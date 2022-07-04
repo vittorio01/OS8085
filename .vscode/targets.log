@@ -7,7 +7,7 @@ make all --print-data-base --no-builtin-variables --no-builtin-rules --question
 
 # This program built for i386-apple-darwin11.3.0
 
-# Make data base, printed on Mon Jul  4 18:34:53 2022
+# Make data base, printed on Mon Jul  4 18:43:55 2022
 
 # Variables
 
@@ -38,7 +38,7 @@ VSCODE_VERBOSE_LOGGING = true
 # environment
 __CFBundleIdentifier = com.microsoft.VSCode
 # environment
-VSCODE_IPC_HOOK_EXTHOST = /var/folders/r_/d0z_3v7n20q8y72zxcg7tl680000gn/T/vscode-ipc-5668bed0-65af-485a-95b9-79143b1a86e8.sock
+VSCODE_IPC_HOOK_EXTHOST = /var/folders/r_/d0z_3v7n20q8y72zxcg7tl680000gn/T/vscode-ipc-b905c851-dd25-42f1-8c81-7feebe519036.sock
 # environment
 VSCODE_CWD = /
 # environment
@@ -200,7 +200,7 @@ sources/memory_management/MMS.8085.asm:
 # Not a target:
 makefile:
 #  Implicit rule search has been done.
-#  Last modified 2022-07-04 18:23:50
+#  Last modified 2022-07-04 18:38:08
 #  File has been updated.
 #  Successfully updated.
 # variable set hash-table stats:
@@ -235,11 +235,8 @@ target: sources/console_processor/CPS.8085.asm sources/file_system_manager/FSM.8
 #  Modification time never checked.
 #  File has not been updated.
 #  commands to execute (from `makefile', line 12):
-	@echo compiling main system files
-	#mkdir $(OUTPUT)
-	dotnet $(ASSEMBLER) $(MAIN) $(OUTPUT)
-	cp $(TEMP)/main.bin $(OUTPUT)/OS8085.bin
-	rm -rf $(OUTPUT)
+	@echo compiling main system files...
+	dotnet $(ASSEMBLER) $(MAIN) $(OUTPUT)/
 	
 
 # files hash-table stats:
@@ -255,7 +252,7 @@ target: sources/console_processor/CPS.8085.asm sources/file_system_manager/FSM.8
 # strcache size: total = 4096 / max = 4096 / min = 4096 / avg = 4096
 # strcache free: total = 4087 / max = 4087 / min = 4087 / avg = 4087
 
-# Finished Make data base on Mon Jul  4 18:34:53 2022
+# Finished Make data base on Mon Jul  4 18:43:55 2022
 
  
 make: *** No rule to make target `all'.  Stop.
