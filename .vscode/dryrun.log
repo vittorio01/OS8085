@@ -1,0 +1,9 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory `/Users/vittorio/github/OS8085/OS8085'
+echo compiling main system files
+#mkdir bin
+dotnet retroassembler/retroassembler.dll sources/main.8085.asm bin
+cp /tmp/compiled/main.bin bin/OS8085.bin
+rm -rf bin
+make: Leaving directory `/Users/vittorio/github/OS8085/OS8085'
+ 

@@ -1,0 +1,2 @@
+;ancora vuoto
+boot: hlt
