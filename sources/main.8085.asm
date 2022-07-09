@@ -18,11 +18,7 @@ BIOS        .equ mms+1024
 
 ;.include "sources/px_mini_bios/BIOS.8085.asm" 
 .include "sources/memory_management/mms.8085.asm" 
+
 ;.include "sources/file_system_manager/FSM.8085.asm" 
 .include "sources/console_processor/CPS.8085.asm"
-
-.print "Numero di bytes occupati dalla CPS -> " CPS_level_end-CPS
-.print "Numero di bytes occupati dalla mms -> " mms_level_end-mms
-;.print "Numero di bytes occupati dalla FSM -> " FSM_level_end-FSM
-;.print "Numero di bytes occupati dal BIOS  -> " BIOS_level_end-BIOS 
-;.print "Il sistema operativo ha una dimensione pari a: " bios_level_end - high_memory_start
+.include "libraries/multiply.8085.asm"

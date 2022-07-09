@@ -8,7 +8,21 @@ cps_functions:      .org CPS
                     jmp system_boot
 
 system_boot:    lxi sp,$00bf
-                call mms_low_memory_initialize
+                ;call mms_low_memory_initialize
+                lxi b,$0001
+                lxi d,$0001
+                push b 
+                push d 
+                lxi b,$ABCD
+                lxi d,$EF12
+                push b 
+                push d 
+                lxi b,$ffff 
+                lxi d,$ffff
+                
+                call unsigned_multiply_long
+                hlt
+
                 call mms_bistream_reset
                 call mms_bitstream_number_request
                 call mms_bitstream_reset_requested_bit
