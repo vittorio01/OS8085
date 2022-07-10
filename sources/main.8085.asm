@@ -18,7 +18,7 @@ BIOS        .equ mms+1024
 
 ;.include "sources/px_mini_bios/BIOS.8085.asm" 
 .include "sources/memory_management/mms.8085.asm" 
-
 ;.include "sources/file_system_manager/FSM.8085.asm" 
 .include "sources/console_processor/CPS.8085.asm"
 .include "libraries/multiply.8085.asm"
+.include "libraries/divide.8085.asm"

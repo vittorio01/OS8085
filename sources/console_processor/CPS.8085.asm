@@ -9,18 +9,17 @@ cps_functions:      .org CPS
 
 system_boot:    lxi sp,$00bf
                 ;call mms_low_memory_initialize
-                lxi b,$0001
-                lxi d,$0001
-                push b 
+                lxi b,$000F
+                lxi d,$000F
                 push d 
-                lxi b,$ABCD
-                lxi d,$EF12
-                push b 
+                push b
+                lxi b,$000B
+                lxi d,$000B
                 push d 
-                lxi b,$ffff 
-                lxi d,$ffff
-                
-                call unsigned_multiply_long
+                push b 
+                lxi b,$AAAA
+                lxi d,$AAAA
+                call unsigned_divide_long
                 hlt
 
                 call mms_bistream_reset
@@ -65,7 +64,9 @@ string_not_equals:  mvi a,$0
                     ret
 
 string_equals:      mvi a,$ff
-                    pop d 
+                    mov e,c 
+                    mov d,b 
+                    pop b 
                     pop h 
                     ret
 
