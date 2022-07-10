@@ -1,46 +1,46 @@
-;Libreria che contiene gli algoritmi per la moltiplicazione fra due numeri di diversa grandezza
+;questa libreria contiene gli algoritmi utilizzati per la moltiplicazione fra due numeri di diversa grandezza
 
-;funzione che esegue una moltiplicazione senza segno fra due numeri a 8 bit e restituisce un risultato di 16bit
+;unsigned_multiply_byte esegue una moltiplicazione senza segno fra due numeri a 8 bit e restituisce un risultato di 16bit
 ;B -> primo operando
 ;C -> secondo operando
 ;BC <- risultato
 
-multiply_byte:              mov a,b 
-                            ora a 
-                            jnz multiply_byte_not_zero
-                            mov c,b 
-                            ret
-multiply_byte_not_zero:     mov a,c 
-                            ora a
-                            jnz multiply_byte_not_zero2
-                            mov b,c 
-                            ret 
-multiply_byte_not_zero2:    push d 
-                            push h 
-                            lxi h,0 
-                            mvi d,0
-                            mov e,c 
-                            mvi c,7 
-multiply_byte_loop:         mov a,b  
-                            rrc
-                            mov b,a 
-                            jnc multiply_byte_loop_jump
-                            dad d 
-multiply_byte_loop_jump:    mov a,e 
-                            add e 
-                            mov e,a 
-                            mov a,d 
-                            ral 
-                            mov d,a
-                            dcr c 
-                            jnz multiply_byte_loop
-                            mov c,l 
-                            mov b,h
-                            pop h 
-                            pop d 
-                            ret 
+unsigned_multiply_byte:             mov a,b 
+                                    ora a 
+                                    jnz unsigned_multiply_byte_not_zero
+                                    mov c,b 
+                                    ret
+unsigned_multiply_byte_not_zero:    mov a,c 
+                                    ora a
+                                    jnz unsigned_multiply_byte_not_zero2
+                                    mov b,c 
+                                    ret 
+unsigned_multiply_byte_not_zero2:   push d 
+                                    push h 
+                                    lxi h,0 
+                                    mvi d,0
+                                    mov e,c 
+                                    mvi c,7 
+unsigned_multiply_byte_loop:        mov a,b  
+                                    rrc
+                                    mov b,a 
+                                    jnc unsigned_multiply_byte_loop_jump
+                                    dad d 
+unsigned_multiply_byte_loop_jump:   mov a,e 
+                                    add e 
+                                    mov e,a 
+                                    mov a,d 
+                                    ral 
+                                    mov d,a
+                                    dcr c 
+                                    jnz unsigned_multiply_byte_loop
+                                    mov c,l 
+                                    mov b,h
+                                    pop h 
+                                    pop d 
+                                    ret 
 
-;funzione che esegue la moltiplicazione fra due numeri interi senza segno a 16 bit e restituisce un risultato a 32 bit
+;unsigned_multiply_word esegue la moltiplicazione fra due numeri interi senza segno a 16 bit e restituisce un risultato a 32 bit
 ;BC -> primo operando
 ;DE -> secondo operando
 ;A <- esito dell'operazione (può generare un errore nella creazione del segmento in memoria)
@@ -134,7 +134,7 @@ unsigned_multiply_word_shift_loop:      ldax d
                                         pop h 
                                         ret 
 
-;funzione che esegue la moltiplicazione fra due numeri interi senza segno a 32 bit e restituisce come risultato un numero a 64 bit
+;unsigned_multiply_long esegue la moltiplicazione fra due numeri interi senza segno a 32 bit e restituisce come risultato un numero a 64 bit
 ; SP -> [primo operando (4bytes)][secondo operando(4bytes)]
 ; SP <- [risultato (8bytes)]
 unsigned_multiply_long:         pop psw
