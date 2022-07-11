@@ -8,25 +8,16 @@ cps_functions:      .org CPS
                     jmp system_boot
 
 system_boot:    lxi sp,$00bf
-                ;call mms_low_memory_initialize
-                lxi b,$000F
-                lxi d,$000F
-                push d 
-                push b
-                lxi b,$000B
-                lxi d,$000B
-                push d 
-                push b 
-                lxi b,$AAAA
-                lxi d,$AAAA
-                call unsigned_divide_long
-                hlt
-
-                call mms_bistream_reset
-                call mms_bitstream_number_request
-                call mms_bitstream_reset_requested_bit
+                call mms_low_memory_initialize
+                lxi h,32
+                call mms_create_low_memory_user_data_segment
+                call mms_create_low_memory_system_data_segment
+                call mms_create_low_memory_user_data_segment
+                call mms_create_low_memory_user_data_segment
+                call mms_delete_selected_low_memory_user_data_segment
+                call mms_delete_selected_low_memory_system_data_segment
                 hlt 
-                ;call cold_start
+                
                 
                 lxi h,128
                 call mms_create_low_memory_user_data_segment
