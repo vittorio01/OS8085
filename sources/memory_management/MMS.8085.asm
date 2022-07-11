@@ -113,17 +113,17 @@
 ;                                Aggiornamento 1.1
 ;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
 ;Nella versione aggornata 1 è presente un bg relativo all'assegnazione dei numeri ai segmenti di memoria. 
-;Per l'assegnazione dei segmenti viene inserita una tabella in bitstream da 32 bytes per tenere traccia dei numeri di segmenti assegnati.
+;Per l'assegnazione dei segmenti viene inserita una tabella in bitstream di lunghezza complessiva di 32 bytes (256 bit) per tenere traccia dei numeri di segmenti assegnati.
 ;In particolare nel bitstream un bit segnato a 1 indica un numero assegnato (il numero viene identificato dalla posizione del bit nel bitstream)
+
+;Dato che esistono due diversi tipi di segmenti, sono presenti due bitstream separati per l'associazione (64 bytes complessivi)
 
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0050
 mms_data_low_pointer                        .equ reserved_memory_start+$0052
 mms_user_data_selected_segment_id           .equ reserved_memory_start+$0054
-mms_system_data_last_segment_id             .equ reserved_memory_start+$0055
-mms_user_data_last_segment_id               .equ reserved_memory_start+$0056
-mms_system_data_selected_segment_id         .equ reserved_memory_start+$0057
-mms_user_data_selected_segment_address      .equ reserved_memory_start+$0058
+mms_system_data_selected_segment_id         .equ reserved_memory_start+$0055
+mms_user_data_selected_segment_address      .equ reserved_memory_start+$0056
 mms_system_data_selected_segment_address    .equ reserved_memory_start+$005A
 mms_user_data_selected_segment_dimension    .equ reserved_memory_start+$005C
 mms_system_data_selected_segment_dimension  .equ reserved_memory_start+$005E
@@ -133,8 +133,8 @@ mms_data_segment_generated_error_code       .equ reserved_memory_start+$004F
 ;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram
 mms_low_memory_user_segment_flags           .equ %10000000
 mms_low_memory_system_segment_flags         .equ %11000000
-mms_low_memory_allocation_bitstream_start   .equ low_memory_end - 32
-
+mms_low_memory_system_bitstream_start       .equ low_memory_end - 32
+mms_low_memory_user_bitstream_start         .equ mms_low_memory_system_bitstream_start - 32
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni
 mms_not_enough_ram_error_code               .equ $11
 mms_segment_data_not_found_error_code       .equ $12
@@ -166,23 +166,23 @@ mms_functions:  .org MMS
 
 ;Implementazioni delle system calls della mms
 
-;La funzione mms_low_memory_initialize inizializze i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
+;La funzione mms_low_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
 mms_low_memory_initialize:      push h
                                 push psw 
                                 lxi h,low_memory_start
                                 shld mms_program_high_pointer
-                                lxi h,mms_low_memory_allocation_bitstream_start 
+                                lxi h,mms_low_memory_user_bitstream_start 
                                 shld mms_data_low_pointer 
                                 xra a 
                                 sta mms_system_data_selected_segment_id
                                 sta mms_user_data_selected_segment_id
-                                sta mms_system_data_last_segment_id 
-                                sta mms_user_data_last_segment_id
                                 lxi h,0 
                                 shld mms_user_data_selected_segment_address
                                 shld mms_system_data_selected_segment_address
                                 mvi a,$ff 
                                 sta mms_data_segment_generated_error_code
+                                call mms_system_bitstream_reset
+                                call mms_user_bitstream_reset
                                 pop psw 
                                 pop h 
                                 ret 
@@ -269,11 +269,9 @@ mms_create_low_memory_user_data_segment:    push d
                                             shld mms_data_low_pointer
                                             mvi m,mms_low_memory_user_segment_flags
                                             inx h 
-                                            lda mms_user_data_last_segment_id
-                                            inr a  
-                                            cpi $ff 
+                                            call mms_user_bitstream_number_request 
+                                            ora a 
                                             jz mms_create_user_segment_number_overflow_error 
-                                            sta mms_user_data_last_segment_id
                                             sta mms_user_data_selected_segment_id
                                             mov m,a 
                                             inx h 
@@ -351,11 +349,9 @@ mms_create_low_memory_system_data_segment:  push d
                                             shld mms_data_low_pointer
                                             mvi m,mms_low_memory_system_segment_flags
                                             inx h 
-                                            lda mms_system_data_last_segment_id
-                                            inr a  
-                                            cpi $ff 
+                                            call mms_system_bitstream_number_request
+                                            ora a 
                                             jz mms_create_system_segment_number_overflow_error 
-                                            sta mms_system_data_last_segment_id
                                             sta mms_system_data_selected_segment_id
                                             mov m,a 
                                             inx h 
@@ -496,12 +492,7 @@ mms_delete_selected_low_memory_system_data_segment:     push h
                                                         lda mms_system_data_selected_segment_id
                                                         ora a 
                                                         jz mms_delete_system_data_segment_not_found
-                                                        mov b,a 
-                                                        lda mms_system_data_last_segment_id
-                                                        cmp b 
-                                                        jnz mms_delete_selected_low_memory_system_data_segment2
-                                                        dcr a 
-                                                        sta mms_system_data_last_segment_id
+                                                        call mms_system_bitstream_reset_requested_bit
 mms_delete_selected_low_memory_system_data_segment2:    lhld mms_system_data_selected_segment_address
                                                         dcx h 
                                                         mov d,m 
@@ -535,10 +526,9 @@ mms_delete_selected_system_segment_shift_skip:          inx h
                                                         shld mms_data_low_pointer
                                                         xra a 
                                                         sta mms_system_data_selected_segment_id
-                                                        sta mms_user_data_selected_segment_id
                                                         lxi h,0
                                                         shld mms_system_data_selected_segment_address
-                                                        shld mms_user_data_selected_segment_address
+                                                    
                                                         mvi a,mms_operation_ok
                                                         sta mms_data_segment_generated_error_code
                                                         pop d 
@@ -564,12 +554,7 @@ mms_delete_selected_low_memory_user_data_segment:       push h
                                                         lda mms_user_data_selected_segment_id
                                                         ora a 
                                                         jz mms_delete_user_data_segment_not_found
-                                                        mov b,a 
-                                                        lda mms_user_data_last_segment_id
-                                                        cmp b 
-                                                        jnz mms_delete_selected_low_memory_user_data_segment2
-                                                        dcr a 
-                                                        sta mms_user_data_last_segment_id
+                                                        call mms_user_bitstream_reset_requested_bit
 mms_delete_selected_low_memory_user_data_segment2:      lhld mms_user_data_selected_segment_address
                                                         dcx h 
                                                         mov d,m 
@@ -601,10 +586,9 @@ mms_delete_selected_user_segment_shift_loop:            ldax b
                                                         jnc mms_delete_selected_user_segment_shift_loop
 mms_delete_selected_user_segment_shift_skip:            inx h 
                                                         shld mms_data_low_pointer
-                                                        sta mms_system_data_selected_segment_id
+                                                        xra a
                                                         sta mms_user_data_selected_segment_id
                                                         lxi h,0
-                                                        shld mms_system_data_selected_segment_address
                                                         shld mms_user_data_selected_segment_address
                                                         mvi a,mms_operation_ok
                                                         sta mms_data_segment_generated_error_code
@@ -844,93 +828,183 @@ mms_read_selected_user_dimension_segment_not_found:     mvi a,mms_segment_data_n
 
 ;Funzioni secondarie utilizzate nella mms
 
+;mms_bistream_reset inizializza il bitstream system e lo prepara per l'associazione degli ID dei segmenti
+mms_system_bitstream_reset: push h 
+                            push b
+                            lxi h,mms_low_memory_system_bitstream_start
+                            mvi m,%01111111
+                            inx h 
+                            mvi b,31 
+mms_system_bitstream_loop:  mvi m,$ff
+                            inx h 
+                            dcr b 
+                            jnz mms_system_bitstream_loop
+                            pop b 
+                            pop h 
+                            ret 
+
+;mms_system_bitstream_number_request vefifica se è disponibile un valore nel bitstream system e, in caso positivo, restituisce l'ID da associare al segmento
+
+mms_system_bitstream_number_request:            push h 
+                                                push b 
+                                                lxi h,mms_low_memory_system_bitstream_start
+                                                mvi b,0
+                                                mov a,m 
+mms_system_bitstream_number_request_search_bit: add a 
+                                                jc mms_system_bitstream_number_request_pos_found 
+                                                dcr b 
+                                                jz mms_system_bitstream_number_request_bit_not_found
+                                                mov c,a 
+                                                mov a,b 
+                                                ani %00000111
+                                                mov a,c
+                                                jnz mms_system_bitstream_number_request_search_bit
+                                                inx h 
+                                                mov a,m
+                                                jmp mms_system_bitstream_number_request_search_bit
+mms_system_bitstream_number_request_pos_found:  dcr b 
+                                                mov a,b 
+                                                ani %00000111
+                                                xri %00000111
+                                                mov c,a 
+                                                mvi a,%01111111
+                                                jz mms_system_bitstream_number_request_pos_write                               
+mms_system_bitstream_number_request_pos_shift:  rrc
+                                                dcr c 
+                                                jnz mms_system_bitstream_number_request_pos_shift
+mms_system_bitstream_number_request_pos_write:  ana m 
+                                                mov m,a 
+                                                mov a,b 
+                                                xri %11111111
+                                                pop b 
+                                                pop h 
+                                                ret  
+
+mms_system_bitstream_number_request_bit_not_found:  xra a 
+                                                    pop b 
+                                                    pop h 
+                                                    ret 
+
+;mms_system_bitstream_reset_requested_bit elimina il riferimento dell'ID selezionato nel bitstream system
+
+mms_system_bitstream_reset_requested_bit:               ora a 
+                                                        rz 
+                                                        push h 
+                                                        push b 
+                                                        lxi h,mms_low_memory_system_bitstream_start
+mms_system_bitstream_reset_requested_bit_search:        cpi 8 
+                                                        jc mms_system_bitstream_reset_requested_bit_posfound
+                                                        sui 8
+                                                        inx h 
+                                                        jmp mms_system_bitstream_reset_requested_bit_search
+mms_system_bitstream_reset_requested_bit_posfound:      mov b,a 
+                                                        ora a 
+                                                        mvi a,%10000000
+                                                        jz mms_system_bitstream_reset_requested_bit_shift_end
+mms_system_bitstream_reset_requested_bit_shift:         rrc 
+                                                        dcr b
+                                                        jnz mms_system_bitstream_reset_requested_bit_shift
+mms_system_bitstream_reset_requested_bit_shift_end:     ora m 
+                                                        mov m,a 
+                                                        pop b 
+                                                        pop h 
+                                                        ret 
+
+;mms_bistream_reset inizializza il bitstream system e lo prepara per l'associazione degli ID dei segmenti
+mms_user_bitstream_reset:   push h 
+                            push b
+                            lxi h,mms_low_memory_user_bitstream_start
+                            mvi m,%01111111
+                            inx h 
+                            mvi b,31 
+mms_user_bitstream_loop:    mvi m,$ff
+                            inx h 
+                            dcr b 
+                            jnz mms_user_bitstream_loop
+                            pop b 
+                            pop h 
+                            ret 
+
+;mms_user_bitstream_number_request vefifica se è disponibile un valore nel bitstream user e, in caso positivo, restituisce l'ID da associare al segmento
+
+mms_user_bitstream_number_request:              push h 
+                                                push b 
+                                                lxi h,mms_low_memory_user_bitstream_start
+                                                mvi b,0
+                                                mov a,m 
+mms_user_bitstream_number_request_search_bit:   add a 
+                                                jc mms_user_bitstream_number_request_pos_found 
+                                                dcr b 
+                                                jz mms_user_bitstream_number_request_bit_not_found
+                                                mov c,a 
+                                                mov a,b 
+                                                ani %00000111
+                                                mov a,c
+                                                jnz mms_user_bitstream_number_request_search_bit
+                                                inx h 
+                                                mov a,m
+                                                jmp mms_user_bitstream_number_request_search_bit
+mms_user_bitstream_number_request_pos_found:    dcr b 
+                                                mov a,b 
+                                                ani %00000111
+                                                xri %00000111
+                                                mov c,a 
+                                                mvi a,%01111111
+                                                jz mms_user_bitstream_number_request_pos_write                               
+mms_user_bitstream_number_request_pos_shift:    rrc
+                                                dcr c 
+                                                jnz mms_user_bitstream_number_request_pos_shift
+mms_user_bitstream_number_request_pos_write:    ana m 
+                                                mov m,a 
+                                                mov a,b 
+                                                xri %11111111
+                                                pop b 
+                                                pop h 
+                                                ret  
+
+mms_user_bitstream_number_request_bit_not_found:    xra a 
+                                                    pop b 
+                                                    pop h 
+                                                    ret 
+
+;mms_user_bitstream_reset_requested_bit elimina il riferimento dell'ID selezionato nel bitstream user
+
+mms_user_bitstream_reset_requested_bit:             ora a 
+                                                    rz 
+                                                    push h 
+                                                    push b 
+                                                    lxi h,mms_low_memory_user_bitstream_start
+mms_user_bitstream_reset_requested_bit_search:      cpi 8 
+                                                    jc mms_user_bitstream_reset_requested_bit_posfound
+                                                    sui 8
+                                                    inx h 
+                                                    jmp mms_user_bitstream_reset_requested_bit_search
+mms_user_bitstream_reset_requested_bit_posfound:    mov b,a 
+                                                    ora a 
+                                                    mvi a,%10000000
+                                                    jz mms_user_bitstream_reset_requested_bit_shift_end
+mms_user_bitstream_reset_requested_bit_shift:       rrc 
+                                                    dcr b
+                                                    jnz mms_user_bitstream_reset_requested_bit_shift
+mms_user_bitstream_reset_requested_bit_shift_end:   ora m 
+                                                    mov m,a 
+                                                    pop b 
+                                                    pop h 
+                                                    ret 
+
 ;mms_search_user_data_segment verifica l'esistenza del segmento utente specificato nella low ram
-
-mms_bistream_reset:     push h 
-                        push b
-                        lxi h,mms_low_memory_allocation_bitstream_start
-                        mvi b,32 
-mms_bitstream_loop:     mvi m,$ff
-                        inx h 
-                        dcr b 
-                        jnz mms_bitstream_loop
-                        mvi a,%01111111
-                        sta mms_low_memory_allocation_bitstream_start
-                        pop b 
-                        pop h 
-                        ret 
-
-mms_bitstream_number_request:           push h 
-                                        push b 
-                                        lxi h,mms_low_memory_allocation_bitstream_start
-                                        mvi b,$ff
-                                        mov a,m
-mms_bitstream_request_search_bit:       add a 
-                                        jc mms_bitstream_request_bit_found
-                                        dcr b 
-                                        jz mms_bitstream_request_bit_end
-                                        mov c,a 
-                                        mov a,b
-                                        ani %00000111
-                                        mov a,c
-                                        jnz mms_bitstream_request_search_bit 
-                                        inx h 
-                                        mov a,m 
-                                        jmp mms_bitstream_request_search_bit
-mms_bitstream_request_bit_found:        mov a,b
-                                        xri $ff 
-                                        mov c,a
-                                        mov a,b
-                                        ani %00000111
-                                        mov b,a 
-                                        mvi a,%01111111
-                                        jz mms_bitstream_write_bit_found
-mms_bitstream_write_bit_search:         rrc 
-                                        dcr b 
-                                        jnz mms_bitstream_write_bit_search
-mms_bitstream_write_bit_found:          ana m 
-                                        mov m,a
-                                        mov b,c
-mms_bitstream_request_bit_end:          mov a,b
-                                        pop b 
-                                        pop h 
-                                        ret 
-
-mms_bitstream_reset_requested_bit:      ora a 
-                                        jz mms_bitstream_reset_requested_bit_end
-                                        push h 
-                                        push b 
-                                        lxi h,mms_low_memory_allocation_bitstream_start
-mms_bitstream_reset_requested_bit_loop: cpi 8
-                                        jz mms_bitstreame_reset_write_bit
-                                        sui 8
-                                        inx h 
-                                        jmp mms_bitstream_reset_requested_bit_loop
-mms_bitstreame_reset_write_bit:         mov b,a 
-                                        ora a 
-                                        mvi a,%10000000
-                                        jz mms_bitstreame_reset_write_bit2
-mms_bitstream_reset_write_bit_search:   rrc 
-                                        dcr b 
-                                        jnz mms_bitstream_reset_write_bit_search
-mms_bitstreame_reset_write_bit2:        ora m 
-                                        mov m,a                 
-                                        mvi a,$ff
-mms_bitstream_reset_requested_bit_end:  pop b
-                                        pop h 
-                                        ret
 
 mms_search_user_data_segment:       push b 
                                     push d 
                                     push psw 
-                                    lxi b,mms_low_memory_allocation_bitstream_start
+                                    lxi b,mms_low_memory_user_bitstream_start
                                     lhld mms_data_low_pointer
                                     mov a,l  
                                     sub c
                                     mov a,h
                                     sbb b
                                     jnc mms_user_segment_not_found
-                                    lxi b,mms_low_memory_allocation_bitstream_start
+                                    lxi b,mms_low_memory_user_bitstream_start
 mms_user_data_segment_search_loop:  mov a,m 
                                     cpi mms_low_memory_user_segment_flags
                                     inx h 
@@ -974,14 +1048,14 @@ mms_user_segment_found:     inx sp
 mms_search_system_data_segment:             push b 
                                             push d 
                                             push psw 
-                                            lxi b,mms_low_memory_allocation_bitstream_start
+                                            lxi b,mms_low_memory_user_bitstream_start
                                             lhld mms_data_low_pointer
                                             mov a,l  
                                             sub c
                                             mov a,h
                                             sbb b
                                             jnc mms_system_segment_not_found
-                                            lxi b,mms_low_memory_allocation_bitstream_start
+                                            lxi b,mms_low_memory_user_bitstream_start
 mms_system_data_segment_search_loop:        mov a,m 
                                             cpi mms_low_memory_system_segment_flags
                                             inx h 
