@@ -7,8 +7,18 @@
 ;   scrittura di una traccia e formattazione del disco
 ;-  funzioni per la copia di blocchi di memoria, che vengono utilizzati nel caso di trasferimenti di grandi blocchi di dati da e verso la memoria. 
 
+;parametri hardware standard
 bios_ram_dimension      .equ 32768
 
+;codici di esecuzione che possono essere generati dalle funzioni
+bios_operation_ok                   .equ $ff 
+bios_mass_memory_write_only         .equ $01
+bios_mass_memory_device_not_found   .equ $02
+bios_mass_memory_bad_argument       .equ $03
+bios_mass_memory_transfer_error     .equ $04
+bios_mass_memory_seek_error         .equ $05
+bios_console_not_ready              .equ $04
+bios_memory_transfer_error          .equ $05 
 
 bios_functions: .org BIOS 
                 jmp bios_cold_boot 
@@ -25,13 +35,14 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
-                jmp bios_mem_copy
+                jmp bios_memory_transfer
+                
 ;bios_cold_boot esegue un test e un reset della memoria ram e procede con l'inizializzazione delle risorse hardware. Tra le operazioni che deve eseguire troviamo quindi:
 ;- inizializzazione e test (facoltativo) della ram 
 ;- inzializzazione dei dispositivi per interfacciare la console
 ;- inzializzazione dei dispositivi per la gestione delle memoria di massa
 
-bios_cold_boot:         lxi h,0 
+bios_cold_boot:         lxi h,0                     ;esempio di inizializzazione della RAM (facolatativo)
                         lxi d,bios_ram_dimension 
 bios_memory_test_loop:  mvi m,0 
                         inx h 
@@ -40,13 +51,15 @@ bios_memory_test_loop:  mvi m,0
                         mov a,d 
                         sbb h 
                         jnz bios_memory_test_loop
+                        ;da implementare
                         ret 
 
 ;bios_warm_boot esegue delle operazioni simili a bios_warm_boot escludendo il test e l'inizializzazione della ram. Prevede quindi:
 ;- inzializzazione dei dispositivi per interfacciare la console
 ;- inzializzazione dei dispositivi per la gestione delle memoria di massa
 ;tuttavia, è possibile specificare operazioni diverse per la gestione dei dispositivi IO, in caso si desidera ad esempio lasciare invariato il setup dei dispositivi
-bios_warm_boot:         ret 
+bios_warm_boot:         ;da implementare
+                        ret 
 
 ;bios_console_output_write_character e bios_console_output_ready sono due funzioni dedicate alla gestione del lato output della console (monitor). In particolare:
 ;-  bios_console_output_ready restituisce lo stato dell'output della console (pronto per ricevere dati o no)
@@ -54,11 +67,13 @@ bios_warm_boot:         ret
 
 ;bios_console_output_write_character
 ; A -> carattere ASCII da scrivere
-bios_console_output_write_character:    ret 
+bios_console_output_write_character:    ;da implementare
+                                        ret 
 
 ;bios_console_output_ready
 ; A <- stato della console (lato output)
-bios_console_output_ready:  ret 
+bios_console_output_ready:  ;da implementare
+                            ret 
 
 ;bios_console_input_read_character e bios_console_input_ready sono due funzioni dedicate alla gestione del lato input della console (tastiera). In particolare:
 ;-  bios_console_input_ready restituisce lo stato dell'input della console (dato in attesa di essere letto o no)
@@ -66,11 +81,13 @@ bios_console_output_ready:  ret
 
 ;bios_console_input_ready
 ; A <- stato della console (lato input)
-bios_console_input_ready:   ret 
+bios_console_input_ready:   ;da implementare
+                            ret 
 
 ;bios_console_input_read_character 
 ; A <- carattere ASCII in ingresso
-bios_console_input_read_character:  ret 
+bios_console_input_read_character:  ;da implementare
+                                    ret 
 
 ;le prossime funzioni servono per la gestione della memoria di massa. Troviamo quindi le seguente funzioni di selezione:
 ;-  bios_mass_memory_select_drive seleziona il drive, restituisce l'esito dell'operazione e le informazioni sul dispositivo selezionato. 
@@ -89,26 +106,31 @@ bios_console_input_read_character:  ret
 ; C <- numero di testine
 ; DE <- numero di tracce
 
-bios_mass_memory_select_drive:  ret 
+bios_mass_memory_select_drive:  ;da implementare
+                                ret 
 
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
 ; A <- esito dell'operazione
-bios_mass_memory_select_sector: ret 
+bios_mass_memory_select_sector: ;da implementare
+                                ret 
 
 ;bios_mass_memory_select_track
 ; HL -> traccia da selezionare
 ; A <- esito dell'operazione
-bios_mass_memory_select_track: ret 
+bios_mass_memory_select_track:  ;da implementare
+                                ret 
 
 ;bios_mass_memory_select_head
 ; A -> testina da selezionare
 ; A <- esito dell'operazione
-bios_mass_memory_select_head: ret 
+bios_mass_memory_select_head:   ;da implementare
+                                ret 
 
 ;bios_mass_memory_write_enable_status verifica se la memoria di massa è abilitata alla scrittura.
 ; A <- esito dell'operazione
-bios_mass_memory_write_enable_status: ret 
+bios_mass_memory_write_enable_status:   ;da implementare
+                                        ret 
 
 ;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.
 ;-  bios_mass_memory_write_sector scrive i dati nel settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo in memoria dei dati da scrivere
@@ -118,26 +140,44 @@ bios_mass_memory_write_enable_status: ret
 ;bios_mass_memory_write_sector
 ; HL -> indirizzo in memoria 
 ; A <- esito dell'operazione
-bios_mass_memory_write_sector:  ret 
+bios_mass_memory_write_sector:      ;da implementare
+                                    ret 
 
 ; bios_mass_memory_read_sector
 ; HL -> indirizzo in memoria
 ; A <- esito dell'operazione
-bios_mass_memory_read_sector:   ret 
+bios_mass_memory_read_sector:       ;da implementare
+                                    ret 
 
 ;bios_mass_memory_format_drive
 ; A <- esito dell'operazione
-bios_mass_memory_format_drive:  ret 
+bios_mass_memory_format_drive:  ;da implementare
+                                ret 
 
 ;opzionalmente può essere inserito un dispositivo DMA per gestire il flusso dati CPU/IO in modo più efficente. Il dispositivo DMa può essere inizializzato nelle funzioni cold_boot e warm_boot e i trasferimenti
 ;possono essere avviati e gestiti tramite le funzioni bios_mass_memory_write_sector e bios_mass_memory_read_sector.
 
-;bios_mem_copy viene utilizzata per la copia di grandi quantità di dati all'interno della memoria. Dato che alcuni dispositivi DMA possono gestire il trasferimento mem-to-mem si preferisce mantenere 
+;bios_memory_transfer viene utilizzata per la copia di grandi quantità di dati all'interno della memoria. Dato che alcuni dispositivi DMA possono gestire il trasferimento mem-to-mem si preferisce mantenere 
 ;questa funzione nel bios. Nel caso non sia presente un dispositivo DMA o non sia disponibile la funzionalità, è possibile implementare una copoa software dei dati
+; BC -> numero di bytes da trasferire 
 ; DE -> indirizzo sorgente
 ; HL -> indirizzo destinazione
+
 ; A <- esito dell'operazione 
+; BC <- $0000
 ; DE <- indirizzo sorgente dopo l'esecuzione
 ; HL <- indirizzo destinazione dopo l'esecuzione 
 
-bios_mem_copy:  ret 
+bios_memory_transfer:       mov a,b     
+                            ora c 
+                            jz bios_memo_copy_end
+                            ldax d 
+                            mov m,a 
+                            dcx b 
+                            inx h 
+                            inx d 
+                            jmp bios_mem_copy
+bios_memory_transfer_end:   mvi a,bios_operation_ok 
+                            ret 
+
+;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
