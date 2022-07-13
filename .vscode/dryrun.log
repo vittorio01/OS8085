@@ -1,6 +1,13 @@
 make --dry-run --always-make --keep-going --print-directory
-make: Entering directory `/Users/vittorio/github/OS8085/OS8085'
+make: Entering directory `/Users/vittorio/github/OS8085'
+echo selected bios: sources/bios/BIOS_MINIMAL.8085.asm
+echo selected CPS:	sources/console_processor/CPS.8085.asm
+echo selected FSM: sources/file_system_manager/FSM.8085.asm
+echo selected MMS: sources/memory_management/MMS.8085.asm
 echo compiling main system files...
 dotnet retroassembler/retroassembler.dll sources/main.8085.asm bin/
-make: Leaving directory `/Users/vittorio/github/OS8085/OS8085'
+echo -------------------------------- 
+echo files generated: 
+ls bin
+make: Leaving directory `/Users/vittorio/github/OS8085'
  
