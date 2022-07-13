@@ -5,5 +5,9 @@ I files sorgenti, contenuti nella cartella sources, vengono compilati tramite il
 
 makefile ASSEMBLER="path/to/assembler/retroassembler.dll" 
 
-Il comando compila tutti i files sorgenti e restituisce un output main.bin nella cartella bin del progetto, dove è contenuto tutto il sistema operativo compilato e pronto per essere installato nella ROM del microcomputer. 
+Nel comando deve anche essere specificato il BIOS personalizzato che si vuole compilare nel sistema operativo (nel caso non sia specificato compila automaticamente il bios minimale presente in sources/bios/BIOS_MINIMAL.8085.asm).
+
+makefile ASSEMBLER="path/to/assembler/retroassembler.dll" BIOS="path/to/cbios/BIOS.8085.asm" 
+
+Il comando compila tutti i files sorgenti e restituisce un output main.bin nella cartella bin del progetto, dove è contenuto tutto il sistema operativo compilato e pronto per essere installato nella ROM del computer o nel disco di avvio.
 Per maggiori informazioni sulla struttura del SO è disponibile una guida in PDF nella cartella info (non ancora disponibile)
