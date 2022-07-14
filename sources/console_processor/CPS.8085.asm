@@ -8,14 +8,11 @@ cps_functions:      .org CPS
                     jmp system_boot
 
 system_boot:    lxi sp,$00bf
-                call mms_low_memory_initialize
-                lxi h,32
-                call mms_create_low_memory_user_data_segment
-                call mms_create_low_memory_system_data_segment
-                call mms_create_low_memory_user_data_segment
-                call mms_create_low_memory_user_data_segment
-                call mms_delete_selected_low_memory_user_data_segment
-                call mms_delete_selected_low_memory_system_data_segment
+                call bios_warm_boot
+                ;call mms_low_memory_initialize
+                mvi a,'A'
+                call bios_mass_memory_select_drive
+                call bios_mass_memory_format_device
                 hlt 
                 
                 
