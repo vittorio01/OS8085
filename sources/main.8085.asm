@@ -12,11 +12,12 @@ high_memory_start        .equ $8000 ;low_memory_end
 
 CPS         .equ high_memory_start
 FSM         .equ CPS+512
-MMS         .equ FSM+2048
-BIOS        .equ mms+1024
+MMS         .equ FSM+1024
+BIOS        .equ mms+2048
 
-
-;.include "sources/px_mini_bios/BIOS.8085.asm" 
+.include "sources/bios/PX_MINI_BIOS.8085.asm" 
 .include "sources/memory_management/mms.8085.asm" 
 ;.include "sources/file_system_manager/FSM.8085.asm" 
 .include "sources/console_processor/CPS.8085.asm"
+.include "sources/libraries/multiply/multiply_word.8085.asm"
+.include "sources/libraries/multiply/multiply_byte.8085.asm"
