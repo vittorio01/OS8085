@@ -10,6 +10,8 @@
 ;parametri hardware standard
 bios_ram_dimension      .equ 32768
 
+
+
 ;codici di esecuzione che possono essere generati dalle funzioni
 bios_operation_ok                   .equ $ff 
 bios_mass_memory_write_only         .equ $01
