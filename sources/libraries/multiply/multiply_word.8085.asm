@@ -1,8 +1,7 @@
 ;unsigned_multiply_word esegue la moltiplicazione fra due numeri interi senza segno a 16 bit e restituisce un risultato a 32 bit
 ;BC -> primo operando
 ;DE -> secondo operando
-;A <- esito dell'operazione (può generare un errore nella creazione del segmento in memoria)
-;DEHL <- risultato dell'operazione
+;BCDE <- risultato dell'operazione
 
 unsigned_multiply_word:                 mov a,c 
                                         ora b
