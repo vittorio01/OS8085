@@ -1,9 +1,9 @@
 
 ;L'hardware del computer PX MINI prevede:
-;-  una porta seriale per comunicare con computers moderni
-;-  un timer per generare il clock per la porta seriale ed, eventualmente, generare interrupts al processore
-;-  una RAM da 32kb
-;-  una ROM da 32kb
+;-  una porta seriale per comunicare con computers moderni (D8251A)
+;-  un timer per generare il clock per la porta seriale ed, eventualmente, generare interrupts al processore (D8253)
+;-  una RAM da 32kb     (da $0000 a $7FFF)
+;-  una ROM da 32kb     (da $8000 a $FFFF)
 ;Nel computer non viene preinstallato nessun dipositivo per l'utilizzo delle memorie di massa. Essendo sprovvisto di una memoria secondaria, per il funzionamento
 ; del SO viene utilizzata parte della ROM (quella non utilizzata dal firmware base) come una finta memoria di massa.
 
