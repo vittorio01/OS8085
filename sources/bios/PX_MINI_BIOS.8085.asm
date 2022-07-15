@@ -18,8 +18,11 @@
 
 ;parametri hardware standard
 bios_ram_dimension          .equ 32768
-bios_serial_data_port       .equ $22 
-bios_serial_command_port    .equ $21
+
+bios_serial_data_port                       .equ $22 
+bios_serial_command_port                    .equ $21
+bios_serial_port_settins_flags              .equ $3B 
+
 
 bios_mass_memory_rom_address_start          .equ $9000
 bios_mass_memory_rom_address_end            .equ $ffff
@@ -34,14 +37,17 @@ bios_mass_memory_rom_format_fill_byte       .equ $ff
 
 ;codici di esecuzione che possono essere generati dalle funzioni
 bios_operation_ok                       .equ $ff 
+
 bios_mass_memory_write_only             .equ $01
 bios_mass_memory_device_not_found       .equ $02
 bios_mass_memory_device_not_selected    .equ $03
 bios_mass_memory_bad_argument           .equ $04
 bios_mass_memory_transfer_error         .equ $05
 bios_mass_memory_seek_error             .equ $06
-bios_console_not_ready                  .equ $07
-bios_memory_transfer_error              .equ $08 
+bios_memory_transfer_error              .equ $07 
+
+bios_console_ready                      .equ $08
+bios_console_not_ready                  .equ $09
 
 ;memoria dedicata al salvataggio delle informazioni
 bios_mass_memory_selected_sector    .equ reserved_memory_start+$0040
@@ -65,9 +71,22 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
-                jmp bios_mass_memory_status 
                 jmp bios_memory_transfer
-                
+
+
+bios_serial_port_init:  xra a 	
+                        out bios_serial_command_port		
+                        out bios_serial_command_port	
+                        out bios_serial_command_port	
+                        mvi a,$40
+                        out bios_serial_command_port	
+                        mvi a,bios_serial_port_settins_flags
+                        out bios_serial_command_port	
+                        mvi a,$37
+		                out bios_serial_command_port	
+		                in bios_serial_data_port	
+                        ret 
+
 ;bios_cold_boot esegue un test e un reset della memoria ram e procede con l'inizializzazione delle risorse hardware. Tra le operazioni che deve eseguire troviamo quindi:
 ;- inizializzazione e test (facoltativo) della ram 
 ;- inzializzazione dei dispositivi per interfacciare la console
@@ -84,7 +103,7 @@ bios_memory_test_loop:  mvi m,0
                         jnz bios_memory_test_loop
                         mvi a,0 
                         sta bios_mass_memory_selected_device
-                        ;da implementare
+                        call bios_serial_port_init
                         ret 
 
 ;bios_warm_boot esegue delle operazioni simili a bios_warm_boot escludendo il test e l'inizializzazione della ram. Prevede quindi:
@@ -93,6 +112,7 @@ bios_memory_test_loop:  mvi m,0
 ;tuttavia, è possibile specificare operazioni diverse per la gestione dei dispositivi IO, in caso si desidera ad esempio lasciare invariato il setup dei dispositivi
 bios_warm_boot:         mvi a,0 
                         sta bios_mass_memory_selected_device
+                        call bios_serial_port_init
                         ret 
 
 ;bios_console_output_write_character e bios_console_output_ready sono due funzioni dedicate alla gestione del lato output della console (monitor). In particolare:
@@ -101,13 +121,18 @@ bios_warm_boot:         mvi a,0
 
 ;bios_console_output_write_character
 ; A -> carattere ASCII da scrivere
-bios_console_output_write_character:    ;da implementare
+bios_console_output_write_character:    out bios_serial_data_port
                                         ret 
 
 ;bios_console_output_ready
 ; A <- stato della console (lato output)
-bios_console_output_ready:  ;da implementare
-                            ret 
+bios_console_output_ready:      in bios_serial_command_port
+                                ani %00000001
+                                jnz bios_console_output_ready_ok
+                                mvi a,bios_console_not_ready
+                                ret 
+bios_console_output_ready_ok:   mvi a,bios_console_ready
+                                ret 
 
 ;bios_console_input_read_character e bios_console_input_ready sono due funzioni dedicate alla gestione del lato input della console (tastiera). In particolare:
 ;-  bios_console_input_ready restituisce lo stato dell'input della console (dato in attesa di essere letto o no)
@@ -115,12 +140,17 @@ bios_console_output_ready:  ;da implementare
 
 ;bios_console_input_ready
 ; A <- stato della console (lato input)
-bios_console_input_ready:   ;da implementare
-                            ret 
+bios_console_input_ready:       in bios_serial_command_port
+                                ani %00000010
+                                jnz bios_console_input_ready_ok
+                                mvi a,bios_console_not_ready
+                                ret 
+bios_console_input_ready_ok:    mvi a,bios_console_ready
+                                ret 
 
 ;bios_console_input_read_character 
 ; A <- carattere ASCII in ingresso
-bios_console_input_read_character:  ;da implementare
+bios_console_input_read_character:  in bios_serial_data_port
                                     ret 
 
 ;le prossime funzioni servono per la gestione della memoria di massa. Troviamo quindi le seguente funzioni di selezione:
