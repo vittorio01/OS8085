@@ -26,7 +26,33 @@ unsigned_divide_long:           push h
                                 inx h 
                                 inx h 
                                 inx h   ;HL: [quoziente] BC: [dividendo] DE: [divisore]
-                                xchg    ;SP: [indici][quoziente(4bytes)][bc][de][hl][pc][dividendo(4 bytes)][divisore(4 bytes)]                 
+                                xchg    ;SP: [indici][quoziente(4bytes)][bc][de][hl][pc][dividendo(4 bytes)][divisore(4 bytes)]    
+                                push h 
+                                mov l,c 
+                                mov h,b 
+                                mov a,m 
+                                inx h 
+                                ora m 
+                                inx h 
+                                ora m 
+                                inx h 
+                                ora m 
+                                pop h 
+                                jz unsigned_divide_long_zero
+                                push h 
+                                mov l,e 
+                                mov h,d 
+                                mov a,m 
+                                inx h 
+                                ora m 
+                                inx h 
+                                ora m 
+                                inx h 
+                                ora m 
+                                pop h 
+                                jnz unsigned_divide_long_shift
+unsigned_divide_long_zero:      xchg 
+                                jmp unsigned_divide_long_end2
 unsigned_divide_long_shift:     inx b 
                                 inx b 
                                 inx b 
