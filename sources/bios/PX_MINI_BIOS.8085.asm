@@ -24,12 +24,12 @@ bios_serial_command_port                    .equ $21
 bios_serial_port_settins_flags              .equ $3B 
 
 
-bios_mass_memory_rom_address_start          .equ $9000
+bios_mass_memory_rom_address_start          .equ $A000
 bios_mass_memory_rom_address_end            .equ $ffff
 bios_mass_memory_rom_id                     .equ $41
 bios_mass_memory_rom_heads_number           .equ 1
-bios_mass_memory_rom_tracks_number          .equ 15 
-bios_mass_memory_rom_spt_number             .equ 14 
+bios_mass_memory_rom_tracks_number          .equ 16 
+bios_mass_memory_rom_spt_number             .equ 6 
 bios_mass_memory_rom_bps_coded_number       .equ 2 
 bios_mass_memory_rom_bps_uncoded_number     .equ 256
 bios_mass_memory_rom_write_enable           .equ $ff    

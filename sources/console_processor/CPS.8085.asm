@@ -1,18 +1,29 @@
-
-;funzione che confronta due stringe verifica se sono uguali
-;HL -> prima stringa
-;DE -> seconda stringa
-
-;A  <- $ff se le due stringhe sono uguali, $00 altrimenti
 cps_functions:      .org CPS
                     jmp system_boot
 
 system_boot:    lxi sp,$00bf
                 call bios_warm_boot
                 ;call mms_low_memory_initialize
+                call fsm_init 
                 mvi a,'A'
                 call bios_mass_memory_select_drive
-                call bios_mass_memory_format_device
+                mvi a,bios_mass_memory_rom_heads_number
+                sta fsm_selected_disk_head_number
+                mvi a,bios_mass_memory_rom_spt_number
+                sta fsm_selected_disk_spt_number
+                lxi h,bios_mass_memory_rom_tracks_number
+                shld fsm_selected_disk_tph_number
+
+                lxi h,$00a0
+                shld fsm_selected_disk_sectors_number
+                lxi b,$0000
+                lxi d,$001f
+                call fsm_seek_disk_sector 
+                hlt 
+
+                lxi h,0 
+                lxi d,disk_name 
+                call fsm_disk_format
                 hlt 
                 
                 
@@ -30,32 +41,6 @@ loop:           call mms_write_selected_system_segment_byte
                 call mms_delete_selected_low_memory_system_data_segment
                 hlt
 
-string_compare:     push d 
-                    push h 
-string_cmp_loop:    mov a,m 
-                    cpi 0
-                    jnz string_cmp_loop2
-                    ldax d 
-                    cpi 0 
-                    jnz string_not_equals
-                    jz string_equals
-string_cmp_loop2:   ldax d
-                    cmp m 
-                    jnz string_not_equals
-string_cmp_loop3:   inx h 
-                    inx d 
-                    jmp string_cmp_loop
-
-string_not_equals:  mvi a,$0 
-                    pop d 
-                    pop h 
-                    ret
-
-string_equals:      mvi a,$ff
-                    mov e,c 
-                    mov d,b 
-                    pop b 
-                    pop h 
-                    ret
-
+disk_name:  .text "DISCO DI PROVA"
+            .b 0
 CPS_level_end:
