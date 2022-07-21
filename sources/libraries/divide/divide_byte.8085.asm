@@ -1,5 +1,5 @@
 ;unsigned_divide_byte esegue la divisione fra due numeri interi senza segno a 8 bit
-;B -> unsigned_dividendo
+;B -> dividendo
 ;C -> divisore
 ;B <- quoziente
 ;C <- resto
