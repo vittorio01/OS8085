@@ -142,16 +142,14 @@ fsm_selected_disk_loaded_page           .equ $0073
 fsm_selected_disk_loaded_page_flags     .equ $0075
 
 
-fsm_coded_page_dimension            .equ 16
+fsm_coded_page_dimension            .equ 8
 fsm_uncoded_page_dimension          .equ 2048
 
 fsm_format_marker_lenght            .equ 6 
 fms_disk_name_max_lenght            .equ 16 
 
-fsm_page_loaded_mask            .equ %10000000
-fsm_page_type_mask              .equ %01000000 ;(0 per tipo fat, 1 per tipo data)
-
 fsm_mass_memory_sector_not_found    .equ $20
+fsm_bad_argument                    .equ $21
 fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
@@ -166,11 +164,24 @@ fsm_functions:  .org FSM
 
 ;fsm_init inizializza la fsm 
 
-fsm_init:   xra a 
+fsm_init:   push h 
+            xra a 
             sta fsm_selected_disk
             sta fsm_selected_disk_loaded_page
             sta fsm_selected_disk_loaded_page+1
             sta fsm_selected_disk_loaded_page_flags
+            mvi b,fsm_coded_page_dimension 
+            mvi c,128 
+            call unsigned_multiply_byte
+            mov l,c 
+            mov h,b 
+            call mms_create_low_memory_system_data_segment
+            ora a 
+            jz fsm_disk_external_generated_error
+            sta fsm_page_buffer_segment_id 
+            call mms_read_selected_system_segment_data_address
+            shld fsm_page_buffer_segment_address
+            pop h 
             ret 
 
 ;fsm_disk_format formatta il disco e prepara il file system di base 
@@ -241,17 +252,9 @@ fsm_disk_format_jump1:  inx b
                         call bios_mass_memory_select_track
                         cpi bios_operation_ok
                         jnz fsm_disk_external_generated_error
-                        mvi b,fsm_coded_page_dimension 
-                        mvi c,128 
-                        call unsigned_multiply_byte
-                        mov l,c 
-                        mov h,b 
-                        call mms_create_low_memory_system_data_segment
-                        ora a 
-                        jz fsm_disk_external_generated_error
-                        sta fsm_page_buffer_segment_id 
-                        call mms_read_selected_system_segment_data_address
-                        shld fsm_page_buffer_segment_address
+                        call fsm_reselect_mms_segment
+                        cpi fsm_operation_ok
+                        jnz fsm_disk_external_generated_error
                         call fsm_clear_mms_segment
                         mvi m,$c9 
                         inx h 
@@ -377,7 +380,6 @@ fsm_disk_format_jump2:  pop d
                         call bios_mass_memory_write_sector
                         cpi bios_operation_ok
                         jnz fsm_disk_external_generated_error
-
                         mvi a,fsm_operation_ok 
                         pop h 
                         pop d 
@@ -389,7 +391,20 @@ fsm_disk_external_generated_error:      pop h
                                         pop b 
                                         ret 
 
+;fsm_reselect_mms_segment riseleziona il segmento di buffer e aggiorna l'indirizzo in memoria assogiato se è stato modificato
+;A <- esito dell'operazione
+;HL <- indirizzo aggiornato
 
+fsm_reselect_mms_segment:   lda fsm_page_buffer_segment_id
+                            call mms_select_low_memory_system_data_segment
+                            cpi mms_operation_ok
+                            rnz
+                            call mms_read_selected_system_segment_data_address
+                            shld fsm_page_buffer_segment_address
+                            mvi a,fsm_operation_ok 
+                            ret 
+
+;fsm_clear_mms_segment riempie il buffer di memoria con degli zeri
 
 fsm_clear_mms_segment:      push h 
                             push d 
@@ -405,6 +420,173 @@ fsm_clear_mms_segment_loop: mvi m,0
                             pop h 
                             ret 
 
+;fsm_read_fat_page seleziona la pagina appartenente alla fat 
+;A -> pagina da selezionare
+;A <- esito dell'operazione 
+
+fsm_read_fat_page:                  push b
+                                    push d 
+                                    push h 
+                                    mov b,a 
+                                    lda fsm_selected_disk_fat_page_number 
+                                    mov c,a 
+                                    mov a,b 
+                                    sub c
+                                    jc fsm_read_fat_page_not_overflow
+                                    xra a 
+                                    sta fsm_selected_disk_loaded_page_flags
+                                    mvi a,fsm_bad_argument 
+                                    jmp fsm_read_fat_page_end
+fsm_read_fat_page_not_overflow:     sta fsm_selected_disk_loaded_page
+                                    xra a 
+                                    sta fsm_selected_disk_loaded_page+1
+                                    lda fsm_selected_disk_spp_number  
+                                    mov c,a 
+                                    call unsigned_multiply_byte 
+                                    lhld fsm_selected_disk_data_first_sector 
+                                    mov a,l 
+                                    add c 
+                                    mov e,a 
+                                    mov a,h 
+                                    adc d 
+                                    mov d,a 
+                                    lxi b,0
+                                    mov a,c 
+                                    aci 0 
+                                    mov c,a 
+                                    mov a,b 
+                                    aci 0 
+                                    mov b,a
+                                    call fsm_seek_disk_sector
+                                    cpi fsm_operation_ok
+                                    jz fsm_read_fat_page_operation_ok
+                                    xra a 
+                                    sta fsm_selected_disk_loaded_page_flags
+                                    jmp fsm_read_fat_page_end
+fsm_read_fat_page_operation_ok:     mvi a,%10000000
+                                    sta fsm_selected_disk_loaded_page_flags
+                                    call fsm_reselect_mms_segment
+                                    lda fsm_selected_disk_spp_number
+                                    dcr a 
+                                    push psw 
+fsm_read_fat_page_operation_loop:   call bios_mass_memory_read_sector
+                                    cpi bios_operation_ok
+                                    jz fsm_read_fat_page_operation_loop2
+                                    inx sp 
+                                    inx sp 
+                                    jmp fsm_read_fat_page_end
+fsm_read_fat_page_operation_loop2:  inr e 
+                                    mov a,d 
+                                    aci 0 
+                                    mov d,a 
+                                    mov a,c 
+                                    aci 0 
+                                    mov c,a 
+                                    mov b,a 
+                                    aci 0 
+                                    mov b,a 
+                                    call fsm_seek_disk_sector
+                                    xthl 
+                                    dcr h 
+                                    xthl 
+                                    jnz fsm_read_fat_page_operation_loop
+                                    mvi a,fsm_operation_ok
+fsm_read_fat_page_end:              pop h 
+                                    pop d 
+                                    pop b 
+                                    ret 
+
+
+;fsm_read_data_page seleziona la pagina appartenente alla fat 
+;HL -> pagina da selezionare
+;A <- esito dell'operazione 
+
+fsm_read_data_page:                     push b
+                                        push d 
+                                        push h 
+                                        xchg 
+                                        lhld fsm_selected_disk_data_page_number 
+                                        mov a,e
+                                        sub l 
+                                        mov a,d 
+                                        sbb h 
+                                        jc fsm_read_data_page_not_overflow
+                                        mvi a,%01000000
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        mvi a,fsm_bad_argument 
+                                        jmp fsm_read_data_page_end
+fsm_read_data_page_not_overflow:        xchg 
+                                        shld fsm_selected_disk_loaded_page
+                                        lda fsm_selected_disk_spp_number  
+                                        mov c,l 
+                                        mov b,h 
+                                        mvi d,0
+                                        mov e,a 
+                                        call unsigned_multiply_word
+                                        lhld fsm_selected_disk_data_first_sector 
+                                        lda fsm_selected_disk_fat_page_number
+                                        add e 
+                                        mov e,a 
+                                        mov a,d 
+                                        aci 0
+                                        mov d,a 
+                                        mov a,c 
+                                        aci 0 
+                                        mov b,c
+                                        mov a,b 
+                                        aci 0 
+                                        mov b,a  
+                                        mov a,l 
+                                        add e 
+                                        mov e,a 
+                                        mov a,h 
+                                        adc d 
+                                        mov d,a 
+                                        mov a,c 
+                                        aci 0 
+                                        mov c,a 
+                                        mov a,b 
+                                        aci 0 
+                                        mov b,a 
+                                        call fsm_seek_disk_sector
+                                        cpi fsm_operation_ok
+                                        jz fsm_read_data_page_operation_ok
+                                        push psw 
+                                        mvi a,%010000000
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        pop psw 
+                                        jmp fsm_read_data_page_end
+fsm_read_data_page_operation_ok:        mvi a,%11000000
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        call fsm_reselect_mms_segment
+                                        lda fsm_selected_disk_spp_number
+                                        push psw 
+fsm_read_data_page_operation_loop:      call bios_mass_memory_read_sector
+                                        cpi bios_operation_ok
+                                        jz fsm_read_data_page_operation_loop2
+                                        inx sp 
+                                        inx sp 
+                                        jmp fsm_read_data_page_end
+fsm_read_data_page_operation_loop2:     inr e 
+                                        mov a,d 
+                                        aci 0 
+                                        mov d,a 
+                                        mov a,c 
+                                        aci 0 
+                                        mov c,a 
+                                        mov b,a 
+                                        aci 0 
+                                        mov b,a 
+                                        call fsm_seek_disk_sector
+                                        xthl 
+                                        dcr h 
+                                        xthl 
+                                        jnz fsm_read_fat_page_operation_loop
+                                        mvi a,fsm_operation_ok
+fsm_read_data_page_end:                 pop h 
+                                        pop d 
+                                        pop b 
+                                        ret 
 
 ;fsm_seek_mass_memory_sector posiziona la testina nel settore specificato
 ;BCDE -> posizione in settori
