@@ -3,7 +3,7 @@ cps_functions:      .org CPS
 
 system_boot:    lxi sp,$00bf
                 call bios_warm_boot
-                ;call mms_low_memory_initialize
+                call mms_low_memory_initialize
                 call fsm_init 
                 mvi a,'A'
                 call bios_mass_memory_select_drive
@@ -13,12 +13,15 @@ system_boot:    lxi sp,$00bf
                 sta fsm_selected_disk_spt_number
                 lxi h,bios_mass_memory_rom_tracks_number
                 shld fsm_selected_disk_tph_number
-
+                lxi h,5
+                shld fsm_selected_disk_data_first_sector
                 lxi h,$00a0
                 shld fsm_selected_disk_sectors_number
-                lxi b,$0000
-                lxi d,$001f
-                call fsm_seek_disk_sector 
+                mvi a,8 
+                sta fsm_selected_disk_spp_number
+                sta fsm_selected_disk_fat_page_number
+                mvi a,1
+                call fsm_read_fat_page
                 hlt 
 
                 lxi h,0 
