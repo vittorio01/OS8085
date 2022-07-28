@@ -170,11 +170,7 @@ fsm_init:   push h
             sta fsm_selected_disk_loaded_page
             sta fsm_selected_disk_loaded_page+1
             sta fsm_selected_disk_loaded_page_flags
-            mvi b,fsm_coded_page_dimension 
-            mvi c,128 
-            call unsigned_multiply_byte
-            mov l,c 
-            mov h,b 
+            lxi h,fsm_uncoded_page_dimension
             call mms_create_low_memory_system_data_segment
             ora a 
             jz fsm_disk_external_generated_error
@@ -466,7 +462,7 @@ fsm_read_fat_page_not_overflow:     sta fsm_selected_disk_loaded_page
 fsm_read_fat_page_operation_ok:     mvi a,%10000000
                                     sta fsm_selected_disk_loaded_page_flags
                                     call fsm_reselect_mms_segment
-                                    lda fsm_selected_disk_spp_number
+                                    lda fsm_selected_disk_spp_number 
                                     dcr a 
                                     push psw 
 fsm_read_fat_page_operation_loop:   call bios_mass_memory_read_sector
@@ -491,6 +487,9 @@ fsm_read_fat_page_operation_loop2:  inr e
                                     xthl 
                                     jnz fsm_read_fat_page_operation_loop
                                     mvi a,fsm_operation_ok
+                                    inx sp 
+                                    inx sp  
+                                    hlt 
 fsm_read_fat_page_end:              pop h 
                                     pop d 
                                     pop b 
