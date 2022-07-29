@@ -303,6 +303,7 @@ bios_mass_memory_write_dselected:   push b
                                     pop d 
                                     lxi b,bios_mass_memory_rom_bps_uncoded_number
                                     call bios_memory_transfer
+                                    xchg 
                                     mvi a,bios_operation_ok 
                                     pop d 
                                     pop b 
