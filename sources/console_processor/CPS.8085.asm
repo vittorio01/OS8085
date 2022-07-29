@@ -19,9 +19,13 @@ system_boot:    lxi sp,$00bf
                 shld fsm_selected_disk_sectors_number
                 mvi a,8 
                 sta fsm_selected_disk_spp_number
+                mvi a,2
                 sta fsm_selected_disk_fat_page_number
-                mvi a,1
-                call fsm_read_fat_page
+                lxi h,128
+                shld fsm_selected_disk_data_page_number
+                call fsm_clear_mms_segment
+                lxi h,7
+                call fsm_write_data_page
                 hlt 
 
                 lxi h,0 
