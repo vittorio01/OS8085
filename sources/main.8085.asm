@@ -16,7 +16,7 @@ MMS         .equ FSM+2048
 BIOS        .equ mms+2048
 
 .include "sources/bios/PX_MINI_BIOS.8085.asm" 
-.include "sources/memory_management/mms.8085.asm" 
+.include "sources/memory_management/MMS.8085.asm" 
 .include "sources/file_system_manager/FSM.8085.asm" 
 .include "sources/console_processor/CPS.8085.asm"
 .include "sources/libraries/multiply/multiply_word.8085.asm"

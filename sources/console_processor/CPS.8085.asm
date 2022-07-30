@@ -21,7 +21,7 @@ system_boot:    lxi sp,$00bf
                 sta fsm_selected_disk_spp_number
                 mvi a,5
                 sta fsm_selected_disk_fat_page_number
-                lxi h,2048
+                lxi h,512
                 shld fsm_selected_disk_data_page_number
                 call fsm_clear_fat_table
                 hlt 
