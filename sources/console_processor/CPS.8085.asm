@@ -13,19 +13,17 @@ system_boot:    lxi sp,$00bf
                 sta fsm_selected_disk_spt_number
                 lxi h,bios_mass_memory_rom_tracks_number
                 shld fsm_selected_disk_tph_number
-                lxi h,5
+                lxi h,1
                 shld fsm_selected_disk_data_first_sector
-                lxi h,$00a0
+                lxi h,2000
                 shld fsm_selected_disk_sectors_number
                 mvi a,8 
                 sta fsm_selected_disk_spp_number
-                mvi a,2
+                mvi a,5
                 sta fsm_selected_disk_fat_page_number
-                lxi h,128
+                lxi h,2048
                 shld fsm_selected_disk_data_page_number
-                call fsm_clear_mms_segment
-                lxi h,7
-                call fsm_write_data_page
+                call fsm_clear_fat_table
                 hlt 
 
                 lxi h,0 

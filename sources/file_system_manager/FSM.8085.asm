@@ -150,6 +150,8 @@ fms_disk_name_max_lenght            .equ 16
 
 fsm_mass_memory_sector_not_found    .equ $20
 fsm_bad_argument                    .equ $21
+fsm_disk_not_selected               .equ $22
+fsm_formatting_fat_generation_error .equ $23
 fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
@@ -387,6 +389,78 @@ fsm_disk_external_generated_error:      pop h
                                         pop b 
                                         ret 
 
+;fsm_fat_reset inizializza la fat table del dispositivo selezionato
+fsm_clear_fat_table:                            ;lda fsm_selected_disk
+                                                ;ora a 
+                                                ;jnz fsm_clear_fat_table_disk_selected
+                                                ;mvi a,fsm_disk_not_selected
+                                                ;ret 
+fsm_clear_fat_table_disk_selected:              push h 
+                                                push d 
+                                                push b 
+                                                call fsm_reselect_mms_segment
+                                                cpi fsm_operation_ok
+                                                jnz fsm_clear_fat_table_reset_end
+                                                call fsm_clear_mms_segment
+                                                xchg 
+                                                lhld fsm_selected_disk_data_page_number
+                                                push h                                  
+                                                lxi h,0                                 ; sp -> [pagina fat][numero di pagine]
+                                                push h                                  ; HL -> puntatore al buffer
+                                                xchg                                    ; de -> pagina corrente 
+                                                lxi b,fsm_uncoded_page_dimension        ; bc -> dimensione del buffer 
+                                                inx h 
+                                                inx h 
+                                                inx d
+                                                dcx b 
+                                                dcx b
+fsm_clear_fat_table_loop:                       mov a,c 
+                                                ora b 
+                                                jz fsm_clear_fat_table_load_page
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov a,l 
+                                                sub e 
+                                                mov a,h 
+                                                sbb d 
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                jz fsm_clear_fat_table_loop_end
+                                                mov m,e 
+                                                inx h 
+                                                mov m,d 
+                                                inx h 
+                                                dcx b 
+                                                dcx b 
+                                                inx d 
+                                                jmp fsm_clear_fat_table_loop
+fsm_clear_fat_table_load_page:                  lxi b,fsm_uncoded_page_dimension
+                                                xthl 
+                                                mov a,l 
+                                                inr l 
+                                                xthl 
+                                                call fsm_write_fat_page
+                                                cpi fsm_operation_ok                   
+                                                jnz fsm_clear_fat_table_load_page_error
+                                                call fsm_clear_mms_segment
+                                                jmp fsm_clear_fat_table_loop
+fsm_clear_fat_table_load_page_error:            inx sp 
+                                                inx sp 
+                                                inx sp 
+                                                inx sp 
+                                                jmp fsm_clear_fat_table_reset_end
+fsm_clear_fat_table_loop_end:                   inx sp 
+                                                inx sp 
+                                                inx sp 
+                                                inx sp 
+                                                mvi a,fsm_operation_ok
+fsm_clear_fat_table_reset_end:                  pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
+
 ;fsm_reselect_mms_segment riseleziona il segmento di buffer e aggiorna l'indirizzo in memoria assogiato se è stato modificato
 ;A <- esito dell'operazione
 ;HL <- indirizzo aggiornato
@@ -405,14 +479,17 @@ fsm_reselect_mms_segment:   lda fsm_page_buffer_segment_id
 fsm_clear_mms_segment:      push h 
                             push d 
                             call fsm_reselect_mms_segment
+                            cpi fsm_operation_ok
+                            jnz fsm_clear_mms_segment_end
                             lxi d,fsm_uncoded_page_dimension
-fsm_clear_mms_segment_loop: mvi m,$ff ;0 
+fsm_clear_mms_segment_loop: mvi m,0 
                             inx h 
                             dcx d 
                             mov a,d 
                             ora e 
                             jnz fsm_clear_mms_segment_loop
-                            pop d 
+                            mvi a,fsm_operation_ok
+fsm_clear_mms_segment_end:  pop d 
                             pop h 
                             ret 
 
@@ -735,7 +812,7 @@ fsm_write_data_page_operation_loop:     call bios_mass_memory_write_sector
                                         inx sp 
                                         inx sp 
                                         jmp fsm_write_data_page_end
-fsm_write_data_page_operation_loop2:     inr e 
+fsm_write_data_page_operation_loop2:    inr e 
                                         mov a,d 
                                         aci 0 
                                         mov d,a 
