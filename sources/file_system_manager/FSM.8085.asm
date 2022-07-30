@@ -77,7 +77,7 @@
 ;  0010   | xxxx | xxxx | xxxx | xxxx | xxxx | ***
 
 ;Per salvare i dati è quindi necessario inserire l'intestazione, che contiene l'indirizzo della pagina di partenza, e modificare opportunamente la tabella di allocazione
-
+;Nella tabella, se l'indirizzo della pagina successiva risulta zero vuol dire che non è concatenata a nessun'altra pagina
 ;----- Gestione delle intestazioni -----
 ;le intestazioni hanno tutte la stessa dimensione e, dato che non è presente un sistema per la gestione delle directories, vengono messe in modo sequenziale all'interno delle pagine
 ;nel caso in cui i dati superano la dimensione di una pagina, viene creata una seconda pagina in cui verranno inseriti in seguito le nuove intestazioni.
@@ -427,7 +427,7 @@ fsm_clear_fat_table_loop:                       mov a,c
                                                 xthl 
                                                 dcx sp 
                                                 dcx sp 
-                                                jz fsm_clear_fat_table_loop_end
+                                                jc fsm_clear_fat_table_loop_end
                                                 mov m,e 
                                                 inx h 
                                                 mov m,d 
@@ -445,13 +445,21 @@ fsm_clear_fat_table_load_page:                  lxi b,fsm_uncoded_page_dimension
                                                 cpi fsm_operation_ok                   
                                                 jnz fsm_clear_fat_table_load_page_error
                                                 call fsm_clear_mms_segment
+                                                lhld fsm_page_buffer_segment_address
                                                 jmp fsm_clear_fat_table_loop
 fsm_clear_fat_table_load_page_error:            inx sp 
                                                 inx sp 
                                                 inx sp 
                                                 inx sp 
                                                 jmp fsm_clear_fat_table_reset_end
-fsm_clear_fat_table_loop_end:                   inx sp 
+fsm_clear_fat_table_loop_end:                   xthl
+                                                mov a,l
+                                                ora a 
+                                                jnz fsm_clear_fat_table_loop_end2
+                                                call fsm_write_fat_page
+                                                cpi fsm_operation_ok                   
+                                                jnz fsm_clear_fat_table_load_page_error
+fsm_clear_fat_table_loop_end2:                  inx sp 
                                                 inx sp 
                                                 inx sp 
                                                 inx sp 
@@ -521,15 +529,12 @@ fsm_read_fat_page_not_overflow:     sta fsm_selected_disk_loaded_page
                                     add c 
                                     mov e,a 
                                     mov a,h 
-                                    adc d 
+                                    adc b 
                                     mov d,a 
                                     lxi b,0
                                     mov a,c 
                                     aci 0 
                                     mov c,a 
-                                    mov a,b 
-                                    aci 0 
-                                    mov b,a
                                     call fsm_seek_disk_sector
                                     cpi fsm_operation_ok
                                     jz fsm_read_fat_page_operation_ok
@@ -599,15 +604,12 @@ fsm_write_fat_page_not_overflow:    sta fsm_selected_disk_loaded_page
                                     add c 
                                     mov e,a 
                                     mov a,h 
-                                    adc d 
+                                    adc b 
                                     mov d,a 
                                     lxi b,0
                                     mov a,c 
                                     aci 0 
                                     mov c,a 
-                                    mov a,b 
-                                    aci 0 
-                                    mov b,a
                                     call fsm_seek_disk_sector
                                     cpi fsm_operation_ok
                                     jz fsm_write_fat_page_operation_ok
@@ -847,7 +849,7 @@ fsm_seek_disk_sector:                       push b
                                             sbb d 
                                             lda fsm_selected_disk_sectors_number+2
                                             sbb c 
-                                            lda fsm_selected_disk_sectors_number+2
+                                            lda fsm_selected_disk_sectors_number+3
                                             sbb b 
                                             jnc fsm_seek_disk_sector_not_overflow
                                             mvi a,fsm_mass_memory_sector_not_found
@@ -881,7 +883,7 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
                                             inx sp 
                                             pop b 
                                             inx sp 
-                                            inx sp 
+                                            inx sp
                                             call bios_mass_memory_select_track
                                             cpi bios_operation_ok
                                             jnz fsm_seek_disk_sector_error
