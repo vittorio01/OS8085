@@ -77,7 +77,7 @@
 ;  0010   | xxxx | xxxx | xxxx | xxxx | xxxx | ***
 
 ;Per salvare i dati è quindi necessario inserire l'intestazione, che contiene l'indirizzo della pagina di partenza, e modificare opportunamente la tabella di allocazione
-;Nella tabella, se l'indirizzo della pagina successiva risulta zero vuol dire che non è concatenata a nessun'altra pagina
+;Nella tabella, se l'indirizzo della pagina successiva risulta $ffff vuol dire che non è concatenata a nessun'altra pagina (EOF)
 ;----- Gestione delle intestazioni -----
 ;le intestazioni hanno tutte la stessa dimensione e, dato che non è presente un sistema per la gestione delle directories, vengono messe in modo sequenziale all'interno delle pagine
 ;nel caso in cui i dati superano la dimensione di una pagina, viene creata una seconda pagina in cui verranno inseriti in seguito le nuove intestazioni.
@@ -156,7 +156,6 @@ fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
-
 
 fsm_functions:  .org FSM 
                 jmp fsm_init 
@@ -389,12 +388,117 @@ fsm_disk_external_generated_error:      pop h
                                         pop b 
                                         ret 
 
+;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
+;HL -> indirizzo della pagina di riferimento
+;HL <- indirizzo della pagina concatenata
+;A -> esito dell'operazione
+
+fsm_get_page_link:                  lda fsm_selected_disk
+                                    ora a 
+                                    jnz fsm_get_page_link_disk_selected
+                                    mvi a,fsm_disk_not_selected
+                                    ret 
+fsm_get_page_link_disk_selected:    push d 
+                                    push b 
+                                    mov c,l 
+                                    mov b,h 
+                                    lxi d,fsm_uncoded_page_dimension
+                                    call unsigned_divide_word 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %10000000
+                                    jz fsm_get_page_link_load_page2
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %01000000
+                                    jnz fsm_get_page_link_load_page
+                                    lda fsm_selected_disk_loaded_page
+                                    cmp c 
+                                    jz fsm_get_page_link_offset
+fsm_get_page_link_load_page:        call fsm_write_fat_page
+                                    cpi fsm_operation_ok 
+                                    jnz fsm_get_page_link_end
+fsm_get_page_link_load_page2:       mov a,c 
+                                    call fsm_read_fat_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_get_page_link_end
+fsm_get_page_link_offset:           mov a,e 
+                                    add e  
+                                    mov e,a 
+                                    mov a,d 
+                                    ral 
+                                    mov d,a 
+                                    call fsm_reselect_mms_segment
+                                    dad d 
+                                    mov e,m 
+                                    mov d,m 
+                                    xchg 
+                                    mvi a,fsm_operation_ok
+fsm_get_page_link_end:              pop b 
+                                    pop d 
+                                    ret 
+
+;fsm_set_page_link scrive l'indirizzo della pagina concatenata nella fat table
+;DE -> insirizzo della pagina da salvare
+;HL -> indirizzo della pagina di riferimento
+;A -> esito dell'operazione
+
+fsm_set_page_link:                  lda fsm_selected_disk
+                                    ora a 
+                                    jnz fsm_set_page_link_disk_selected
+                                    mvi a,fsm_disk_not_selected
+                                    ret 
+fsm_set_page_link_disk_selected:    push b 
+                                    push h 
+                                    push d 
+                                    mov c,l 
+                                    mov b,h 
+                                    lxi d,fsm_uncoded_page_dimension
+                                    call unsigned_divide_word 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %10000000
+                                    jz fsm_set_page_link_load_page2
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %01000000
+                                    jz fsm_set_page_link_load_page
+                                    lhld fsm_selected_disk_loaded_page
+                                    call fsm_write_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_set_page_link_end
+                                    jmp fsm_set_page_link_load_page2
+fsm_set_page_link_load_page:        lda fsm_selected_disk_loaded_page
+                                    cmp c 
+                                    jz fsm_set_page_link_offset
+                                    call fsm_write_fat_page
+                                    cpi fsm_operation_ok 
+                                    jnz fsm_set_page_link_end
+fsm_set_page_link_load_page2:       mov a,c 
+                                    call fsm_read_fat_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_set_page_link_end
+fsm_set_page_link_offset:           mov a,e 
+                                    add e  
+                                    mov e,a 
+                                    mov a,d 
+                                    ral 
+                                    mov d,a 
+                                    call fsm_reselect_mms_segment
+                                    dad d 
+                                    pop d 
+                                    push d 
+                                    mov m,e  
+                                    inx h 
+                                    mov m,d  
+                                    mvi a,fsm_operation_ok
+fsm_set_page_link_end:              pop d 
+                                    pop h 
+                                    pop b 
+                                    ret 
+
 ;fsm_fat_reset inizializza la fat table del dispositivo selezionato
-fsm_clear_fat_table:                            ;lda fsm_selected_disk
-                                                ;ora a 
-                                                ;jnz fsm_clear_fat_table_disk_selected
-                                                ;mvi a,fsm_disk_not_selected
-                                                ;ret 
+fsm_clear_fat_table:                            lda fsm_selected_disk
+                                                ora a 
+                                                jnz fsm_clear_fat_table_disk_selected
+                                                mvi a,fsm_disk_not_selected
+                                                ret 
 fsm_clear_fat_table_disk_selected:              push h 
                                                 push d 
                                                 push b 
@@ -404,12 +508,15 @@ fsm_clear_fat_table_disk_selected:              push h
                                                 call fsm_clear_mms_segment
                                                 xchg 
                                                 lhld fsm_selected_disk_data_page_number
+                                                dcx h
                                                 push h                                  
                                                 lxi h,0                                 ; sp -> [pagina fat][numero di pagine]
                                                 push h                                  ; HL -> puntatore al buffer
                                                 xchg                                    ; de -> pagina corrente 
                                                 lxi b,fsm_uncoded_page_dimension        ; bc -> dimensione del buffer 
+                                                mvi m,$ff 
                                                 inx h 
+                                                mvi m,$ff 
                                                 inx h 
                                                 inx d
                                                 dcx b 
@@ -463,6 +570,8 @@ fsm_clear_fat_table_loop_end2:                  inx sp
                                                 inx sp 
                                                 inx sp 
                                                 inx sp 
+                                                xra a 
+                                                sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
 fsm_clear_fat_table_reset_end:                  pop b 
                                                 pop d 
@@ -518,7 +627,8 @@ fsm_read_fat_page:                  push b
                                     sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_bad_argument 
                                     jmp fsm_read_fat_page_end
-fsm_read_fat_page_not_overflow:     sta fsm_selected_disk_loaded_page
+fsm_read_fat_page_not_overflow:     mov a,b 
+                                    sta fsm_selected_disk_loaded_page
                                     xra a 
                                     sta fsm_selected_disk_loaded_page+1
                                     lda fsm_selected_disk_spp_number  
@@ -593,7 +703,8 @@ fsm_write_fat_page:                 push b
                                     sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_bad_argument 
                                     jmp fsm_write_fat_page_end
-fsm_write_fat_page_not_overflow:    sta fsm_selected_disk_loaded_page
+fsm_write_fat_page_not_overflow:    mov a,b 
+                                    sta fsm_selected_disk_loaded_page
                                     xra a 
                                     sta fsm_selected_disk_loaded_page+1
                                     lda fsm_selected_disk_spp_number  

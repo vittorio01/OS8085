@@ -6,6 +6,7 @@ system_boot:    lxi sp,$00bf
                 call mms_low_memory_initialize
                 call fsm_init 
                 mvi a,'A'
+                sta fsm_selected_disk
                 call bios_mass_memory_select_drive
                 mvi a,bios_mass_memory_rom_heads_number
                 sta fsm_selected_disk_head_number
@@ -21,17 +22,15 @@ system_boot:    lxi sp,$00bf
                 sta fsm_selected_disk_spp_number
                 mvi a,5
                 sta fsm_selected_disk_fat_page_number
-                lxi h,512
+                lxi h,2048
                 shld fsm_selected_disk_data_page_number
                 call fsm_clear_fat_table
+                lxi h,9
+                call fsm_get_page_link
+                lxi d,$ffff 
+                lxi h,1234
+                call fsm_set_page_link
                 hlt 
-
-                lxi h,0 
-                lxi d,disk_name 
-                call fsm_disk_format
-                hlt 
-                
-                
                 lxi h,128
                 call mms_create_low_memory_user_data_segment
                 lxi h,256
