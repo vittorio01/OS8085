@@ -393,47 +393,66 @@ fsm_disk_external_generated_error:      pop h
 ;HL <- indirizzo della pagina concatenata
 ;A -> esito dell'operazione
 
+;fsm_set_page_link scrive l'indirizzo della pagina concatenata nella fat table
+;DE -> insirizzo della pagina da salvare
+;HL -> indirizzo della pagina di riferimento
+;A -> esito dell'operazione
+
 fsm_get_page_link:                  lda fsm_selected_disk
                                     ora a 
                                     jnz fsm_get_page_link_disk_selected
                                     mvi a,fsm_disk_not_selected
                                     ret 
-fsm_get_page_link_disk_selected:    push d 
-                                    push b 
+fsm_get_page_link_disk_selected:    push b 
+                                    push d 
                                     mov c,l 
                                     mov b,h 
                                     lxi d,fsm_uncoded_page_dimension
+                                    stc 
+                                    cmc 
+                                    mov a,d 
+                                    rar 
+                                    mov d,a 
+                                    mov a,e 
+                                    rar 
+                                    mov e,a 
                                     call unsigned_divide_word 
                                     lda fsm_selected_disk_loaded_page_flags
                                     ani %10000000
                                     jz fsm_get_page_link_load_page2
                                     lda fsm_selected_disk_loaded_page_flags
                                     ani %01000000
-                                    jnz fsm_get_page_link_load_page
-                                    lda fsm_selected_disk_loaded_page
+                                    jz fsm_get_page_link_load_page
+                                    lhld fsm_selected_disk_loaded_page
+                                    call fsm_write_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_get_page_link_end
+                                    jmp fsm_get_page_link_load_page2
+fsm_get_page_link_load_page:        lda fsm_selected_disk_loaded_page
                                     cmp c 
                                     jz fsm_get_page_link_offset
-fsm_get_page_link_load_page:        call fsm_write_fat_page
+                                    call fsm_write_fat_page
                                     cpi fsm_operation_ok 
                                     jnz fsm_get_page_link_end
 fsm_get_page_link_load_page2:       mov a,c 
                                     call fsm_read_fat_page
                                     cpi fsm_operation_ok
                                     jnz fsm_get_page_link_end
-fsm_get_page_link_offset:           mov a,e 
-                                    add e  
+fsm_get_page_link_offset:           call fsm_reselect_mms_segment
+                                    mov a,e 
+                                    add a 
                                     mov e,a 
                                     mov a,d 
                                     ral 
                                     mov d,a 
-                                    call fsm_reselect_mms_segment
                                     dad d 
                                     mov e,m 
+                                    inx h 
                                     mov d,m 
                                     xchg 
                                     mvi a,fsm_operation_ok
-fsm_get_page_link_end:              pop b 
-                                    pop d 
+fsm_get_page_link_end:              pop d 
+                                    pop b 
                                     ret 
 
 ;fsm_set_page_link scrive l'indirizzo della pagina concatenata nella fat table
@@ -452,6 +471,14 @@ fsm_set_page_link_disk_selected:    push b
                                     mov c,l 
                                     mov b,h 
                                     lxi d,fsm_uncoded_page_dimension
+                                    stc 
+                                    cmc 
+                                    mov a,d 
+                                    rar 
+                                    mov d,a 
+                                    mov a,e 
+                                    rar 
+                                    mov e,a 
                                     call unsigned_divide_word 
                                     lda fsm_selected_disk_loaded_page_flags
                                     ani %10000000
@@ -474,13 +501,13 @@ fsm_set_page_link_load_page2:       mov a,c
                                     call fsm_read_fat_page
                                     cpi fsm_operation_ok
                                     jnz fsm_set_page_link_end
-fsm_set_page_link_offset:           mov a,e 
-                                    add e  
+fsm_set_page_link_offset:           call fsm_reselect_mms_segment
+                                    mov a,e 
+                                    add a 
                                     mov e,a 
                                     mov a,d 
                                     ral 
                                     mov d,a 
-                                    call fsm_reselect_mms_segment
                                     dad d 
                                     pop d 
                                     push d 
@@ -508,7 +535,6 @@ fsm_clear_fat_table_disk_selected:              push h
                                                 call fsm_clear_mms_segment
                                                 xchg 
                                                 lhld fsm_selected_disk_data_page_number
-                                                dcx h
                                                 push h                                  
                                                 lxi h,0                                 ; sp -> [pagina fat][numero di pagine]
                                                 push h                                  ; HL -> puntatore al buffer
@@ -519,12 +545,10 @@ fsm_clear_fat_table_disk_selected:              push h
                                                 mvi m,$ff 
                                                 inx h 
                                                 inx d
+                                                inx d 
                                                 dcx b 
                                                 dcx b
-fsm_clear_fat_table_loop:                       mov a,c 
-                                                ora b 
-                                                jz fsm_clear_fat_table_load_page
-                                                inx sp 
+fsm_clear_fat_table_loop:                       inx sp 
                                                 inx sp 
                                                 xthl 
                                                 mov a,l 
@@ -535,6 +559,9 @@ fsm_clear_fat_table_loop:                       mov a,c
                                                 dcx sp 
                                                 dcx sp 
                                                 jc fsm_clear_fat_table_loop_end
+                                                mov a,c 
+                                                ora b 
+                                                jz fsm_clear_fat_table_load_page
                                                 mov m,e 
                                                 inx h 
                                                 mov m,d 
@@ -559,11 +586,18 @@ fsm_clear_fat_table_load_page_error:            inx sp
                                                 inx sp 
                                                 inx sp 
                                                 jmp fsm_clear_fat_table_reset_end
-fsm_clear_fat_table_loop_end:                   xthl
-                                                mov a,l
-                                                ora a 
-                                                jnz fsm_clear_fat_table_loop_end2
+fsm_clear_fat_table_loop_end:                   dcx h 
+                                                mvi m,$ff 
+                                                dcx h 
+                                                mvi m,$ff
+                                                xthl 
+                                                mov a,l 
                                                 call fsm_write_fat_page
+                                                cpi fsm_operation_ok                   
+                                                jnz fsm_clear_fat_table_load_page_error
+                                                call fsm_clear_mms_segment
+                                                lxi h,0 
+                                                call fsm_write_data_page
                                                 cpi fsm_operation_ok                   
                                                 jnz fsm_clear_fat_table_load_page_error
 fsm_clear_fat_table_loop_end2:                  inx sp 
