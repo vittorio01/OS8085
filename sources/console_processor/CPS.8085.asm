@@ -25,9 +25,10 @@ system_boot:    lxi sp,$00bf
                 lxi h,2048
                 shld fsm_selected_disk_data_page_number
                 call fsm_clear_fat_table
-                lxi h,9
-                call fsm_get_page_link
-                lxi d,$ffff 
+                hlt
+                lxi d,$1234
+                lxi h,0
+                call fsm_set_page_link
                 lxi h,1234
                 call fsm_set_page_link
                 hlt 
