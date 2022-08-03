@@ -29,21 +29,25 @@
 ;----- Struttura dei files -----
 ;Un file è dotato di intestazine e corpo, che vengono separati e memorizzati in due diverse zone della memoria. L'intestazione è formata da:
 ;-  tipo        ->  un byte che identifica la tipologia di file. I bit assumono valori diversi secondo le seguenti caratteristiche:
-;               * bit 8 -> bit di valdità settato sempre per indicare che in quela posizione +è presente un intestazione
-;               * bit 7 -> bit che indica se il file è di sistema o no
-;               * bit 6 -> bit che identifica se il file è eseguibile o no
-;               * bit 5 -> bit che indica se il file è nascosto 
+;               * bit 8 -> distingue il marker EOL (0) da un intestazione valida (1)
+;               * bit 7 -> indica se l'intestazione è stata eliminata (1) 
+;               * bit 6 -> indica se il file è di sistema (1) 
+;               * bit 5 -> indica se il file è eseguibile (1)
+;               * bit 4 -> indica se il file è nascosto (1)
+;               * bit 3 -> indica se il file è di sola lettura (1)
 ;               
-;-  nome        -> 20 bytes per memorizzare nome ed estenzione del file, separate da un punto (ad esempio file.exe) 
-;-  data        -> 7 bytes che memorizzano la data di creazione del file (codificata in BCD a partire dall'anno)
-;-  dimensione  -> 2 bytes per indicare il numero di blocchi occupati dal file
+;-  nome        -> 20 bytes per memorizzare nome del file. La stringa prevede una dimensione massima di 20 bytes, ma può essere interrotta prima di questo limite 
+;                  tramite il carattere terminatore ($00)
+;-  estenzione  -> 5 bytes per memorizzare l'estenzione del file. La stringa prevede una dimensione massima di 5 bytes, ma può essere interrotta prima di questo limite 
+;                  tramite il carattere terminatore ($00)
+;-  dimensione  -> 4 bytes che indicano la dimensione del file (in bytes)
 ;-  dati        -> 2 bytes che mantengono l'indirizzo della prima pagina dei dati
 
 ;-------------------------------------------------------------------------------------------
 ;- tipo - nome ed estenzione - dimensione (in pagine) - puntatore alla prima pagina dati -
 ;-------------------------------------------------------------------------------------------
 
-;L'intestazione di un file è quindi di dimensione fissa prestabilita (32 bytes)
+;L'intestazione di un file è quindi di dimensione fissa prestabilita (28 bytes)
 
 ;----- Tabella di allocazione -----
 ;Il corpo dei files viene spezzato in pagine e salvato in posizioni non per forza contigue del disco. Un file di dimensione N se deve essere salvato in un disco 
@@ -61,13 +65,13 @@
 
 ;nell'esempio precedente la tabella contiene 
 
-;         ---------------
-;  0001   ----  0040 ----
+;         --------------
+;  0001   ---- 0040 ----
 ;         ***************
-;  0030   ----  EOF  ----
+;  0030   ---- EOF  ----
 ;         ***************
-;  0040   ---- 0030  ----
-;         ---------------
+;  0040   ---- 0030 ----
+;         --------------
 
 ;Fisicamente, la tabella viene memorizzata nelle prime pagine (in modo adiacente) del file system e le riche vengono inserite in modo sequenziale (una riga occupa due bytes)
 
@@ -106,7 +110,6 @@
 ;-  Il settore di avvio (il primo settore) contiene tutte le specifiche del disco tra cui:
 ;       * istruzione di salto                   (3 bytes) un istruzione di salto alla parte eseguibile del settore di avvio
 ;       * marcatore di formattazione            (6 bytes)
-;       * nome del disco                        (16 bytes)
 ;       * numero di testine del disco           (1 byte)
 ;       * numero di tracce per testina          (2 bytes)
 ;       * numero di settori per traccia         (1 byte)
@@ -124,7 +127,10 @@
 ;----------------------------------------------------------------------
 ;- settore di avvio - sistema operativo (opzionale) - FAT - Zona dati -
 ;----------------------------------------------------------------------
-
+;La prima intestazione presente nella zona dati comprende i dati generali sul file system:
+;-  Nome del disco (20 bytes)
+;-  numero di blocchi liberi (2 bytes)
+;-  puntatore al primo blocco libero (2 bytes)
 
 fsm_selected_disk                       .equ $0060
 fsm_selected_disk_head_number           .equ $0061
@@ -146,7 +152,10 @@ fsm_coded_page_dimension            .equ 16
 fsm_uncoded_page_dimension          .equ 2048
 
 fsm_format_marker_lenght            .equ 6 
-fms_disk_name_max_lenght            .equ 16 
+fsm_header_dimension                .equ 32 
+fsm_disk_name_max_lenght            .equ 20
+fsm_header_name_dimension           .equ 20
+fsm_header_extension_dimenson       .equ 5 
 
 fsm_mass_memory_sector_not_found    .equ $20
 fsm_bad_argument                    .equ $21
@@ -183,10 +192,8 @@ fsm_init:   push h
 
 ;fsm_disk_format formatta il disco e prepara il file system di base 
 ; A  -> disco da formattare 
-; DE -> nome del disco (puntatore a una stringa)
 ; HL -> dimensione della sezione riservata al sistema (in bytes)
-fsm_disk_format:        
-                        push b 
+fsm_disk_format:        push b 
                         push d 
                         push h 
                         push psw 
@@ -266,23 +273,6 @@ fsm_disk_format_jump1:  inx b
                         mov a,h 
                         aci 0 
                         mov h,a 
-                        inx sp 
-                        inx sp 
-                        pop d 
-                        push d 
-                        dcx sp 
-                        dcx sp 
-                        mvi a,fms_disk_name_max_lenght
-                        call string_ncopy
-                        mvi a,fms_disk_name_max_lenght
-                        add l 
-                        mov l,a 
-                        mov a,h 
-                        aci 0 
-                        mov h,a 
-                        inx h
-                        mvi m,0 
-                        inx h 
                         lda fsm_selected_disk_head_number
                         mov m,a 
                         inx h 
@@ -300,7 +290,7 @@ fsm_disk_format_jump1:  inx b
                         inx h 
                         lxi d,0 
                         push d 
-                        lxi d,fsm_uncoded_page_dimension 
+                        lxi d,fsm_coded_page_dimension 
                         push d 
                         lda fsm_selected_disk_data_first_sector
                         mov e,a 
@@ -330,12 +320,20 @@ fsm_disk_format_jump1:  inx b
                         mov a,d 
                         sta fsm_selected_disk_data_page_number+1
                         push b  
-                        lxi b,fsm_uncoded_page_dimension+2 
+                        lxi b,fsm_uncoded_page_dimension+2
                         push b 
-                        lxi b,2
-                        call unsigned_multiply_word 
+                        lxi b,0
+                        mov a,e 
+                        add a 
+                        mov e,a 
+                        mov a,d 
+                        ral 
+                        mov d,a 
+                        mov a,c 
+                        ral 
+                        mov c,a
+                        push b 
                         push d 
-                        push b 
                         call unsigned_divide_long
                         pop d 
                         pop b 
@@ -350,6 +348,7 @@ fsm_disk_format_jump2:  pop d
                         mov a,e 
                         add a 
                         mov e,a 
+                        hlt 
                         sta fsm_selected_disk_fat_page_number
                         mov m,a 
                         inx h 
@@ -377,12 +376,15 @@ fsm_disk_format_jump2:  pop d
                         call bios_mass_memory_write_sector
                         cpi bios_operation_ok
                         jnz fsm_disk_external_generated_error
+                        hlt 
+                        call fsm_clear_fat_table
+                        cpi fsm_operation_ok
+                        jnz fsm_disk_external_generated_error
                         mvi a,fsm_operation_ok 
                         pop h 
                         pop d 
                         pop b 
                         ret 
-
 fsm_disk_external_generated_error:      pop h 
                                         pop d 
                                         pop b 
@@ -391,11 +393,6 @@ fsm_disk_external_generated_error:      pop h
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
 ;HL <- indirizzo della pagina concatenata
-;A -> esito dell'operazione
-
-;fsm_set_page_link scrive l'indirizzo della pagina concatenata nella fat table
-;DE -> insirizzo della pagina da salvare
-;HL -> indirizzo della pagina di riferimento
 ;A -> esito dell'operazione
 
 fsm_get_page_link:                  lda fsm_selected_disk
@@ -595,7 +592,28 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 call fsm_write_fat_page
                                                 cpi fsm_operation_ok                   
                                                 jnz fsm_clear_fat_table_load_page_error
-                                                call fsm_clear_mms_segment
+                                                lxi h,0 
+                                                call fsm_read_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_clear_fat_table_load_page_error
+                                                lhld fsm_page_buffer_segment_address
+                                                lxi b,fsm_disk_name_max_lenght
+                                                dad b 
+                                                xchg 
+                                                lhld fsm_selected_disk_data_page_number
+                                                xchg 
+                                                dcx d 
+                                                mov m,e 
+                                                inx h 
+                                                mov m,d 
+                                                inx h 
+                                                mvi m,1 
+                                                inx h 
+                                                mvi m,0 
+                                                lhld fsm_page_buffer_segment_address 
+                                                mvi b,fsm_header_dimension
+                                                dad b 
+                                                mvi m,0 
                                                 lxi h,0 
                                                 call fsm_write_data_page
                                                 cpi fsm_operation_ok                   
@@ -644,7 +662,7 @@ fsm_clear_mms_segment_end:  pop d
                             pop h 
                             ret 
 
-;fsm_write_fat_page legge la pagina desiderata e salva il contenuto nel buffer in memoria
+;fsm_read_fat_page legge la pagina desiderata e salva il contenuto nel buffer in memoria
 ;A -> pagina da selezionare
 ;A <- esito dell'operazione 
 
@@ -720,7 +738,7 @@ fsm_read_fat_page_end:              pop h
                                     ret 
 
 
-;fsm_write_fat_page srive nella pagina desiderata il contenuto nel buffer in memoria
+;fsm_write_fat_page scrive nella pagina desiderata il contenuto nel buffer in memoria
 ;A -> pagina da selezionare
 ;A <- esito dell'operazione 
 
