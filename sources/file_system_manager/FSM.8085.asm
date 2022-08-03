@@ -197,10 +197,10 @@ fsm_disk_format:        push b
                         push d 
                         push h 
                         push psw 
-                        ;call bios_mass_memory_format_device
-                        ;cpi bios_operation_ok 
+                        call bios_mass_memory_format_device
+                        cpi bios_operation_ok 
                         pop psw 
-                        ;jz fsm_disk_external_generated_error
+                        jz fsm_disk_external_generated_error
                         sta fsm_selected_disk
                         call bios_mass_memory_select_drive
                         ora a 
@@ -238,7 +238,7 @@ fsm_disk_format:        push b
                         call unsigned_divide_word
                         mov a,e 
                         ora d 
-                        jnz fsm_disk_format_jump1
+                        jz fsm_disk_format_jump1
                         inx b 
 fsm_disk_format_jump1:  inx b 
                         mov l,c 
@@ -345,10 +345,8 @@ fsm_disk_format_jump1:  inx b
                         mvi a,1
 fsm_disk_format_jump2:  pop d 
                         pop b 
-                        mov a,e 
-                        add a 
+                        add e 
                         mov e,a 
-                        hlt 
                         sta fsm_selected_disk_fat_page_number
                         mov m,a 
                         inx h 
@@ -362,7 +360,6 @@ fsm_disk_format_jump2:  pop d
                         mov m,a 
                         inx h 
                         sta fsm_selected_disk_data_page_number+1
-                        inx h 
                         lda fsm_selected_disk_data_first_sector
                         mov m,a 
                         inx h 
@@ -376,7 +373,6 @@ fsm_disk_format_jump2:  pop d
                         call bios_mass_memory_write_sector
                         cpi bios_operation_ok
                         jnz fsm_disk_external_generated_error
-                        hlt 
                         call fsm_clear_fat_table
                         cpi fsm_operation_ok
                         jnz fsm_disk_external_generated_error
