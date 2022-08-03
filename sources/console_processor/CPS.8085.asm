@@ -4,7 +4,7 @@ cps_functions:      .org CPS
 system_boot:    lxi sp,$00bf
                 lxi b,0 
                 push b 
-                lxi b,$A 
+                lxi b,$A000 
                 push b 
                 lxi b,0 
                 push b 
