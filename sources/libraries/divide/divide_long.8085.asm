@@ -120,8 +120,8 @@ unsigned_divide_shift_end:      xthl
                                 sub h 
                                 mov l,a
                                 xthl 
+                                xchg                         ;DE: [quoziente] BC: [dividendo] HL: [divisore]
                                 jc unsigned_divide_long_end
-                                xchg        ;DE: [quoziente] BC: [dividendo] HL: [divisore]
 unsigned_divide_long_loop:      ldax b 
                                 sub m 
                                 inx b 
