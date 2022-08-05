@@ -161,10 +161,13 @@ fsm_mass_memory_sector_not_found    .equ $20
 fsm_bad_argument                    .equ $21
 fsm_disk_not_selected               .equ $22
 fsm_formatting_fat_generation_error .equ $23
+fsm_unformatted_disk                .equ $24
 fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
+
+fsm_default_disk_name   .text "NO NAME"
 
 fsm_functions:  .org FSM 
                 jmp fsm_init 
@@ -190,16 +193,95 @@ fsm_init:   push h
             pop h 
             ret 
 
+;fsm_select_disk seleziona il disco desiderato 
+;A -> disco da selezionare (ASCII)
+;A <- esito dell'operazione
+
+fsm_select_disk:                cpi $41
+                                jc fsm_select_disk_bad_argument
+                                cpi $5A
+                                jc fsm_select_disk_next
+fsm_select_disk_bad_argument:   mvi a,fsm_bad_argument 
+                                ret 
+fsm_select_disk_next:           sta fsm_selected_disk 
+                                push h
+                                push d 
+                                call bios_mass_memory_select_drive
+                                ora a  
+                                jz fsm_select_disk_end
+                                lxi b,0 
+                                lxi d,0 
+                                call fsm_seek_disk_sector
+                                call fsm_reselect_mms_segment
+                                call bios_mass_memory_read_sector
+                                cpi bios_operation_ok
+                                jnz fsm_select_disk_end
+                                lhld fsm_page_buffer_segment_address
+                                inx h 
+                                inx h 
+                                inx h 
+                                lxi d,fsm_format_marker
+                                call string_ncompare
+                                ora a 
+                                jnz fsm_select_disk_formatted_disk
+                                mvi a,fsm_unformatted_disk 
+                                jmp fsm_select_disk_end
+fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
+                                mvi a,fsm_format_marker_lenght+3 
+                                add l 
+                                mov l,a 
+                                mov a,h 
+                                aci 0 
+                                mov h,a 
+                                mov a,m 
+                                sta fsm_selected_disk_head_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_tph_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_tph_number+1 
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_spt_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_bps_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_spp_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_fat_page_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_data_page_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_data_page_number+1
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_data_first_sector
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_data_first_sector+1
+fsm_select_disk_end:            pop d 
+                                pop h 
+                                ret 
+
 ;fsm_disk_format formatta il disco e prepara il file system di base 
-; A  -> disco da formattare 
 ; HL -> dimensione della sezione riservata al sistema (in bytes)
+
 fsm_disk_format:        push b 
                         push d 
                         push h 
-                        push psw 
-                        call bios_mass_memory_format_device
+                        lda fsm_selected_disk
+                        ora a 
+                        jnz fsm_disk_format_next
+                        mvi a,fsm_bad_argument
+                        jmp fsm_disk_external_generated_error
+fsm_disk_format_next:   call bios_mass_memory_format_device
                         cpi bios_operation_ok 
-                        pop psw 
                         jz fsm_disk_external_generated_error
                         sta fsm_selected_disk
                         call bios_mass_memory_select_drive
@@ -376,6 +458,10 @@ fsm_disk_format_jump2:  pop d
                         call fsm_clear_fat_table
                         cpi fsm_operation_ok
                         jnz fsm_disk_external_generated_error
+                        lxi d,fsm_default_disk_name
+                        call fsm_disk_set_name
+                        cpi fsm_operation_ok
+                        jnz fsm_disk_external_generated_error
                         mvi a,fsm_operation_ok 
                         pop h 
                         pop d 
@@ -385,6 +471,41 @@ fsm_disk_external_generated_error:      pop h
                                         pop d 
                                         pop b 
                                         ret 
+
+;fsm_disk_set_name sostituisce il nome del disco con quello fornito
+;DE -> puntatore alla stringa del nome 
+;A <- esito dell'operazione
+
+fsm_disk_set_name:                  lda fsm_selected_disk
+                                    ora a 
+                                    jnz fsm_disk_set_name_disk_selected
+                                    mvi a,fsm_disk_not_selected
+                                    ret 
+fsm_disk_set_name_disk_selected:    push h
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %11000000
+                                    cpi %11000000
+                                    jnz fsm_disk_set_name_disk_page_load
+                                    lhld fsm_selected_disk_loaded_page
+                                    mov a,l 
+                                    ora h 
+                                    jz fsm_disk_set_name_disk_page_loaded
+fsm_disk_set_name_disk_page_load:   lxi h,0 
+                                    call fsm_read_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_set_name_end
+fsm_disk_set_name_disk_page_loaded: call fsm_reselect_mms_segment
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_set_name_end
+                                    mvi a,fsm_disk_name_max_lenght
+                                    call string_ncopy
+                                    lxi h,0 
+                                    call fsm_write_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_set_name_end
+                                    mvi a,fsm_operation_ok
+fsm_disk_set_name_end:              pop h 
+                                    ret 
 
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
@@ -606,6 +727,8 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 mvi m,1 
                                                 inx h 
                                                 mvi m,0 
+                                                inx h 
+                                                mvi m,0 
                                                 lhld fsm_page_buffer_segment_address 
                                                 mvi b,fsm_header_dimension
                                                 dad b 
@@ -659,7 +782,6 @@ fsm_clear_mms_segment_end:  pop d
                             ret 
 
 ;fsm_read_fat_page legge la pagina desiderata e salva il contenuto nel buffer in memoria
-;A -> pagina da selezionare
 ;A <- esito dell'operazione 
 
 fsm_read_fat_page:                  push b
@@ -830,14 +952,32 @@ fsm_read_data_page:                     push b
                                         jmp fsm_read_data_page_end
 fsm_read_data_page_not_overflow:        xchg 
                                         shld fsm_selected_disk_loaded_page
+                                        lda fsm_selected_disk_fat_page_number
+                                        mov c,a 
+                                        lda fsm_selected_disk_spp_number  
+                                        mov b,a 
+                                        call unsigned_multiply_byte
+                                        push b 
                                         lda fsm_selected_disk_spp_number  
                                         mov c,l 
                                         mov b,h 
                                         mvi d,0
-                                        mov e,a 
+                                        mov e,a              
                                         call unsigned_multiply_word
+                                        pop h 
+                                        mov a,l 
+                                        add e 
+                                        mov e,a 
+                                        mov a,h 
+                                        add d 
+                                        mov d,a 
+                                        mov a,c 
+                                        aci 0 
+                                        mov c,a 
+                                        mov a,b 
+                                        aci 0 
+                                        mov b,a 
                                         lhld fsm_selected_disk_data_first_sector 
-                                        lda fsm_selected_disk_fat_page_number
                                         add e 
                                         mov e,a 
                                         mov a,d 
@@ -923,14 +1063,32 @@ fsm_write_data_page:                    push b
                                         jmp fsm_write_data_page_end
 fsm_write_data_page_not_overflow:       xchg 
                                         shld fsm_selected_disk_loaded_page
+                                        lda fsm_selected_disk_fat_page_number
+                                        mov c,a 
+                                        lda fsm_selected_disk_spp_number  
+                                        mov b,a 
+                                        call unsigned_multiply_byte
+                                        push b 
                                         lda fsm_selected_disk_spp_number  
                                         mov c,l 
                                         mov b,h 
                                         mvi d,0
-                                        mov e,a 
+                                        mov e,a              
                                         call unsigned_multiply_word
+                                        pop h 
+                                        mov a,l 
+                                        add e 
+                                        mov e,a 
+                                        mov a,h 
+                                        add d 
+                                        mov d,a 
+                                        mov a,c 
+                                        aci 0 
+                                        mov c,a 
+                                        mov a,b 
+                                        aci 0 
+                                        mov b,a 
                                         lhld fsm_selected_disk_data_first_sector 
-                                        lda fsm_selected_disk_fat_page_number
                                         add e 
                                         mov e,a 
                                         mov a,d 
