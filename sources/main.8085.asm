@@ -28,6 +28,7 @@ BIOS        .equ mms+2048
 .include "sources/libraries/string/string_copy.8085.asm"
 .include "sources/libraries/string/string_ncopy.8085.asm"
 .include "sources/libraries/string/string_compare.8085.asm"
+.include "sources/libraries/string/string_ncompare.8085.asm"
 
 .org $A000
 .incbin "bin/eprom_disk_image.sfs", $0000, $6000
