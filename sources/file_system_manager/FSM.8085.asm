@@ -145,7 +145,16 @@ fsm_page_buffer_segment_address         .equ $006E
 fsm_selected_disk_data_page_number      .equ $0070
 fsm_selected_disk_fat_page_number       .equ $0072
 fsm_selected_disk_loaded_page           .equ $0073
+
+;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
+;bit 7 -> pagina caricata in memoria
+;bit 6 -> tipo di pagina (FAT 0 o data 1)
+;bit 5 -> disco selezionato precedentemente 
+;bit 4 -> il disco selezionato è formattato 
+
 fsm_selected_disk_loaded_page_flags     .equ $0075
+
+
 
 
 fsm_coded_page_dimension            .equ 16
@@ -216,11 +225,14 @@ fsm_select_disk_next:           sta fsm_selected_disk
                                 call bios_mass_memory_read_sector
                                 cpi bios_operation_ok
                                 jnz fsm_select_disk_end
+                                mvi a,%00100000
+                                sta fsm_selected_disk_loaded_page_flags
                                 lhld fsm_page_buffer_segment_address
                                 inx h 
                                 inx h 
                                 inx h 
                                 lxi d,fsm_format_marker
+                                mvi a,fsm_format_marker_lenght
                                 call string_ncompare
                                 ora a 
                                 jnz fsm_select_disk_formatted_disk
@@ -265,6 +277,10 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 inx h 
                                 mov a,m 
                                 sta fsm_selected_disk_data_first_sector+1
+                                lda fsm_selected_disk_loaded_page_flags
+                                ori %00010000
+                                sta fsm_selected_disk_loaded_page_flags
+                                mvi a,fsm_operation_ok
 fsm_select_disk_end:            pop d 
                                 pop h 
                                 ret 
@@ -272,201 +288,199 @@ fsm_select_disk_end:            pop d
 ;fsm_disk_format formatta il disco e prepara il file system di base 
 ; HL -> dimensione della sezione riservata al sistema (in bytes)
 
-fsm_disk_format:        push b 
-                        push d 
-                        push h 
-                        lda fsm_selected_disk
-                        ora a 
-                        jnz fsm_disk_format_next
-                        mvi a,fsm_bad_argument
-                        jmp fsm_disk_external_generated_error
-fsm_disk_format_next:   call bios_mass_memory_format_device
-                        cpi bios_operation_ok 
-                        jz fsm_disk_external_generated_error
-                        sta fsm_selected_disk
-                        call bios_mass_memory_select_drive
-                        ora a 
-                        jz fsm_disk_external_generated_error
-                        sta fsm_selected_disk_bps_number
-                        mov a,b 
-                        sta fsm_selected_disk_spt_number
-                        mov a,c 
-                        sta fsm_selected_disk_head_number
-                        xchg 
-                        shld fsm_selected_disk_tph_number
-                        call unsigned_multiply_byte
-                        xchg 
-                        call unsigned_multiply_word 
-                        xchg 
-                        shld fsm_selected_disk_sectors_number
-                        xchg 
-                        mov l,c 
-                        mov h,b 
-                        shld fsm_selected_disk_sectors_number+2
-                        lda fsm_selected_disk_bps_number
-                        mov c,a 
-                        mvi b,fsm_coded_page_dimension
-                        call unsigned_divide_byte 
-                        mov a,b 
-                        sta fsm_selected_disk_spp_number 
-                        lda fsm_selected_disk_bps_number
-                        mov b,a 
-                        mvi c,128
-                        call unsigned_multiply_byte
-                        mov e,c 
-                        mov d,b 
-                        pop d 
-                        push d 
-                        call unsigned_divide_word
-                        mov a,e 
-                        ora d 
-                        jz fsm_disk_format_jump1
-                        inx b 
-fsm_disk_format_jump1:  inx b 
-                        mov l,c 
-                        mov h,b 
-                        shld fsm_selected_disk_data_first_sector
-                        xra a 
-                        call bios_mass_memory_select_head
-                        cpi bios_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        xra a 
-                        call bios_mass_memory_select_sector
-                        cpi bios_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        lxi h,0 
-                        call bios_mass_memory_select_track
-                        cpi bios_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        call fsm_reselect_mms_segment
-                        cpi fsm_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        call fsm_clear_mms_segment
-                        mvi m,$c9 
-                        inx h 
-                        inx h 
-                        inx h 
-                        lxi d,fsm_format_marker
-                        mvi a,fsm_format_marker_lenght 
-                        call string_ncopy
-                        mvi a,fsm_format_marker_lenght 
-                        add l 
-                        mov l,a 
-                        mov a,h 
-                        aci 0 
-                        mov h,a 
-                        lda fsm_selected_disk_head_number
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_tph_number
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_tph_number+1 
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_spt_number
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_spp_number
-                        mov m,a 
-                        inx h 
-                        lxi d,0 
-                        push d 
-                        lxi d,fsm_coded_page_dimension 
-                        push d 
-                        lda fsm_selected_disk_data_first_sector
-                        mov e,a 
-                        lda fsm_selected_disk_data_first_sector+1
-                        mov d,a 
-                        lda fsm_selected_disk_sectors_number
-                        sub e 
-                        mov e,a 
-                        lda fsm_selected_disk_sectors_number+1
-                        sub d 
-                        mov d,a 
-                        lda fsm_selected_disk_sectors_number+2
-                        sbi 0 
-                        mov c,a 
-                        lda fsm_selected_disk_sectors_number+3
-                        sbi 0 
-                        mov b,a 
-                        push b 
-                        push d 
-                        call unsigned_divide_long
-                        pop d 
-                        pop d 
-                        pop d 
-                        pop b
-                        mov a,e 
-                        sta fsm_selected_disk_data_page_number
-                        mov a,d 
-                        sta fsm_selected_disk_data_page_number+1
-                        push b  
-                        lxi b,fsm_uncoded_page_dimension+2
-                        push b 
-                        lxi b,0
-                        mov a,e 
-                        add a 
-                        mov e,a 
-                        mov a,d 
-                        ral 
-                        mov d,a 
-                        mov a,c 
-                        ral 
-                        mov c,a
-                        push b 
-                        push d 
-                        call unsigned_divide_long
-                        pop d 
-                        pop b 
-                        mov a,e 
-                        ora d 
-                        ora c 
-                        ora b 
-                        jz fsm_disk_format_jump2 
-                        mvi a,1
-fsm_disk_format_jump2:  pop d 
-                        pop b 
-                        add e 
-                        mov e,a 
-                        sta fsm_selected_disk_fat_page_number
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_data_page_number
-                        sub e 
-                        mov m,a 
-                        inx h 
-                        sta fsm_selected_disk_data_page_number
-                        lda fsm_selected_disk_data_page_number+1
-                        sbi 0 
-                        mov m,a 
-                        inx h 
-                        sta fsm_selected_disk_data_page_number+1
-                        lda fsm_selected_disk_data_first_sector
-                        mov m,a 
-                        inx h 
-                        lda fsm_selected_disk_data_first_sector+1  
-                        mov m,a 
-                        inx h 
-                        mvi m,0 
-                        inx h 
-                        mvi m,0 
-                        lhld fsm_page_buffer_segment_address
-                        call bios_mass_memory_write_sector
-                        cpi bios_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        call fsm_clear_fat_table
-                        cpi fsm_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        lxi d,fsm_default_disk_name
-                        call fsm_disk_set_name
-                        cpi fsm_operation_ok
-                        jnz fsm_disk_external_generated_error
-                        mvi a,fsm_operation_ok 
-                        pop h 
-                        pop d 
-                        pop b 
-                        ret 
+fsm_disk_format:                        push b 
+                                        push d 
+                                        push h 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %00100000
+                                        jnz fsm_disk_format_next
+                                        mvi a,fsm_bad_argument
+                                        jmp fsm_disk_external_generated_error
+fsm_disk_format_next:                   call bios_mass_memory_format_device
+                                        cpi bios_operation_ok 
+                                        jnz fsm_disk_external_generated_error
+                                        sta fsm_selected_disk
+                                        call bios_mass_memory_select_drive
+                                        ora a 
+                                        jz fsm_disk_external_generated_error
+                                        sta fsm_selected_disk_bps_number
+                                        mov a,b 
+                                        sta fsm_selected_disk_spt_number
+                                        mov a,c 
+                                        sta fsm_selected_disk_head_number
+                                        xchg 
+                                        shld fsm_selected_disk_tph_number
+                                        call unsigned_multiply_byte
+                                        xchg 
+                                        call unsigned_multiply_word 
+                                        xchg 
+                                        shld fsm_selected_disk_sectors_number
+                                        xchg 
+                                        mov l,c 
+                                        mov h,b 
+                                        shld fsm_selected_disk_sectors_number+2
+                                        lda fsm_selected_disk_bps_number
+                                        mov c,a 
+                                        mvi b,fsm_coded_page_dimension
+                                        call unsigned_divide_byte 
+                                        mov a,b 
+                                        sta fsm_selected_disk_spp_number 
+                                        lda fsm_selected_disk_bps_number
+                                        mov b,a 
+                                        mvi c,128
+                                        call unsigned_multiply_byte
+                                        mov e,c 
+                                        mov d,b 
+                                        pop d 
+                                        push d 
+                                        call unsigned_divide_word
+                                        mov a,e 
+                                        ora d 
+                                        jz fsm_disk_format_jump1
+                                        inx b 
+fsm_disk_format_jump1:                  inx b 
+                                        mov l,c 
+                                        mov h,b 
+                                        shld fsm_selected_disk_data_first_sector
+                                        xra a 
+                                        call bios_mass_memory_select_head
+                                        cpi bios_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        xra a 
+                                        call bios_mass_memory_select_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        lxi h,0 
+                                        call bios_mass_memory_select_track
+                                        cpi bios_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        call fsm_clear_mms_segment
+                                        mvi m,$c9 
+                                        inx h 
+                                        inx h 
+                                        inx h 
+                                        lxi d,fsm_format_marker
+                                        mvi a,fsm_format_marker_lenght 
+                                        call string_ncopy
+                                        mvi a,fsm_format_marker_lenght 
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        aci 0 
+                                        mov h,a 
+                                        lda fsm_selected_disk_head_number
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_tph_number
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_tph_number+1 
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_spt_number
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_spp_number
+                                        mov m,a 
+                                        inx h 
+                                        lxi d,0 
+                                        push d 
+                                        lxi d,fsm_coded_page_dimension 
+                                        push d 
+                                        lda fsm_selected_disk_data_first_sector
+                                        mov e,a 
+                                        lda fsm_selected_disk_data_first_sector+1
+                                        mov d,a 
+                                        lda fsm_selected_disk_sectors_number
+                                        sub e 
+                                        mov e,a 
+                                        lda fsm_selected_disk_sectors_number+1
+                                        sub d 
+                                        mov d,a 
+                                        lda fsm_selected_disk_sectors_number+2
+                                        sbi 0 
+                                        mov c,a 
+                                        lda fsm_selected_disk_sectors_number+3
+                                        sbi 0 
+                                        mov b,a 
+                                        push b 
+                                        push d 
+                                        call unsigned_divide_long
+                                        pop d 
+                                        pop d 
+                                        pop d 
+                                        pop b
+                                        mov a,e 
+                                        sta fsm_selected_disk_data_page_number
+                                        mov a,d 
+                                        sta fsm_selected_disk_data_page_number+1
+                                        push b  
+                                        lxi b,fsm_uncoded_page_dimension+2
+                                        push b 
+                                        lxi b,0
+                                        mov a,e 
+                                        add a 
+                                        mov e,a 
+                                        mov a,d 
+                                        ral 
+                                        mov d,a 
+                                        mov a,c 
+                                        ral 
+                                        mov c,a
+                                        push b 
+                                        push d 
+                                        call unsigned_divide_long
+                                        pop d 
+                                        pop b 
+                                        mov a,e 
+                                        ora d 
+                                        ora c 
+                                        ora b 
+                                        jz fsm_disk_format_jump2 
+                                        mvi a,1
+fsm_disk_format_jump2:                  pop d 
+                                        pop b 
+                                        add e 
+                                        mov e,a 
+                                        sta fsm_selected_disk_fat_page_number
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_data_page_number
+                                        sub e 
+                                        mov m,a 
+                                        inx h 
+                                        sta fsm_selected_disk_data_page_number
+                                        lda fsm_selected_disk_data_page_number+1
+                                        sbi 0 
+                                        mov m,a 
+                                        inx h 
+                                        sta fsm_selected_disk_data_page_number+1
+                                        lda fsm_selected_disk_data_first_sector
+                                        mov m,a 
+                                        inx h 
+                                        lda fsm_selected_disk_data_first_sector+1  
+                                        mov m,a 
+                                        inx h 
+                                        mvi m,0 
+                                        inx h 
+                                        mvi m,0 
+                                        lhld fsm_page_buffer_segment_address
+                                        call bios_mass_memory_write_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        call fsm_clear_fat_table
+                                        cpi fsm_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        lxi d,fsm_default_disk_name
+                                        call fsm_disk_set_name
+                                        cpi fsm_operation_ok
+                                        jnz fsm_disk_external_generated_error
+                                        mvi a,%00110000
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        mvi a,fsm_operation_ok 
 fsm_disk_external_generated_error:      pop h 
                                         pop d 
                                         pop b 
@@ -476,8 +490,9 @@ fsm_disk_external_generated_error:      pop h
 ;DE -> puntatore alla stringa del nome 
 ;A <- esito dell'operazione
 
-fsm_disk_set_name:                  lda fsm_selected_disk
-                                    ora a 
+fsm_disk_set_name:                  lda fsm_selected_disk_loaded_page_flags
+                                    ani %00110000
+                                    xri $ff 
                                     jnz fsm_disk_set_name_disk_selected
                                     mvi a,fsm_disk_not_selected
                                     ret 
@@ -507,17 +522,70 @@ fsm_disk_set_name_disk_page_loaded: call fsm_reselect_mms_segment
 fsm_disk_set_name_end:              pop h 
                                     ret 
 
+;fsm_append_page seleziona una pagina libera e la concatena all'indirizzo della pagina selezionata 
+;HL -> indirizzo della pagina 
+;A <- esito dell'operazione 
+fsm_append_page:        push h 
+                        push d 
+                        lxi h,0 
+                        call fsm_read_data_page
+                        cpi fsm_operation_ok
+                        jnz fsm_append_page_end
+                        call fsm_reselect_mms_segment
+                        cpi fsm_operation_ok
+                        jnz fsm_append_page_end
+                        mvi a,fsm_disk_name_max_lenght
+                        mov e,m 
+                        inx h 
+                        mov d,m 
+                        inx h 
+                        mov a,e 
+                        ora d 
+                        jnz fsm_append_page_next
+                        mvi a,fsm_not_enough_space 
+                        jmp fsm_append_page_end
+fsm_append_page_next:   mov e,m 
+                        inx h 
+                        mov d,m
+                        mov l,e 
+                        mov h,d 
+                        call fsm_get_page_link
+                        cpi fsm_operation_ok
+                        jnz fsm_append_page_end
+                        lxi h,0 
+                        call fsm_
+
+
+
+fsm_append_page_end:    pop d 
+                        pop h 
+                        ret 
+
+;fsm_get_first_free_page_address legge l'indirizzo della prima pagina libera disponibile 
+;A <- esito dell'operazione 
+;HL <- indirizzo della prima pagina libera 
+
+fsm_get_first_free_page_address:            lda fsm_selected_disk_loaded_page_flags
+                                            ani %11000000
+                                            cpi %11000000
+                                            jz fsm_get_dirst_free_page_address_next
+                                            ani %10000000
+                                            
+                                            lxi h,0 
+fsm_get_first_free_page_address_writeback:                                        
+fsm_get_dirst_free_page_address_next:       call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok 
+                                            jnz fsm_get_first_free_page_address_end
+
+                                            lhld fsm_selected_disk_loaded_page
+fsm_get_first_free_page_address_end:
+
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
 ;HL <- indirizzo della pagina concatenata
 ;A -> esito dell'operazione
 
-fsm_get_page_link:                  lda fsm_selected_disk
-                                    ora a 
-                                    jnz fsm_get_page_link_disk_selected
-                                    mvi a,fsm_disk_not_selected
-                                    ret 
-fsm_get_page_link_disk_selected:    push b 
+fsm_get_page_link:                  push b 
                                     push d 
                                     mov c,l 
                                     mov b,h 
@@ -574,12 +642,7 @@ fsm_get_page_link_end:              pop d
 ;HL -> indirizzo della pagina di riferimento
 ;A -> esito dell'operazione
 
-fsm_set_page_link:                  lda fsm_selected_disk
-                                    ora a 
-                                    jnz fsm_set_page_link_disk_selected
-                                    mvi a,fsm_disk_not_selected
-                                    ret 
-fsm_set_page_link_disk_selected:    push b 
+fsm_set_page_link:                  push b 
                                     push h 
                                     push d 
                                     mov c,l 
@@ -635,8 +698,9 @@ fsm_set_page_link_end:              pop d
                                     ret 
 
 ;fsm_fat_reset inizializza la fat table del dispositivo selezionato
-fsm_clear_fat_table:                            lda fsm_selected_disk
-                                                ora a 
+fsm_clear_fat_table:                            lda fsm_selected_disk_loaded_page_flags
+                                                ani %00110000
+                                                xri $ff 
                                                 jnz fsm_clear_fat_table_disk_selected
                                                 mvi a,fsm_disk_not_selected
                                                 ret 
