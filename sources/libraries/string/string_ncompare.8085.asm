@@ -5,36 +5,33 @@
 
 ;A <- esit dell'operazione ($ff se corrispondono, $00 altrimenti)
 
-string_ncompare:    push d 
-                    push h 
-                    push b 
-                    mov a,b 
-string_cmp_loop:    dcr a 
-                    jnz 
-                    mov a,m 
-                    cpi 0
-                    jnz string_cmp_loop2
-                    ldax d 
-                    cpi 0 
-                    jnz string_not_equals
-                    jz string_equals
-string_cmp_loop2:   ldax d
-                    cmp m 
-                    jnz string_not_equals
-string_cmp_loop3:   inx h 
-                    inx d 
-                    jmp string_cmp_loop
-
-string_not_equals:  mvi a,0 
-                    pop d 
-                    pop h 
-                    ret
-
-string_equals:      mvi a,$ff
-                    mov e,c 
-                    mov d,b 
-
-                    pop b 
-                    pop h 
-                    pop d 
-                    ret
+string_ncompare:        push b 
+                        push d 
+                        push h 
+                        ora a 
+                        jz string_ncmp_loop_end2
+                        mov b,a 
+string_ncmp_loop:       dcr b 
+                        jnz string_ncmp_loop3
+                        ldax d
+                        cmp m 
+                        jz string_ncmp_loop_end1
+                        jmp string_ncmp_loop_end2
+string_ncmp_loop3:      mov a,m 
+                        ora a 
+                        ldax d 
+                        jz string_ncmp_loop2
+                        cmp m 
+                        jnz string_ncmp_loop_end2
+                        inx h 
+                        inx d 
+                        jmp string_ncmp_loop
+string_ncmp_loop2:      ora a 
+                        jnz string_ncmp_loop_end2
+string_ncmp_loop_end1:  mvi a,$ff
+                        jmp string_ncompare_end
+string_ncmp_loop_end2:  xra a 
+string_ncompare_end:    pop h 
+                        pop d 
+                        pop b
+                        ret
