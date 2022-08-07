@@ -507,19 +507,11 @@ fsm_disk_set_name:                  lda fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_disk_not_selected
                                     ret 
 fsm_disk_set_name_disk_selected:    push h
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ani %11000000
-                                    cpi %11000000
-                                    jnz fsm_disk_set_name_disk_page_load
-                                    lhld fsm_selected_disk_loaded_page
-                                    mov a,l 
-                                    ora h 
-                                    jz fsm_disk_set_name_disk_page_loaded
-fsm_disk_set_name_disk_page_load:   lxi h,0 
-                                    call fsm_read_data_page
+                                    lxi h,0 
+                                    call fsm_move_data_page
                                     cpi fsm_operation_ok
                                     jnz fsm_disk_set_name_end
-fsm_disk_set_name_disk_page_loaded: call fsm_reselect_mms_segment
+                                    call fsm_reselect_mms_segment
                                     cpi fsm_operation_ok
                                     jnz fsm_disk_set_name_end
                                     mvi a,fsm_disk_name_max_lenght
@@ -532,6 +524,12 @@ fsm_disk_set_name_disk_page_loaded: call fsm_reselect_mms_segment
 fsm_disk_set_name_end:              pop h 
                                     ret 
    
+;fsm_get_free_page_number ricava il numero di pagine libere del disco 
+;A <- esito dell'operazioni
+;HL 
+
+fsm_get_free_page_number:   
+
 
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
@@ -552,25 +550,8 @@ fsm_get_page_link:                  push b
                                     rar 
                                     mov e,a 
                                     call unsigned_divide_word 
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ani %10000000
-                                    jz fsm_get_page_link_load_page2
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ani %01000000
-                                    jz fsm_get_page_link_load_page
-                                    lhld fsm_selected_disk_loaded_page
-                                    call fsm_write_data_page
-                                    cpi fsm_operation_ok
-                                    jnz fsm_get_page_link_end
-                                    jmp fsm_get_page_link_load_page2
-fsm_get_page_link_load_page:        lda fsm_selected_disk_loaded_page
-                                    cmp c 
-                                    jz fsm_get_page_link_offset
-                                    call fsm_write_fat_page
-                                    cpi fsm_operation_ok 
-                                    jnz fsm_get_page_link_end
-fsm_get_page_link_load_page2:       mov a,c 
-                                    call fsm_read_fat_page
+                                    mov a,c 
+                                    call fsm_move_fat_page
                                     cpi fsm_operation_ok
                                     jnz fsm_get_page_link_end
 fsm_get_page_link_offset:           call fsm_reselect_mms_segment
@@ -610,25 +591,8 @@ fsm_set_page_link:                  push b
                                     rar 
                                     mov e,a 
                                     call unsigned_divide_word 
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ani %10000000
-                                    jz fsm_set_page_link_load_page2
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ani %01000000
-                                    jz fsm_set_page_link_load_page
-                                    lhld fsm_selected_disk_loaded_page
-                                    call fsm_write_data_page
-                                    cpi fsm_operation_ok
-                                    jnz fsm_set_page_link_end
-                                    jmp fsm_set_page_link_load_page2
-fsm_set_page_link_load_page:        lda fsm_selected_disk_loaded_page
-                                    cmp c 
-                                    jz fsm_set_page_link_offset
-                                    call fsm_write_fat_page
-                                    cpi fsm_operation_ok 
-                                    jnz fsm_set_page_link_end
-fsm_set_page_link_load_page2:       mov a,c 
-                                    call fsm_read_fat_page
+                                    mov a,c 
+                                    call fsm_move_fat_page
                                     cpi fsm_operation_ok
                                     jnz fsm_set_page_link_end
 fsm_set_page_link_offset:           call fsm_reselect_mms_segment
@@ -758,8 +722,6 @@ fsm_clear_fat_table_loop_end2:                  inx sp
                                                 inx sp 
                                                 inx sp 
                                                 inx sp 
-                                                xra a 
-                                                sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
 fsm_clear_fat_table_reset_end:                  pop b 
                                                 pop d 
@@ -1071,7 +1033,7 @@ fsm_read_data_page_not_overflow:        xchg
                                         add e 
                                         mov e,a 
                                         mov a,h 
-                                        add d 
+                                        adc d 
                                         mov d,a 
                                         mov a,c 
                                         aci 0 
@@ -1088,22 +1050,10 @@ fsm_read_data_page_not_overflow:        xchg
                                         mov d,a
                                         mov a,c 
                                         aci 0 
-                                        mov b,c
+                                        mov b,a
                                         mov a,b 
                                         aci 0 
                                         mov b,a  
-                                        mov a,l 
-                                        add e 
-                                        mov e,a 
-                                        mov a,h 
-                                        adc d 
-                                        mov d,a 
-                                        mov a,c 
-                                        aci 0 
-                                        mov c,a 
-                                        mov a,b 
-                                        aci 0 
-                                        mov b,a 
                                         call fsm_seek_disk_sector
                                         cpi fsm_operation_ok
                                         jz fsm_read_data_page_operation_ok
@@ -1187,30 +1137,6 @@ fsm_write_data_page_not_overflow:       xchg
                                         add e 
                                         mov e,a 
                                         mov a,h 
-                                        add d 
-                                        mov d,a 
-                                        mov a,c 
-                                        aci 0 
-                                        mov c,a 
-                                        mov a,b 
-                                        aci 0 
-                                        mov b,a 
-                                        lhld fsm_selected_disk_data_first_sector 
-                                        add e 
-                                        mov e,a 
-                                        mov a,d 
-                                        aci 0
-                                        mov d,a 
-                                        mov a,c 
-                                        aci 0 
-                                        mov b,c
-                                        mov a,b 
-                                        aci 0 
-                                        mov b,a  
-                                        mov a,l 
-                                        add e 
-                                        mov e,a 
-                                        mov a,h 
                                         adc d 
                                         mov d,a 
                                         mov a,c 
@@ -1219,14 +1145,23 @@ fsm_write_data_page_not_overflow:       xchg
                                         mov a,b 
                                         aci 0 
                                         mov b,a 
+                                        lhld fsm_selected_disk_data_first_sector 
+                                        mov a,l
+                                        add e 
+                                        mov e,a 
+                                        mov a,h 
+                                        adc d 
+                                        mov d,a
+                                        mov a,c 
+                                        aci 0 
+                                        mov b,a
+                                        mov a,b 
+                                        aci 0 
+                                        mov b,a  
                                         call fsm_seek_disk_sector
                                         cpi fsm_operation_ok
                                         jnz fsm_write_data_page_operation_ok
-fsm_write_data_page_operation_ok:       lda fsm_selected_disk_loaded_page_flags
-                                        ani %01111111
-                                        ori %01000000
-                                        sta fsm_selected_disk_loaded_page_flags
-                                        call fsm_reselect_mms_segment
+fsm_write_data_page_operation_ok:       call fsm_reselect_mms_segment
                                         lda fsm_selected_disk_spp_number
                                         push psw 
 fsm_write_data_page_operation_loop:     call bios_mass_memory_write_sector
@@ -1250,9 +1185,6 @@ fsm_write_data_page_operation_loop2:    inr e
                                         dcr h 
                                         xthl 
                                         jnz fsm_write_fat_page_operation_loop
-                                        lda fsm_selected_disk_loaded_page_flags
-                                        ori %11000000
-                                        sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok
                                         inx sp 
                                         inx sp 
