@@ -7,7 +7,8 @@ system_boot:    lxi sp,$00bf
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk
-                
+                lxi h,3
+                call fsm_unappend_page 
                 hlt 
 
 disk_name:  .text "DISCO DI PROVA"
