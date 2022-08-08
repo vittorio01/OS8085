@@ -8,12 +8,8 @@ system_boot:    lxi sp,stack_memory_start
                 mvi a,$41
                 call fsm_select_disk
                 lxi h,0 
-                call fsm_append_page
-                lxi h,0
-                call fsm_append_page
-                lxi h,0 
                 call fsm_truncate_page
-                hlt 
+                hlt
 
 disk_name:  .text "DISCO DI PROVA"
             .b 0
