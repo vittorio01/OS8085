@@ -173,6 +173,7 @@ fsm_formatting_fat_generation_error .equ $23
 fsm_unformatted_disk                .equ $24
 fsm_device_not_found                .equ $25
 fsm_not_enough_spage_left           .equ $26
+fsm_list_empty                      .equ $27
 fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
@@ -525,48 +526,85 @@ fsm_disk_set_name_disk_selected:    push h
 fsm_disk_set_name_end:              pop h 
                                     ret 
 
-;fsm_append_new_page concatena la prima pagina libera a quella desiderata 
-; HL -> indirizzo su cui concatenare la pagina
+;fsm_append_new_page concatena la prima pagina libera alla lista concatenata 
+; HL -> indirizzo di partenza della lista 
+; A <- esito dell'operazione 
+; HL <- indirizzo della nuova pagina aggiunta
 
 fsm_append_page:        push d 
-                        push h 
-                        xchg 
-                        call fsm_get_first_free_page_address
-                        cpi fsm_operation_ok
-                        jnz fsm_append_page_end
-                        xchg 
-                        call fsm_set_page_link
-                        cpi fsm_operation_ok
-                        jnz fsm_append_page_end
-                        mvi a,fsm_operation_ok
-fsm_append_page_end:    pop h 
-                        pop d 
-                        ret 
-
-;fsm_unappend_page libera la pagina concatenata a quella fornita
-;HL -> indirizzo della pagina che contiene l'indirizzo da liberare 
-
-fsm_unappend_page:      push h 
-                        push d 
-                        mov e,l 
+                        push b 
+fsm_append_page_loop:   mov e,l 
                         mov d,h 
                         call fsm_get_page_link
                         cpi fsm_operation_ok
-                        jnz fsm_unappend_page_end
+                        jnz fsm_append_page_end
+                        mov a,h
+                        cpi $ff 
+                        jnz fsm_append_page_loop
+                        mov a,l 
+                        cpi $ff 
+                        jnz fsm_append_page_loop
+                        call fsm_get_first_free_page_address
+                        cpi fsm_operation_ok
+                        jnz fsm_append_page_end
+                        mov c,l 
+                        mov b,h 
                         xchg 
-                        push d 
-                        lxi d,$ffff 
                         call fsm_set_page_link
-                        pop h
                         cpi fsm_operation_ok
-                        jnz fsm_unappend_page_end
-                        call fsm_set_first_free_page_address
+                        jnz fsm_append_page_end
+                        call fsm_writeback_page
                         cpi fsm_operation_ok
-                        jnz fsm_unappend_page_end
-
-fsm_unappend_page_end:  pop d 
-                        pop h 
+                        jnz fsm_append_page_end
+                        mvi a,fsm_operation_ok
+                        mov l,c 
+                        mov h,b 
+fsm_append_page_end:    pop b 
+                        pop d 
                         ret 
+
+;fsm_truncate_page rimuove l'ultima pagina dalla lista concatenata e la inserisce in quella delle pagine libere
+;HL -> indirizzo della pagina che contiene l'indirizzo da liberare 
+;A <- esito dell'operazione 
+
+fsm_truncate_page:          push h 
+                            push d 
+                            mov e,l 
+                            mov d,h
+                            call fsm_get_page_link
+                            cpi $ff 
+                            jnz fsm_truncate_page_loop
+                            mov a,l 
+                            cpi $ff 
+                            jnz fsm_truncate_page_loop 
+                            call fsm_list_empty
+                            jmp fsm_truncate_page_end
+fsm_truncate_page_loop:     mov e,l 
+                            mov d,h 
+                            call fsm_get_page_link
+                            cpi fsm_operation_ok
+                            jnz fsm_truncate_page_end
+                            mov a,h
+                            cpi $ff 
+                            jnz fsm_truncate_page_loop
+                            mov a,l 
+                            cpi $ff 
+                            jnz fsm_truncate_page_loop  
+                            call fsm_set_first_free_page_address
+                            cpi fsm_operation_ok
+                            jnz fsm_truncate_page_end 
+                            xchg 
+                            lxi d,$ffff 
+                            call fsm_set_page_link
+                            cpi fsm_operation_ok
+                            jnz fsm_truncate_page_end 
+                            call fsm_writeback_page
+                            cpi fsm_operation_ok
+                            jnz fsm_truncate_page_end 
+                            mvi a,fsm_operation_ok
+fsm_truncate_page_end:      pop d 
+                            pop h 
+                            ret 
 
 ;fsm_get_first_free_page_address preleva la prima pagina libera disponibile (aggiorna la lista concatenata delle pagine libere)
 ;HL <- indirizzo della pagina libera
@@ -721,7 +759,6 @@ fsm_get_free_page_number:       lxi h,0
                                 pop d 
                                 mvi a,fsm_operation_ok
 fsm_get_free_page_number_end:   ret 
-
 
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
@@ -1032,6 +1069,29 @@ fsm_move_data_page_end:         pop h
                                 pop d 
                                 ret 
 
+;fsm_writeback_page salva in memoria la pagina contenuta nel buffer (salva le modifiche all'ultima pagina caricata)
+
+fsm_writeback_page:     push h 
+                        lda fsm_selected_disk_loaded_page_flags
+                        ani %10000000
+                        jz fsm_writeback_page_end
+                        lda fsm_selected_disk_loaded_page_flags
+                        ani %01000000
+                        jz fsm_writeback_page_fat 
+                        lhld fsm_selected_disk_loaded_page
+                        call fsm_write_data_page
+                        cpi fsm_operation_ok
+                        jnz fsm_writeback_page_end
+                        jmp fsm_writeback_page_ok
+fsm_writeback_page_fat: lda fsm_selected_disk_loaded_page
+                        call fsm_write_fat_page
+                        cpi fsm_operation_ok
+                        jnz fsm_writeback_page_end
+fsm_writeback_page_ok:  mvi a,fsm_operation_ok
+fsm_writeback_page_end: pop h 
+                        ret 
+
+
 ;fsm_read_fat_page legge la pagina desiderata e salva il contenuto nel buffer in memoria
 ;A <- esito dell'operazione 
 
@@ -1039,7 +1099,18 @@ fsm_read_fat_page:                  push b
                                     push d 
                                     push h 
                                     mov b,a 
-                                    lda fsm_selected_disk_fat_page_number 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    xri $ff 
+                                    ani %00110000
+                                    jz fsm_read_fat_page_next
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %00100000
+                                    jnz fsm_read_fat_page_not_formatted
+                                    mvi a,fsm_disk_not_selected
+                                    jmp fsm_read_fat_page_end
+fsm_read_fat_page_not_formatted:    mvi a,fsm_unformatted_disk
+                                    jmp fsm_read_fat_page_end
+fsm_read_fat_page_next:             lda fsm_selected_disk_fat_page_number 
                                     mov c,a 
                                     mov a,b 
                                     sub c
@@ -1119,7 +1190,18 @@ fsm_write_fat_page:                 push b
                                     push d 
                                     push h 
                                     mov b,a 
-                                    lda fsm_selected_disk_fat_page_number 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    xri $ff 
+                                    ani %00110000
+                                    jz fsm_write_fat_page_next
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %00100000
+                                    jnz fsm_write_fat_page_not_formatted
+                                    mvi a,fsm_disk_not_selected
+                                    jmp fsm_write_fat_page_end
+fsm_write_fat_page_not_formatted:   mvi a,fsm_unformatted_disk
+                                    jmp fsm_write_fat_page_end
+fsm_write_fat_page_next:            lda fsm_selected_disk_fat_page_number 
                                     mov c,a 
                                     mov a,b 
                                     sub c
@@ -1199,7 +1281,18 @@ fsm_write_fat_page_end:             pop h
 fsm_read_data_page:                     push b
                                         push d 
                                         push h 
-                                        xchg 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        xri $ff 
+                                        ani %00110000
+                                        jz fsm_read_data_page_next
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %00100000
+                                        jnz fsm_read_data_page_not_formatted
+                                        mvi a,fsm_disk_not_selected
+                                        jmp fsm_read_data_page_end
+fsm_read_data_page_not_formatted:       mvi a,fsm_unformatted_disk
+                                        jmp fsm_read_data_page_end
+fsm_read_data_page_next:                xchg 
                                         lhld fsm_selected_disk_data_page_number 
                                         mov a,e
                                         sub l 
@@ -1303,7 +1396,18 @@ fsm_read_data_page_end:                 pop h
 fsm_write_data_page:                    push b
                                         push d 
                                         push h 
-                                        xchg 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        xri $ff 
+                                        ani %00110000
+                                        jz fsm_write_data_page_next
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %00100000
+                                        jnz fsm_write_data_page_not_formatted
+                                        mvi a,fsm_disk_not_selected
+                                        jmp fsm_write_data_page_end
+fsm_write_data_page_not_formatted:       mvi a,fsm_unformatted_disk
+                                        jmp fsm_write_data_page_end
+fsm_write_data_page_next:               xchg 
                                         lhld fsm_selected_disk_data_page_number 
                                         mov a,e
                                         sub l 
