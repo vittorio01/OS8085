@@ -173,7 +173,7 @@ fsm_formatting_fat_generation_error .equ $23
 fsm_unformatted_disk                .equ $24
 fsm_device_not_found                .equ $25
 fsm_not_enough_spage_left           .equ $26
-fsm_list_empty                      .equ $27
+fsm_list_is_empty                   .equ $27
 fsm_operation_ok                    .equ $ff
 
 fsm_format_marker   .text "SFS1.0"
@@ -567,44 +567,70 @@ fsm_append_page_end:    pop b
 ;HL -> indirizzo della pagina che contiene l'indirizzo da liberare 
 ;A <- esito dell'operazione 
 
-fsm_truncate_page:          push h 
-                            push d 
-                            mov e,l 
-                            mov d,h
-                            call fsm_get_page_link
-                            cpi $ff 
-                            jnz fsm_truncate_page_loop
-                            mov a,l 
-                            cpi $ff 
-                            jnz fsm_truncate_page_loop 
-                            call fsm_list_empty
-                            jmp fsm_truncate_page_end
-fsm_truncate_page_loop:     mov e,l 
-                            mov d,h 
-                            call fsm_get_page_link
-                            cpi fsm_operation_ok
-                            jnz fsm_truncate_page_end
-                            mov a,h
-                            cpi $ff 
-                            jnz fsm_truncate_page_loop
-                            mov a,l 
-                            cpi $ff 
-                            jnz fsm_truncate_page_loop  
-                            call fsm_set_first_free_page_address
-                            cpi fsm_operation_ok
-                            jnz fsm_truncate_page_end 
-                            xchg 
-                            lxi d,$ffff 
-                            call fsm_set_page_link
-                            cpi fsm_operation_ok
-                            jnz fsm_truncate_page_end 
-                            call fsm_writeback_page
-                            cpi fsm_operation_ok
-                            jnz fsm_truncate_page_end 
-                            mvi a,fsm_operation_ok
-fsm_truncate_page_end:      pop d 
-                            pop h 
-                            ret 
+fsm_truncate_page:              push h 
+                                push d 
+                                push b 
+                                mov e,l 
+                                mov d,h
+                                call fsm_get_page_link
+                                cpi $ff 
+                                jnz fsm_truncate_page_loop
+                                mov a,l 
+                                cpi $ff 
+                                jnz fsm_truncate_page_loop 
+                                call fsm_list_is_empty
+                                jmp fsm_truncate_page_end
+fsm_truncate_page_loop:         mov c,l 
+                                mov b,h 
+                                call fsm_get_page_link
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end
+                                mov a,h
+                                cpi $ff 
+                                jz fsm_truncate_page_loop_end2
+                                mov a,l 
+                                cpi $ff 
+                                jz fsm_truncate_page_loop_end2
+                                mov e,l 
+                                mov d,h 
+                                call fsm_get_page_link
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end
+                                mov a,h
+                                cpi $ff 
+                                jnz fsm_truncate_page_loop
+                                mov a,l 
+                                cpi $ff 
+                                jnz fsm_truncate_page_loop
+                                xchg 
+                                call fsm_set_first_free_page_address
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end 
+                                mov l,c 
+                                mov h,b 
+                                lxi d,$ffff
+                                call fsm_set_page_link
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end
+                                mvi a,fsm_operation_ok
+                                call fsm_writeback_page
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end
+                                jmp fsm_truncate_page_end
+fsm_truncate_page_loop_end2:    hlt 
+                                mov l,c 
+                                mov h,b 
+                                call fsm_set_first_free_page_address
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end 
+                                call fsm_writeback_page
+                                cpi fsm_operation_ok
+                                jnz fsm_truncate_page_end
+                                mvi a,fsm_list_is_empty
+fsm_truncate_page_end:          pop b 
+                                pop d 
+                                pop h 
+                                ret 
 
 ;fsm_get_first_free_page_address preleva la prima pagina libera disponibile (aggiorna la lista concatenata delle pagine libere)
 ;HL <- indirizzo della pagina libera
