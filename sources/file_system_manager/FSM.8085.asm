@@ -165,11 +165,11 @@ fsm_header_name_dimension           .equ 20
 fsm_header_extension_dimenson       .equ 5 
 
 fsm_header_valid_bit                .equ %10000000
-fsm_header_deleted_bit              .equ %01000000
-fsm_header_system_bit               .equ %00100000
-fsm_header_program_bit              .equ %00010000
-fsm_header_hidden_bit               .equ %00001000
-fsm_header_readonly_bit             .equ $00000100
+fsm_header_system_bit               .equ %01000000
+fsm_header_program_bit              .equ %00100000
+fsm_header_hidden_bit               .equ %00010000
+fsm_header_readonly_bit             .equ $00001000
+fsm_header_deleted_bit              .equ %00000100
 
 fsm_mass_memory_sector_not_found    .equ $20
 fsm_bad_argument                    .equ $21
@@ -340,7 +340,7 @@ fsm_disk_format_next2:                  sta fsm_selected_disk_bps_number
                                         mov c,a 
                                         mvi b,fsm_coded_page_dimension
                                         call unsigned_divide_byte 
-                                        mov a,b 
+                                        mov a,b +
                                         sta fsm_selected_disk_spp_number 
                                         lda fsm_selected_disk_bps_number
                                         mov b,a 
@@ -539,75 +539,126 @@ fsm_disk_set_name_end:              pop h
 fsm_create_file_header:                 push h 
                                         push d 
                                         push b 
-                                        push psw 
+                                        push psw
                                         lxi h,0 
                                         call fsm_read_data_page
                                         cpi fsm_operation_ok
                                         jnz fsm_create_file_header_end
-                                        lxi d,0 
-                                        lxi b,fsm_uncoded_page_dimension
-                                        call fsm_reselect_mms_segment    ;HL -> puntatore al buffer
-                                        cpi fsm_operation_ok             ;DE -> pagina corrente
-                                        jnz fsm_create_file_header_end   ;BC -> dimensione della pagina 
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_create_file_header_end      ;BC -> dimensione del buffer
+                                        lxi d,0                             ;DE -> pagina corrente
+                                        lxi b,fsm_uncoded_page_dimension    ;HL -> puntatore al buffer 
                                         mvi a,fsm_header_dimension
                                         add l 
                                         mov l,a 
                                         mov a,h 
                                         aci 0 
                                         mov h,a 
-fsm_create_file_header_search_loop:     mov a,m 
+fsm_create_file_header_loop:            mov a,m 
                                         ani fsm_header_valid_bit
-                                        jz fsm_create_file_header_new
-                                        mov a,m 
-                                        ani fsm_header_deleted_bit
-                                        jnz fsm_create_file_header_replace 
+                                        jz fsm_create_file_header_new 
                                         mvi a,fsm_header_dimension
                                         add l 
                                         mov l,a 
                                         mov a,h 
                                         aci 0 
                                         mov h,a 
-                                        mov a,l 
-                                        sub c 
-                                        mov a,h 
-                                        sbb b 
-                                        jnc fsm_create_file_header_search_loop
+                                        mov a,c 
+                                        sub l 
+                                        mov a,b 
+                                        sbb h 
+                                        jc fsm_create_file_header_loop
                                         mov l,e 
-                                        mov h,d
+                                        mov h,d 
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_create_file_header_end
-                                        xchg 
-                                        call fsm_reselect_mms_segment    
-                                        cpi fsm_operation_ok             
-                                        jnz fsm_create_file_header_end   
-                                        jmp fsm_create_file_header_search_loop
-fsm_create_file_header_new:             call fsm_create_file_header_write_new
-                                        lxi b,fsm_uncoded_page_dimension
                                         mov a,l 
-                                        sub c 
+                                        ani h 
+                                        cpi $ff 
+                                        jz fsm_create_file_header_load_next_page
+                                        call fsm_move_data_page
+                                        cpi fsm_operation_ok
+                                        jnz fsm_create_file_header_end
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_create_file_header_end
+                                        jmp fsm_create_file_header_loop
+fsm_create_file_header_append_page:  
+fsm_create_file_header_new:             push d 
+                                        inx sp
+                                        inx sp
+                                        xthl 
                                         mov a,h 
-                                        sbb b 
-                                        jnc fsm_create_file_header_add_new_page2
+                                        xthl
+                                        mov m,a 
+                                        inx h 
+                                        inx sp 
+                                        inx sp 
+                                        xthl
+                                        mov c,l 
+                                        mov b,h 
+                                        xthl 
+                                        inx sp 
+                                        inx sp 
+                                        mov e,l 
+                                        mov d,h 
+                                        xthl 
+                                        dcx sp 
+                                        dcx sp 
+                                        dcx sp 
+                                        dcx sp 
+                                        dcx sp 
+                                        dcx sp 
+                                        mvi a,fsm_header_name_dimension
+                                        call string_ncopy
+                                        mvi a,fsm_header_name_dimension
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        aci 0 
+                                        mov h,a 
+                                        mvi a,fsm_header_extension_dimenson
+                                        mov e,c 
+                                        mov d,b 
+                                        call string_ncopy
+                                        mvi a,fsm_header_extension_dimension
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        aci 0 
+                                        mov h,a 
                                         mvi m,0 
-                                        jmp fsm_create_file_header_next
-fsm_create_file_header_add_new_page2:   mov l,e 
-                                        mov h,d
-                                        call fsm_append_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
+                                        inx h 
+                                        mvi m,0 
+                                        inx h 
+                                        mvi m,0 
+                                        inx h 
+                                        mvi m,0 
+                                        inx h 
+                                        mvi m,$ff 
+                                        inx h 
+                                        mvi m,$ff 
+                                        inx h 
+                                        pop d 
+                                        lxi b,fsm_uncoded_page_dimension
+                                        mov a,c 
+                                        sub l 
+                                        mov a,b 
+                                        sbb h
+                                        jc fsm_create_file_header_next
                                         xchg 
-                                        call fsm_reselect_mms_segment    
-                                        cpi fsm_operation_ok             
-                                        jnz fsm_create_file_header_end   
-                                        call fsm_clear_mms_segment
-                                        jmp fsm_create_file_header_next
-fsm_create_file_header_replace:         call fsm_create_file_header_write_new
-                                        jmp fsm_create_file_header_next
-fsm_create_file_header_next:            call fsm_writeback_page
+                                        call fsm_append_new_page
+                                        cpi fsm_operation_ok
+                                        jz fsm_create_file_header_end
+
+fsm_create_file_header_end
+fsm_create_file_header_next:            mvi m,0 
+                                        call fsm_writeback_page
                                         cpi fsm_operation_ok
                                         jnz fsm_create_file_header_end
-                                        mvi a,fsm_operation_ok
+                                        mvi a,$ff 
 fsm_create_file_header_end:             pop psw 
                                         pop b 
                                         pop d 
