@@ -12,7 +12,7 @@ high_memory_start        .equ $8000
 
 
 CPS         .equ high_memory_start
-FSM         .equ CPS+2048
+FSM         .equ CPS+2100
 MMS         .equ FSM+3072
 BIOS        .equ mms+2048
 
@@ -33,3 +33,7 @@ BIOS        .equ mms+2048
 
 .org $A000
 .incbin "bin/eprom_disk_image.sfs", $0000, $6000
+.print "CPS -> ", CPS 
+.print "FSM -> ", FSM 
+.print "MMS -> ", MMS 
+.print "BIOS -> ", BIOS

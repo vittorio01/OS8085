@@ -7,14 +7,24 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk
-                lxi d,file_name
-                lxi b,extension_name
-                mvi a,%10111111
+                lxi b,file_name
+                lxi d,extension_name
+                mvi h,64
+                mvi l,$30
+loop:           mov a,l
+                sta file_name+6
+                sta extension_name+3
+                mvi a,%10110000
                 call fsm_create_file_header
+                inr l 
+                dcr h 
+                jnz loop
+                
                 hlt
 
-file_name:  .text "HEADER DI PROVA"
+file_name:  .text "HEADER5"
             .b 0
-extension_name: .text "ABC"
+
+extension_name: .text "EXT5"
                 .b 0
 CPS_level_end:
