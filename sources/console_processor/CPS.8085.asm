@@ -9,16 +9,7 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_select_disk
                 lxi b,file_name
                 lxi d,extension_name
-                mvi h,64
-                mvi l,$30
-loop:           mov a,l
-                sta file_name+6
-                sta extension_name+3
-                mvi a,%10110000
-                call fsm_create_file_header
-                inr l 
-                dcr h 
-                jnz loop
+                call fsm_search_file_header
                 
                 hlt
 
