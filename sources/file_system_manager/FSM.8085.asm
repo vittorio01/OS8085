@@ -159,17 +159,17 @@ fsm_coded_page_dimension            .equ 16
 fsm_uncoded_page_dimension          .equ 2048
 
 fsm_format_marker_lenght            .equ 6 
+
 fsm_header_dimension                .equ 32 
 fsm_disk_name_max_lenght            .equ 20
 fsm_header_name_dimension           .equ 20
-fsm_header_extension_dimenson       .equ 5 
-
+fsm_header_extension_dimension      .equ 5 
 fsm_header_valid_bit                .equ %10000000
-fsm_header_system_bit               .equ %01000000
-fsm_header_program_bit              .equ %00100000
-fsm_header_hidden_bit               .equ %00010000
-fsm_header_readonly_bit             .equ $00001000
-fsm_header_deleted_bit              .equ %00000100
+fsm_header_deleted_bit              .equ %01000000
+fsm_header_system_bit               .equ %00100000
+fsm_header_program_bit              .equ %00010000
+fsm_header_hidden_bit               .equ %00001000
+fsm_header_readonly_bit             .equ %00000100
 
 fsm_mass_memory_sector_not_found    .equ $20
 fsm_bad_argument                    .equ $21
@@ -179,7 +179,10 @@ fsm_unformatted_disk                .equ $24
 fsm_device_not_found                .equ $25
 fsm_not_enough_spage_left           .equ $26
 fsm_list_is_empty                   .equ $27
-fsm_operation_ok                    .equ $ff
+fsm_header_not_found                .equ $28
+fsm_operation_ok                    .equ $ff 
+
+
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
@@ -340,7 +343,7 @@ fsm_disk_format_next2:                  sta fsm_selected_disk_bps_number
                                         mov c,a 
                                         mvi b,fsm_coded_page_dimension
                                         call unsigned_divide_byte 
-                                        mov a,b +
+                                        mov a,b
                                         sta fsm_selected_disk_spp_number 
                                         lda fsm_selected_disk_bps_number
                                         mov b,a 
@@ -533,102 +536,167 @@ fsm_disk_set_name_end:              pop h
 
 ;fsm_create_file_header crea una nuova intestazione
 ;A -> flags del file
-;BC -> puntatore all'estenzione dell'intestazione 
-;DE -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
+;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
 
-fsm_create_file_header:                 push h 
-                                        push d 
-                                        push b 
-                                        push psw
-                                        lxi h,0 
-                                        call fsm_read_data_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
-                                        call fsm_reselect_mms_segment
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end      ;BC -> dimensione del buffer
-                                        lxi d,0                             ;DE -> pagina corrente
-                                        lxi b,fsm_uncoded_page_dimension    ;HL -> puntatore al buffer 
-                                        mvi a,fsm_header_dimension
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-fsm_create_file_header_loop:            mov a,m 
-                                        ani fsm_header_valid_bit
-                                        jz fsm_create_file_header_new 
-                                        mvi a,fsm_header_dimension
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mov a,c 
-                                        sub l 
-                                        mov a,b 
-                                        sbb h 
-                                        jc fsm_create_file_header_loop
-                                        mov l,e 
-                                        mov h,d 
-                                        call fsm_get_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
-                                        mov a,l 
-                                        ani h 
-                                        cpi $ff 
-                                        jz fsm_create_file_header_load_next_page
-                                        call fsm_move_data_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
-                                        call fsm_reselect_mms_segment
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
-                                        jmp fsm_create_file_header_loop
-fsm_create_file_header_append_page:  
-fsm_create_file_header_new:             push d 
-                                        inx sp
-                                        inx sp
+
+fsm_create_file_header:                     push h 
+                                            push d 
+                                            push b 
+                                            push psw
+                                            lxi h,0 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok                ;BC -> dimensione del buffer 
+                                            jnz fsm_create_file_header_end      ;DE -> pagina corrente
+                                            lxi d,0                             ;HL -> puntatore al buffer
+                                            lxi b,fsm_uncoded_page_dimension    ;SP -> [pozizione nel buffer][psw][b][d][h]
+                                            push h 
+                                            lxi h,fsm_header_dimension 
+                                            xthl 
+                                            mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+fsm_create_file_header_search_loop:         mov a,m 
+                                            ani fsm_header_valid_bit
+                                            jz fsm_create_file_header_end_of_list 
+                                            mov a,m 
+                                            ani fsm_header_deleted_bit
+                                            jnz fsm_create_file_header_deleted_replace 
+                                            mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+                                            xthl 
+                                            mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+                                            mov a,l  
+                                            sub c 
+                                            mov a,h 
+                                            sbb b
+                                            xthl 
+                                            jc fsm_create_file_header_search_loop
+                                            mov l,e 
+                                            mov h,d 
+                                            call fsm_get_page_link
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end       
+                                            mov a,l 
+                                            ana h 
+                                            cpi $ff 
+                                            jz fsm_create_file_header_end_of_page_list 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok 
+                                            jnz fsm_create_file_header_end      
+                                            mov e,l 
+                                            mov d,h     
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            xthl 
+                                            lxi h,0 
+                                            xthl 
+                                            jmp fsm_create_file_header_search_loop
+fsm_create_file_header_deleted_replace:     call fsm_create_file_header_write_bytes
+                                            jmp fsm_create_file_header_next
+fsm_create_file_header_end_of_page_list:    mov l,e 
+                                            mov h,d 
+                                            call fsm_append_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            mov e,l 
+                                            mov d,h 
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            call fsm_clear_mms_segment
+                                            call fsm_create_file_header_write_bytes
+                                            xchg 
+                                            call fsm_write_data_page
+                                            call fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            jmp fsm_create_file_header_next2
+fsm_create_file_header_end_of_list:         call fsm_create_file_header_write_bytes
+                                            xthl 
+                                            mov a,l 
+                                            sub c 
+                                            mov a,h 
+                                            sbb b 
+                                            xthl 
+                                            jnc fsm_create_file_header_next
+                                            mvi m,0
+fsm_create_file_header_next:                ;call fsm_writeback_page
+                                            ;cpi fsm_operation_ok
+                                            ;jnz fsm_create_file_header_end
+fsm_create_file_header_next2:               mvi a,fsm_operation_ok
+fsm_create_file_header_end:                 inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            pop b 
+                                            pop d 
+                                            pop h 
+                                            ret 
+                                        
+fsm_create_file_header_write_bytes:     push d 
+                                        lxi d,6 
+                                        xchg 
+                                        dad sp 
+                                        sphl 
+                                        xchg 
                                         xthl 
                                         mov a,h 
-                                        xthl
+                                        xthl 
                                         mov m,a 
                                         inx h 
                                         inx sp 
                                         inx sp 
-                                        xthl
+                                        xthl 
                                         mov c,l 
                                         mov b,h 
                                         xthl 
-                                        inx sp 
-                                        inx sp 
-                                        mov e,l 
-                                        mov d,h 
-                                        xthl 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        mvi a,fsm_header_name_dimension
-                                        call string_ncopy
-                                        mvi a,fsm_header_name_dimension
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mvi a,fsm_header_extension_dimenson
+                                        lxi d,$fff8 
+                                        xchg 
+                                        dad sp 
+                                        sphl 
+                                        xchg 
                                         mov e,c 
                                         mov d,b 
+                                        mvi a,fsm_header_name_dimension
                                         call string_ncopy
+                                        lxi d,fsm_header_name_dimension
+                                        dad d 
+                                        lxi d,10 
+                                        xchg 
+                                        dad sp 
+                                        sphl 
+                                        xchg 
+                                        xthl 
+                                        mov c,l 
+                                        mov b,h 
+                                        xthl 
+                                        lxi d,$fff6 
+                                        xchg 
+                                        dad sp 
+                                        sphl 
+                                        xchg
+                                        mov e,c 
+                                        mov d,b 
                                         mvi a,fsm_header_extension_dimension
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
+                                        call string_ncopy
+                                        lxi d,fsm_header_extension_dimension
+                                        dad d 
                                         mvi m,0 
                                         inx h 
                                         mvi m,0 
@@ -643,91 +711,154 @@ fsm_create_file_header_new:             push d
                                         inx h 
                                         pop d 
                                         lxi b,fsm_uncoded_page_dimension
-                                        mov a,c 
-                                        sub l 
-                                        mov a,b 
-                                        sbb h
-                                        jc fsm_create_file_header_next
-                                        xchg 
-                                        call fsm_append_new_page
-                                        cpi fsm_operation_ok
-                                        jz fsm_create_file_header_end
-
-fsm_create_file_header_end
-fsm_create_file_header_next:            mvi m,0 
-                                        call fsm_writeback_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_create_file_header_end
-                                        mvi a,$ff 
-fsm_create_file_header_end:             pop psw 
-                                        pop b 
-                                        pop d 
-                                        pop h 
                                         ret 
 
-fsm_create_file_header_write_new:       push d 
-                                        inx sp 
-                                        inx sp 
-                                        inx sp 
-                                        inx sp 
-                                        xthl 
-                                        mov a,h 
-                                        xthl
-                                        mov m,a 
-                                        inx h  
-                                        inx sp 
-                                        inx sp
-                                        xthl 
-                                        mov c,l 
-                                        mov b,h 
-                                        xthl 
-                                        inx sp 
-                                        inx sp 
-                                        xthl 
-                                        mov e,l 
-                                        mov d,h 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        mvi a,fsm_header_name_dimension
-                                        call string_ncopy 
-                                        mvi a,fsm_header_name_dimension
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mov e,c 
-                                        mov d,b 
-                                        mvi a,fsm_header_extension_dimenson
-                                        call string_ncopy
-                                        mvi a,fsm_header_extension_dimenson
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mvi m,0 
-                                        inx h 
-                                        mvi m,0 
-                                        inx h 
-                                        mvi m,0 
-                                        inx h
-                                        mvi m,0 
-                                        inx h 
-                                        mvi m,$ff 
-                                        inx h 
-                                        mvi m,$ff 
-                                        inx h 
-                                        pop d 
-                                        ret 
+;fsm_search_file_header restituisce le coordinate dell'intestazone desiderata
+;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
+
+;A -> esito dell'operazione 
+;DE -> numero di pagina che contiene l'intestazione
+;BC -> posizione dell'intestazione nella pagina
+
+fsm_search_file_header:                     push h 
+                                            push d 
+                                            push b
+                                            lxi h,0 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_search_file_header_end
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok                ;BC -> dimensione del buffer 
+                                            jnz fsm_search_file_header_end      ;DE -> pagina corrente
+                                            lxi d,0                             ;HL -> puntatore al buffer
+                                            lxi b,fsm_uncoded_page_dimension    ;SP -> [pozizione nel buffer][psw][b][d][h]
+                                            push h 
+                                            lxi h,fsm_header_dimension 
+                                            xthl 
+                                            mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+fsm_search_file_header_search_loop:         mov a,m 
+                                            ani fsm_header_valid_bit
+                                            jz fsm_search_file_header_end_of_list 
+                                            mov a,m 
+                                            ani fsm_header_deleted_bit
+                                            jnz fsm_search_file_header_search_loop2
+                                            push h 
+                                            push d 
+                                            inx h 
+                                            lxi d,6 
+                                            xchg 
+                                            dad sp 
+                                            sphl 
+                                            xchg 
+                                            xthl 
+                                            mov c,l 
+                                            mov b,h 
+                                            xthl 
+                                            lxi d,$fffa
+                                            xchg 
+                                            dad sp 
+                                            sphl 
+                                            xchg 
+                                            mov e,c 
+                                            mov d,b 
+                                            mvi a,fsm_header_name_dimension
+                                            call string_ncompare
+                                            ora a 
+                                            jz fsm_search_file_header_search_loop_next
+                                            lxi d,fsm_header_name_dimension
+                                            dad d 
+                                            lxi d,8 
+                                            xchg 
+                                            dad sp 
+                                            sphl 
+                                            xchg 
+                                            xthl 
+                                            mov c,l 
+                                            mov b,h 
+                                            xthl 
+                                            lxi d,$fff8
+                                            xchg 
+                                            dad sp 
+                                            sphl 
+                                            xchg 
+                                            mov e,c 
+                                            mov d,b 
+                                            mvi a,fsm_header_extension_dimension
+                                            call string_ncompare
+                                            ora a 
+                                            jz fsm_search_file_header_search_loop_next
+                                            pop d 
+                                            pop h 
+                                            xthl 
+                                            xchg 
+                                            mov c,e 
+                                            mov b,d 
+                                            lxi d,fsm_header_dimension
+                                            call unsigned_divide_word
+                                            xchg 
+                                            mvi a,fsm_operation_ok
+                                            jmp fsm_search_file_header_end
+fsm_search_file_header_search_loop_next:    pop d 
+                                            pop h 
+                                            lxi b,fsm_uncoded_page_dimension
+fsm_search_file_header_search_loop2:        mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+                                            xthl 
+                                            mvi a,fsm_header_dimension
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+                                            mov a,l  
+                                            sub c 
+                                            mov a,h 
+                                            sbb b
+                                            xthl 
+                                            jc fsm_search_file_header_search_loop
+                                            mov l,e 
+                                            mov h,d 
+                                            call fsm_get_page_link
+                                            cpi fsm_operation_ok
+                                            jnz fsm_search_file_header_end       
+                                            mov a,l 
+                                            ana h 
+                                            cpi $ff 
+                                            jz fsm_search_file_header_end_of_list 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok 
+                                            jnz fsm_search_file_header_end      
+                                            mov e,l 
+                                            mov d,h     
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_search_file_header_end
+                                            xthl 
+                                            lxi h,0 
+                                            xthl 
+                                            jmp fsm_search_file_header_search_loop
+fsm_search_file_header_end_of_list:         mvi a,fsm_header_not_found 
+                                            lxi d,0 
+                                            lxi b,0 
+fsm_search_file_header_end:                 inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            pop h 
+                                            ret 
+
 
 ;fsm_append_new_page concatena la prima pagina libera alla lista concatenata 
 ; HL -> indirizzo di partenza della lista 
@@ -820,8 +951,7 @@ fsm_truncate_page_loop:         mov c,l
                                 cpi fsm_operation_ok
                                 jnz fsm_truncate_page_end
                                 jmp fsm_truncate_page_end
-fsm_truncate_page_loop_end2:    hlt 
-                                mov l,c 
+fsm_truncate_page_loop_end2:    mov l,c 
                                 mov h,b 
                                 call fsm_set_first_free_page_address
                                 cpi fsm_operation_ok
@@ -1152,7 +1282,9 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 call fsm_read_data_page
                                                 cpi fsm_operation_ok
                                                 jnz fsm_clear_fat_table_load_page_error
-                                                lhld fsm_page_buffer_segment_address
+                                                call fsm_reselect_mms_segment
+                                                cpi fsm_operation_ok
+                                                jnz fsm_clear_fat_table_reset_end
                                                 lxi b,fsm_disk_name_max_lenght
                                                 dad b 
                                                 xchg 
@@ -1166,12 +1298,18 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 mvi m,1 
                                                 inx h 
                                                 mvi m,0 
-                                                inx h 
-                                                mvi m,0 
-                                                lhld fsm_page_buffer_segment_address 
-                                                mvi b,fsm_header_dimension
+                                                call fsm_reselect_mms_segment
+                                                cpi fsm_operation_ok
+                                                jnz fsm_clear_fat_table_reset_end
+                                                lxi b,fsm_header_dimension
                                                 dad b 
-                                                mvi m,0 
+                                                lxi b,fsm_uncoded_page_dimension-fsm_header_dimension 
+fsm_clear_fat_table_header_space_format:        mvi m,0 
+                                                dcx b 
+                                                inx h 
+                                                mov a,c 
+                                                ora b 
+                                                jnz fsm_clear_fat_table_header_space_format
                                                 lxi h,0 
                                                 call fsm_write_data_page
                                                 cpi fsm_operation_ok                   
@@ -1283,7 +1421,7 @@ fsm_move_data_page_verify:      lhld fsm_selected_disk_loaded_page
                                 jnz fsm_move_data_page_writeback
                                 mov a,d 
                                 cmp h 
-                                jz fsm_move_data_page_load
+                                jz fsm_move_data_page_next
 fsm_move_data_page_writeback:   call fsm_write_data_page
                                 cpi fsm_operation_ok
                                 jnz fsm_move_data_page_end
