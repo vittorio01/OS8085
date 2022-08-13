@@ -624,7 +624,7 @@ fsm_create_file_header_end_of_page_list:    mov l,e
                                             call fsm_create_file_header_write_bytes
                                             xchg 
                                             call fsm_write_data_page
-                                            call fsm_operation_ok
+                                            cpi fsm_operation_ok
                                             jnz fsm_create_file_header_end
                                             jmp fsm_create_file_header_next2
 fsm_create_file_header_end_of_list:         call fsm_create_file_header_write_bytes
@@ -714,12 +714,14 @@ fsm_create_file_header_write_bytes:     push d
                                         ret 
 
 ;fsm_search_file_header restituisce le coordinate dell'intestazone desiderata
-;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
 ;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
+;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+
 
 ;A -> esito dell'operazione 
-;DE -> numero di pagina che contiene l'intestazione
 ;BC -> posizione dell'intestazione nella pagina
+;DE -> numero di pagina che contiene l'intestazione
+
 
 fsm_search_file_header:                     push h 
                                             push d 
