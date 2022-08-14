@@ -145,7 +145,8 @@ fsm_page_buffer_segment_address         .equ $006E
 fsm_selected_disk_data_page_number      .equ $0070
 fsm_selected_disk_fat_page_number       .equ $0072
 fsm_selected_disk_loaded_page           .equ $0073
-
+fsm_selected_file_header_page_address   .equ $0075
+fsm_selected_file_header_php_address    .equ $0077
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
 ;bit 7 -> pagina caricata in memoria
 ;bit 6 -> tipo di pagina (FAT 0 o data 1)
@@ -180,6 +181,7 @@ fsm_device_not_found                .equ $25
 fsm_not_enough_spage_left           .equ $26
 fsm_list_is_empty                   .equ $27
 fsm_header_not_found                .equ $28
+fsm_end_of_disk                     .equ $29
 fsm_operation_ok                    .equ $ff 
 
 
@@ -298,6 +300,9 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 lda fsm_selected_disk_loaded_page_flags
                                 ori %00010000
                                 sta fsm_selected_disk_loaded_page_flags
+                                call fsm_reset_file_header_scan_pointer
+                                cpi fsm_operation_ok
+                                jnz fsm_select_disk_end
                                 mvi a,fsm_operation_ok
 fsm_select_disk_end:            pop d 
                                 pop h 
@@ -534,11 +539,60 @@ fsm_disk_set_name_disk_selected:    push h
 fsm_disk_set_name_end:              pop h 
                                     ret 
 
+;fsm_reset_file_header_scan_pointer inizializza il puntatore al file corrente
+
+fsm_reset_file_header_scan_pointer: push h 
+                                    lxi h,0 
+                                    shld fsm_selected_file_header_page_address 
+                                    lxi h,1 
+                                    shld fsm_selected_file_header_php_address 
+                                    pop h 
+                                    ret 
+
+;fsm_select_file_header_scan_pointer imposta il puntatore al file corrente nella posizione desiderata
+;BC <- posizione dell'intestazione nella pagina
+;DE <- numero di pagina che contiene l'intestazione
+
+fsm_select_file_header_scan_pointer:        push h
+                                            push b 
+                                            push d 
+                                            xchg 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_select_file_header_scan_pointer_end
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_select_file_header_scan_pointer_end
+                                            lxi d,fsm_header_dimension
+                                            call unsigned_multiply_word
+                                            dad d 
+                                            mov a,m 
+                                            ani fsm_header_valid_bit
+                                            jnz fsm_select_file_header_scan_pointer_end
+                                            mvi a,fsm_header_not_found 
+                                            jmp fsm_select_file_header_scan_pointer_end
+fsm_select_file_header_scan_pointer_ok:     mvi a,fsm_operation_ok
+                                            pop d 
+                                            pop b 
+                                            mov l,e  
+                                            mov h,d  
+                                            shld fsm_selected_file_header_php_address
+                                            mov l,c 
+                                            mov h,b 
+                                            shld fsm_selected_file_header_page_address
+                                            pop h 
+                                            ret 
+fsm_select_file_header_scan_pointer_end:    pop d 
+                                            pop b 
+                                            pop h 
+                                            ret 
+
+
+
 ;fsm_create_file_header crea una nuova intestazione
 ;A -> flags del file
 ;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
 ;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
-
 
 fsm_create_file_header:                     push h 
                                             push d 
@@ -717,10 +771,9 @@ fsm_create_file_header_write_bytes:     push d
 ;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
 ;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
 
-
-;A -> esito dell'operazione 
-;BC -> posizione dell'intestazione nella pagina
-;DE -> numero di pagina che contiene l'intestazione
+;A <- esito dell'operazione 
+;BC <- posizione dell'intestazione nella pagina
+;DE <- numero di pagina che contiene l'intestazione
 
 
 fsm_search_file_header:                     push h 
@@ -1484,12 +1537,10 @@ fsm_read_fat_page_next:             lda fsm_selected_disk_fat_page_number
                                     mov a,b 
                                     sub c
                                     jc fsm_read_fat_page_not_overflow
-                                    xra a 
-                                    sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_bad_argument 
                                     jmp fsm_read_fat_page_end
 fsm_read_fat_page_not_overflow:     mov a,b 
-                                    sta fsm_selected_disk_loaded_page
+                                    sta fsm_selected_disk_loaded_page 
                                     xra a 
                                     sta fsm_selected_disk_loaded_page+1
                                     lda fsm_selected_disk_spp_number  
@@ -1509,8 +1560,11 @@ fsm_read_fat_page_not_overflow:     mov a,b
                                     call fsm_seek_disk_sector
                                     cpi fsm_operation_ok
                                     jz fsm_read_fat_page_operation_ok
-                                    xra a 
+                                    push psw 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %01111111
                                     sta fsm_selected_disk_loaded_page_flags
+                                    pop psw 
                                     jmp fsm_read_fat_page_end
 fsm_read_fat_page_operation_ok:     lda fsm_selected_disk_loaded_page_flags
                                     ani %00111111
@@ -1518,32 +1572,50 @@ fsm_read_fat_page_operation_ok:     lda fsm_selected_disk_loaded_page_flags
                                     call fsm_reselect_mms_segment
                                     lda fsm_selected_disk_spp_number  
                                     push psw 
-fsm_read_fat_page_operation_loop:   call bios_mass_memory_read_sector
+fsm_read_fat_page_operation_loop:   mov a,c 
+                                    call bios_mass_memory_select_head
                                     cpi bios_operation_ok
-                                    jz fsm_read_fat_page_operation_loop2
-                                    inx sp 
-                                    inx sp 
-                                    jmp fsm_read_fat_page_end
-fsm_read_fat_page_operation_loop2:  inr e 
-                                    mov a,d 
-                                    aci 0 
-                                    mov d,a 
-                                    mov a,c 
-                                    aci 0 
-                                    mov c,a 
-                                    mov b,a 
-                                    aci 0 
-                                    mov b,a 
-                                    call fsm_seek_disk_sector
-                                    xthl 
+                                    jnz fsm_read_fat_page_end_loop
+                                    xchg 
+                                    call bios_mass_memory_select_track
+                                    xchg 
+                                    cpi bios_operation_ok
+                                    jnz fsm_read_fat_page_end_loop
+                                    mov a,b 
+                                    call bios_mass_memory_select_sector
+                                    cpi bios_operation_ok
+                                    jnz fsm_read_fat_page_end_loop
+                                    call bios_mass_memory_read_sector
+                                    cpi bios_operation_ok
+                                    jnz fsm_read_fat_page_end_loop
+                                    inr b 
+                                    lda fsm_selected_disk_spt_number
+                                    cmp b 
+                                    jnz fsm_read_fat_page_operation_loop2
+                                    mvi b,0
+                                    inx d 
+                                    lda fsm_selected_disk_tph_number+1
+                                    cmp d  
+                                    jnz fsm_read_fat_page_operation_loop2
+                                    lda fsm_selected_disk_tph_number
+                                    cmp e 
+                                    jnz fsm_read_fat_page_operation_loop2
+                                    lxi d,0 
+                                    inr c 
+                                    lda fsm_selected_disk_head_number
+                                    cmp e 
+                                    jnz fsm_read_fat_page_operation_loop2
+                                    mvi a,fsm_end_of_disk
+                                    jmp fsm_read_fat_page_end_loop
+fsm_read_fat_page_operation_loop2:  xthl 
                                     dcr h 
-                                    xthl 
+                                    xthl
                                     jnz fsm_read_fat_page_operation_loop
                                     lda fsm_selected_disk_loaded_page_flags
                                     ori %10000000
                                     sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_operation_ok
-                                    inx sp 
+fsm_read_fat_page_end_loop:         inx sp 
                                     inx sp  
 fsm_read_fat_page_end:              pop h 
                                     pop d 
@@ -1575,8 +1647,6 @@ fsm_write_fat_page_next:            lda fsm_selected_disk_fat_page_number
                                     mov a,b 
                                     sub c
                                     jc fsm_write_fat_page_not_overflow
-                                    xra a 
-                                    sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_bad_argument 
                                     jmp fsm_write_fat_page_end
 fsm_write_fat_page_not_overflow:    mov a,b 
@@ -1603,39 +1673,50 @@ fsm_write_fat_page_not_overflow:    mov a,b
                                     xra a 
                                     sta fsm_selected_disk_loaded_page_flags
                                     jmp fsm_write_fat_page_end
-fsm_write_fat_page_operation_ok:    lda fsm_selected_disk_loaded_page_flags
-                                    ani %00111111
-                                    sta fsm_selected_disk_loaded_page_flags
-                                    sta fsm_selected_disk_loaded_page_flags
-                                    call fsm_reselect_mms_segment
+fsm_write_fat_page_operation_ok:    call fsm_reselect_mms_segment
                                     lda fsm_selected_disk_spp_number  
                                     push psw 
-fsm_write_fat_page_operation_loop:  call bios_mass_memory_write_sector
+fsm_write_fat_page_operation_loop:  mov a,c 
+                                    call bios_mass_memory_select_head
                                     cpi bios_operation_ok
-                                    jz fsm_write_fat_page_operation_loop2
-                                    inx sp 
-                                    inx sp 
-                                    jmp fsm_write_fat_page_end
-fsm_write_fat_page_operation_loop2: inr e 
-                                    mov a,d 
-                                    aci 0 
-                                    mov d,a 
-                                    mov a,c 
-                                    aci 0 
-                                    mov c,a 
-                                    mov b,a 
-                                    aci 0 
-                                    mov b,a 
-                                    call fsm_seek_disk_sector
-                                    xthl 
+                                    jnz fsm_write_fat_page_end_loop
+                                    xchg 
+                                    call bios_mass_memory_select_track
+                                    xchg 
+                                    cpi bios_operation_ok
+                                    jnz fsm_write_fat_page_end_loop
+                                    mov a,b 
+                                    call bios_mass_memory_select_sector
+                                    cpi bios_operation_ok
+                                    jnz fsm_write_fat_page_end_loop
+                                    call bios_mass_memory_write_sector
+                                    cpi bios_operation_ok
+                                    jnz fsm_write_fat_page_end_loop
+                                    inr b 
+                                    lda fsm_selected_disk_spt_number
+                                    cmp b 
+                                    jnz fsm_write_fat_page_operation_loop2
+                                    mvi b,0
+                                    inx d 
+                                    lda fsm_selected_disk_tph_number+1
+                                    cmp d  
+                                    jnz fsm_write_fat_page_operation_loop2
+                                    lda fsm_selected_disk_tph_number
+                                    cmp e 
+                                    jnz fsm_write_fat_page_operation_loop2
+                                    lxi d,0 
+                                    inr c 
+                                    lda fsm_selected_disk_head_number
+                                    cmp e 
+                                    jnz fsm_write_fat_page_operation_loop2
+                                    mvi a,fsm_end_of_disk
+                                    jmp fsm_write_fat_page_end_loop
+fsm_write_fat_page_operation_loop2: xthl 
                                     dcr h 
-                                    xthl 
+                                    xthl
                                     jnz fsm_write_fat_page_operation_loop
-                                    lda fsm_selected_disk_loaded_page_flags
-                                    ori %10000000
-                                    sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_operation_ok
-                                    inx sp 
+fsm_write_fat_page_end_loop:        inx sp 
                                     inx sp   
 fsm_write_fat_page_end:             pop h 
                                     pop d 
@@ -1726,32 +1807,50 @@ fsm_read_data_page_operation_ok:        lda fsm_selected_disk_loaded_page_flags
                                         call fsm_reselect_mms_segment
                                         lda fsm_selected_disk_spp_number
                                         push psw 
-fsm_read_data_page_operation_loop:      call bios_mass_memory_read_sector
+fsm_read_data_page_operation_loop:      mov a,c 
+                                        call bios_mass_memory_select_head
                                         cpi bios_operation_ok
-                                        jz fsm_read_data_page_operation_loop2
-                                        inx sp 
-                                        inx sp 
-                                        jmp fsm_read_data_page_end
-fsm_read_data_page_operation_loop2:     inr e 
-                                        mov a,d 
-                                        aci 0 
-                                        mov d,a 
-                                        mov a,c 
-                                        aci 0 
-                                        mov c,a 
-                                        mov b,a 
-                                        aci 0 
-                                        mov b,a 
-                                        call fsm_seek_disk_sector
-                                        xthl 
+                                        jnz fsm_read_data_page_end_loop
+                                        xchg 
+                                        call bios_mass_memory_select_track
+                                        xchg 
+                                        cpi bios_operation_ok
+                                        jnz fsm_read_data_page_end_loop
+                                        mov a,b 
+                                        call bios_mass_memory_select_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_read_data_page_end_loop
+                                        call bios_mass_memory_read_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_read_data_page_end_loop
+                                        inr b 
+                                        lda fsm_selected_disk_spt_number
+                                        cmp b 
+                                        jnz fsm_read_data_page_operation_loop2
+                                        mvi b,0
+                                        inx d 
+                                        lda fsm_selected_disk_tph_number+1
+                                        cmp d  
+                                        jnz fsm_read_data_page_operation_loop2
+                                        lda fsm_selected_disk_tph_number
+                                        cmp e 
+                                        jnz fsm_read_data_page_operation_loop2
+                                        lxi d,0 
+                                        inr c 
+                                        lda fsm_selected_disk_head_number
+                                        cmp e 
+                                        jnz fsm_read_data_page_operation_loop2
+                                        mvi a,fsm_end_of_disk
+                                        jmp fsm_read_data_page_end_loop
+fsm_read_data_page_operation_loop2:     xthl 
                                         dcr h 
-                                        xthl 
-                                        jnz fsm_read_fat_page_operation_loop
+                                        xthl
+                                        jnz fsm_read_data_page_operation_loop
                                         lda fsm_selected_disk_loaded_page_flags
                                         ori %11000000
                                         sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok
-                                        inx sp 
+fsm_read_data_page_end_loop:            inx sp 
                                         inx sp 
 fsm_read_data_page_end:                 pop h 
                                         pop d 
@@ -1831,41 +1930,60 @@ fsm_write_data_page_not_overflow:       xchg
 fsm_write_data_page_operation_ok:       call fsm_reselect_mms_segment
                                         lda fsm_selected_disk_spp_number
                                         push psw 
-fsm_write_data_page_operation_loop:     call bios_mass_memory_write_sector
+fsm_write_data_page_operation_loop:     mov a,c 
+                                        call bios_mass_memory_select_head
                                         cpi bios_operation_ok
-                                        jz fsm_write_data_page_operation_loop2
-                                        inx sp 
-                                        inx sp 
-                                        jmp fsm_write_data_page_end
-fsm_write_data_page_operation_loop2:    inr e 
-                                        mov a,d 
-                                        aci 0 
-                                        mov d,a 
-                                        mov a,c 
-                                        aci 0 
-                                        mov c,a 
-                                        mov b,a 
-                                        aci 0 
-                                        mov b,a 
-                                        call fsm_seek_disk_sector
-                                        xthl 
+                                        jnz fsm_write_data_page_end_loop
+                                        xchg 
+                                        call bios_mass_memory_select_track
+                                        xchg 
+                                        cpi bios_operation_ok
+                                        jnz fsm_write_data_page_end_loop
+                                        mov a,b 
+                                        call bios_mass_memory_select_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_write_data_page_end_loop
+                                        call bios_mass_memory_write_sector
+                                        cpi bios_operation_ok
+                                        jnz fsm_write_data_page_end_loop
+                                        inr b 
+                                        lda fsm_selected_disk_spt_number
+                                        cmp b 
+                                        jnz fsm_write_data_page_operation_loop2
+                                        mvi b,0
+                                        inx d 
+                                        lda fsm_selected_disk_tph_number+1
+                                        cmp d  
+                                        jnz fsm_write_data_page_operation_loop2
+                                        lda fsm_selected_disk_tph_number
+                                        cmp e 
+                                        jnz fsm_write_data_page_operation_loop2
+                                        lxi d,0 
+                                        inr c 
+                                        lda fsm_selected_disk_head_number
+                                        cmp e 
+                                        jnz fsm_write_data_page_operation_loop2
+                                        mvi a,fsm_end_of_disk
+                                        jmp fsm_write_data_page_end_loop
+fsm_write_data_page_operation_loop2:     xthl 
                                         dcr h 
-                                        xthl 
-                                        jnz fsm_write_fat_page_operation_loop
+                                        xthl
+                                        jnz fsm_write_data_page_operation_loop
                                         mvi a,fsm_operation_ok
-                                        inx sp 
+fsm_write_data_page_end_loop:           inx sp 
                                         inx sp 
 fsm_write_data_page_end:                pop h 
                                         pop d 
                                         pop b 
                                         ret 
 
-;fsm_seek_mass_memory_sector posiziona la testina nel settore specificato
+;fsm_seek_mass_memory_sector decodifica il numero di settore in numeri di testina, traccia e settore
 ;BCDE -> posizione in settori
-;A <- esito dell'operazione
-fsm_seek_disk_sector:                       push b 
-                                            push d 
-                                            push h 
+;B <- numero di settore 
+;C <- numero di testina 
+;DE <- numero di traccia
+
+fsm_seek_disk_sector:                       push h 
                                             lda fsm_selected_disk_sectors_number
                                             sub e 
                                             lda fsm_selected_disk_sectors_number+1
@@ -1878,6 +1996,8 @@ fsm_seek_disk_sector:                       push b
                                             mvi a,fsm_mass_memory_sector_not_found
                                             jmp fsm_seek_disk_sector_error
 fsm_seek_disk_sector_not_overflow:          lxi h,0 
+                                            push h                                  ;SP -> [sector, head][track]
+                                            push h 
                                             push h 
                                             lda fsm_selected_disk_spt_number
                                             mov l,a
@@ -1890,10 +2010,10 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
                                             inx sp 
                                             pop d 
                                             pop b 
-                                            mov a,l 
-                                            call bios_mass_memory_select_sector
-                                            cpi bios_operation_ok
-                                            jnz fsm_seek_disk_sector_error
+                                            mov a,l                
+                                            xthl 
+                                            mov h,a 
+                                            xthl                  
                                             lhld fsm_selected_disk_tph_number
                                             push h 
                                             lxi h,0 
@@ -1907,16 +2027,23 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
                                             pop b 
                                             inx sp 
                                             inx sp
-                                            call bios_mass_memory_select_track
-                                            cpi bios_operation_ok
-                                            jnz fsm_seek_disk_sector_error
-                                            mov a,c 
-                                            call bios_mass_memory_select_head
-                                            cpi bios_operation_ok
-                                            jnz fsm_seek_disk_sector_error
+                                            xchg 
+                                            inx sp 
+                                            inx sp 
+                                            xthl 
+                                            mov l,e 
+                                            mov h,d 
+                                            xthl 
+                                            dcx sp 
+                                            dcx sp 
+                                            xchg 
+                                            xthl
+                                            mov b,h  
+                                            xthl 
+                                            pop d 
+                                            pop d 
                                             mvi a,fsm_operation_ok
 fsm_seek_disk_sector_error:                 pop h 
-                                            pop d 
-                                            pop b 
                                             ret 
+
 
