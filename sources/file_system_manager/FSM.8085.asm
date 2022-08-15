@@ -145,8 +145,7 @@ fsm_page_buffer_segment_address         .equ $006E
 fsm_selected_disk_data_page_number      .equ $0070
 fsm_selected_disk_fat_page_number       .equ $0072
 fsm_selected_disk_loaded_page           .equ $0073
-fsm_selected_file_header_page_address   .equ $0075
-fsm_selected_file_header_php_address    .equ $0077
+
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
 ;bit 7 -> pagina caricata in memoria
 ;bit 6 -> tipo di pagina (FAT 0 o data 1)
@@ -155,6 +154,8 @@ fsm_selected_file_header_php_address    .equ $0077
 
 fsm_selected_disk_loaded_page_flags     .equ $0075
 
+fsm_selected_file_header_page_address   .equ $0076
+fsm_selected_file_header_php_address    .equ $0078
 
 fsm_coded_page_dimension            .equ 16
 fsm_uncoded_page_dimension          .equ 2048
@@ -184,18 +185,18 @@ fsm_header_not_found                .equ $28
 fsm_end_of_disk                     .equ $29
 fsm_operation_ok                    .equ $ff 
 
-
+fsm_functions:  .org FSM 
+                jmp fsm_init 
+                jmp fsm_disk_format 
+                ;jmp fsm_disk_wipe 
+                ;jmp fsm_disk_mount 
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
 
 fsm_default_disk_name   .text "NO NAME"
 
-fsm_functions:  .org FSM 
-                jmp fsm_init 
-                jmp fsm_disk_format 
-                ;jmp fsm_disk_wipe 
-                ;jmp fsm_disk_mount 
+
 
 ;fsm_init inizializza la fsm 
 
@@ -301,8 +302,6 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 ori %00010000
                                 sta fsm_selected_disk_loaded_page_flags
                                 call fsm_reset_file_header_scan_pointer
-                                cpi fsm_operation_ok
-                                jnz fsm_select_disk_end
                                 mvi a,fsm_operation_ok
 fsm_select_disk_end:            pop d 
                                 pop h 
@@ -608,30 +607,150 @@ fsm_get_selected_file_header_name:                      push h
                                                         call fsm_load_selected_file_header
                                                         cpi fsm_operation_ok
                                                         jnz fsm_get_selected_file_header_name_end
-                                                        lxi d,fsm_header_dimension+fsm_header_name_dimension+1 
+                                                        lxi d,fsm_header_name_dimension
                                                         dad d 
-                                                        mvi d,fsm_header_name_dimension
+                                                        mvi b,fsm_header_name_dimension
 fsm_get_selected_file_header_name_dimension_loop:       mov a,m 
                                                         ora a 
-                                                        jz fsm_get_selected_file_header_name_dimension_loop_end
+                                                        jnz fsm_get_selected_file_header_name_dimension_loop_end
                                                         dcx h 
-                                                        dcr d 
+                                                        dcr b 
                                                         jnz fsm_get_selected_file_header_name_dimension_loop
 fsm_get_selected_file_header_name_dimension_loop_end:   mov a,l 
-                                                        sub d 
+                                                        sub b 
                                                         mov l,a 
-                                                        mov a,h
+                                                        mov a,h 
                                                         sbi 0 
                                                         mov h,a 
-                                                        
+                                                        inx h
+                                                        mov a,b 
+                                                        cpi fsm_header_dimension
+                                                        jnc fsm_get_selected_file_header_name_dimension_next
+                                                        inr b 
+fsm_get_selected_file_header_name_dimension_next:       xchg 
+                                                        lxi h,0 
+                                                        dad sp 
+                                                        mov a,l 
+                                                        sub b 
+                                                        mov l,a 
+                                                        mov a,h 
+                                                        sbi 0 
+                                                        mov h,a
+                                                        mvi c,8
+                                                        dcx sp 
+fsm_get_selected_file_header_name_stack_loop:           xthl 
+                                                        mov a,h 
+                                                        xthl 
+                                                        mov m,a 
+                                                        inx h 
+                                                        inx sp 
+                                                        dcr c 
+                                                        jnz fsm_get_selected_file_header_name_stack_loop      
+                                                        mov a,l 
+                                                        sui 8 
+                                                        mov l,a 
+                                                        mov a,h 
+                                                        sbi 0 
+                                                        mov h,a 
+                                                        sphl 
+                                                        lxi h,8 
+                                                        dad sp 
+                                                        mov a,b 
+                                                        cpi fsm_header_dimension
+                                                        jnc fsm_get_selected_file_header_name_stack_loop_copy
+                                                        dcr b 
+fsm_get_selected_file_header_name_stack_loop_copy:      mov a,b  
+                                                        call string_ncopy
+                                                        mov a,l 
+                                                        add b 
+                                                        mov l,a 
+                                                        mov a,h 
+                                                        aci 0 
+                                                        mov h,a 
+                                                        mvi m,0 
+                                                        mvi a,fsm_operation_ok
+fsm_get_selected_file_header_name_end:                  pop b 
+                                                        pop d 
+                                                        pop h 
+                                                        ret 
 
+;fsm_get_selected_file_header_extension restituisce il nome del file selezionato 
 
+;A <- esito dell'operazione 
+;SP <- nome del file (una stringa non limitata in lunghezza con $00 come carattere terminatore)
 
-
-fsm_get_selected_file_header_name_end:      pop b 
-                                            pop d 
-                                            pop h 
-                                            ret 
+fsm_get_selected_file_header_extension:                     push h 
+                                                            push d 
+                                                            push b 
+                                                            call fsm_load_selected_file_header
+                                                            cpi fsm_operation_ok
+                                                            jnz fsm_get_selected_file_header_extension_end
+                                                            lxi d,fsm_header_extension_dimension+fsm_header_name_dimension
+                                                            dad d 
+                                                            mvi b,fsm_header_extension_dimension
+fsm_get_selected_file_header_extension_dimension_loop:      mov a,m 
+                                                            ora a 
+                                                            jnz fsm_get_selected_file_header_extension_dimension_loop_end
+                                                            dcx h 
+                                                            dcr b 
+                                                            jnz fsm_get_selected_file_header_extension_dimension_loop
+fsm_get_selected_file_header_extension_dimension_loop_end:  mov a,l 
+                                                            sub b 
+                                                            mov l,a 
+                                                            mov a,h 
+                                                            sbi 0 
+                                                            mov h,a 
+                                                            inx h
+                                                            mov a,b 
+                                                            cpi fsm_header_dimension
+                                                            jnc fsm_get_selected_file_header_extension_dimension_next
+                                                            inr b 
+fsm_get_selected_file_header_extension_dimension_next:      xchg 
+                                                            lxi h,0 
+                                                            dad sp 
+                                                            mov a,l 
+                                                            sub b 
+                                                            mov l,a 
+                                                            mov a,h 
+                                                            sbi 0 
+                                                            mov h,a
+                                                            mvi c,8
+                                                            dcx sp 
+fsm_get_selected_file_header_extension_stack_loop:          xthl 
+                                                            mov a,h 
+                                                            xthl 
+                                                            mov m,a 
+                                                            inx h 
+                                                            inx sp 
+                                                            dcr c 
+                                                            jnz fsm_get_selected_file_header_extension_stack_loop      
+                                                            mov a,l 
+                                                            sui 8 
+                                                            mov l,a 
+                                                            mov a,h 
+                                                            sbi 0 
+                                                            mov h,a 
+                                                            sphl 
+                                                            lxi h,8 
+                                                            dad sp 
+                                                            mov a,b 
+                                                            cpi fsm_header_dimension
+                                                            jnc fsm_get_selected_file_header_extension_stack_loop_copy
+                                                            dcr b 
+fsm_get_selected_file_header_extension_stack_loop_copy:     mov a,b  
+                                                            call string_ncopy
+                                                            mov a,l 
+                                                            add b 
+                                                            mov l,a 
+                                                            mov a,h 
+                                                            aci 0 
+                                                            mov h,a 
+                                                            mvi m,0 
+                                                            mvi a,fsm_operation_ok
+fsm_get_selected_file_header_extension_end:                 pop b 
+                                                            pop d 
+                                                            pop h 
+                                                            ret 
 
 ;fsm_load_selected_file_header carica nel buffer l'intestazione selezionata precedentemente e restituisce l'indirizzo in cui è situata
 
@@ -644,7 +763,7 @@ fsm_load_selected_file_header:          push d
                                         call fsm_move_data_page
                                         cpi fsm_operation_ok
                                         jnz fsm_get_selected_file_header_flags_end
-                                        lhld fsm_selected_file_header_page_address
+                                        lhld fsm_selected_file_header_php_address
                                         xchg 
                                         lxi b,fsm_header_dimension
                                         call unsigned_multiply_word 
@@ -652,6 +771,7 @@ fsm_load_selected_file_header:          push d
                                         cpi fsm_operation_ok
                                         jnz fsm_get_selected_file_header_flags_end
                                         dad d 
+                                        mvi a,fsm_operation_ok
 fsm_load_selected_file_header_end:      pop b 
                                         pop d 
                                         ret 
@@ -848,7 +968,7 @@ fsm_select_file_header:                     push h
                                             lxi h,0 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_end
+                                            jnz fsm_select_file_header_end2
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok                ;BC -> dimensione del buffer 
                                             jnz fsm_select_file_header_end      ;DE -> pagina corrente
@@ -923,11 +1043,11 @@ fsm_select_file_header_select_loop:         mov a,m
                                             lxi d,fsm_header_dimension
                                             call unsigned_divide_word
                                             xchg 
-                                            mov l,e  
-                                            mov h,d  
+                                            mov l,c   
+                                            mov h,b  
                                             shld fsm_selected_file_header_php_address
-                                            mov l,c 
-                                            mov h,b 
+                                            mov l,e 
+                                            mov h,d 
                                             shld fsm_selected_file_header_page_address
                                             mvi a,fsm_operation_ok
                                             jmp fsm_select_file_header_end
@@ -979,7 +1099,7 @@ fsm_select_file_header_end_of_list:         mvi a,fsm_header_not_found
                                             lxi b,0 
 fsm_select_file_header_end:                 inx sp 
                                             inx sp
-                                            pop b  
+fsm_select_file_header_end2:                pop b  
                                             pop d 
                                             pop h 
                                             ret 
