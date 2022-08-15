@@ -9,8 +9,8 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_select_disk
                 lxi b,file_name
                 lxi d,extension_name
-                call fsm_search_file_header
-                
+                call fsm_select_file_header
+                call fsm_get_selected_file_header_extension
                 hlt
 
 file_name:  .text "HEADER5"
