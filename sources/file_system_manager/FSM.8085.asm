@@ -549,43 +549,112 @@ fsm_reset_file_header_scan_pointer: push h
                                     pop h 
                                     ret 
 
-;fsm_select_file_header_scan_pointer imposta il puntatore al file corrente nella posizione desiderata
-;BC <- posizione dell'intestazione nella pagina
-;DE <- numero di pagina che contiene l'intestazione
+;fsm_get_selected_file_header_flags restituisce le caratteristiche del file 
+; A <- esito dell'operazione
+; B <- flags 
 
-fsm_select_file_header_scan_pointer:        push h
-                                            push b 
-                                            push d 
-                                            xchg 
-                                            call fsm_move_data_page
+fsm_get_selected_file_header_flags:     push h 
+                                        call fsm_load_selected_file_header
+                                        cpi fsm_operation_ok
+                                        jnz fsm_get_selected_file_header_flags_end
+                                        mov b,m 
+fsm_get_selected_file_header_flags_end: pop h 
+                                        ret 
+
+;fsm_get_selected_file_header_first_page_address restituisce il primo indirizzo della pagina che punta al corpo del file selezionato precedentemente 
+;A <- esito dell'operazione 
+;HL <- indirizzo alla prima pagina
+fsm_get_selected_file_header_first_page_address:        push d 
+                                                        call fsm_load_selected_file_header
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_get_selected_file_header_first_page_address_end 
+                                                        lxi d,fsm_header_dimension-2 
+                                                        dad h 
+                                                        mov e,m 
+                                                        inx h 
+                                                        mov d,m 
+                                                        xchg 
+fsm_get_selected_file_header_first_page_address_end:    pop d  
+                                                        ret 
+
+;fsm_get_selected_file_header_dimension restituisce la dimensione del file selezionato precedentemente 
+;A <- esito dell'operazione
+;BCDE <- dimensione del file 
+
+fsm_get_selected_file_header_dimension:     push h 
+                                            call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_scan_pointer_end
-                                            call fsm_reselect_mms_segment
-                                            cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_scan_pointer_end
-                                            lxi d,fsm_header_dimension
-                                            call unsigned_multiply_word
-                                            dad d 
-                                            mov a,m 
-                                            ani fsm_header_valid_bit
-                                            jnz fsm_select_file_header_scan_pointer_end
-                                            mvi a,fsm_header_not_found 
-                                            jmp fsm_select_file_header_scan_pointer_end
-fsm_select_file_header_scan_pointer_ok:     mvi a,fsm_operation_ok
+                                            jnz fsm_get_selected_file_header_dimension_end
+                                            lxi d,fsm_header_dimension-6 
+                                            dad h 
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            inx h 
+                                            mov c,m 
+                                            inx h 
+                                            mov b,m 
+fsm_get_selected_file_header_dimension_end: pop h 
+                                            ret 
+
+;fsm_get_selected_file_header_name restituisce il nome del file selezionato 
+
+;A <- esito dell'operazione 
+;SP <- nome del file (una stringa non limitata in lunghezza con $00 come carattere terminatore)
+
+fsm_get_selected_file_header_name:                      push h 
+                                                        push d 
+                                                        push b 
+                                                        call fsm_load_selected_file_header
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_get_selected_file_header_name_end
+                                                        lxi d,fsm_header_dimension+fsm_header_name_dimension+1 
+                                                        dad d 
+                                                        mvi d,fsm_header_name_dimension
+fsm_get_selected_file_header_name_dimension_loop:       mov a,m 
+                                                        ora a 
+                                                        jz fsm_get_selected_file_header_name_dimension_loop_end
+                                                        dcx h 
+                                                        dcr d 
+                                                        jnz fsm_get_selected_file_header_name_dimension_loop
+fsm_get_selected_file_header_name_dimension_loop_end:   mov a,l 
+                                                        sub d 
+                                                        mov l,a 
+                                                        mov a,h
+                                                        sbi 0 
+                                                        mov h,a 
+                                                        
+
+
+
+
+fsm_get_selected_file_header_name_end:      pop b 
                                             pop d 
-                                            pop b 
-                                            mov l,e  
-                                            mov h,d  
-                                            shld fsm_selected_file_header_php_address
-                                            mov l,c 
-                                            mov h,b 
-                                            shld fsm_selected_file_header_page_address
                                             pop h 
                                             ret 
-fsm_select_file_header_scan_pointer_end:    pop d 
-                                            pop b 
-                                            pop h 
-                                            ret 
+
+;fsm_load_selected_file_header carica nel buffer l'intestazione selezionata precedentemente e restituisce l'indirizzo in cui è situata
+
+;A <- esito dell'operazione
+;HL <- indirizzo dell'intestazione
+
+fsm_load_selected_file_header:          push d 
+                                        push b 
+                                        lhld fsm_selected_file_header_page_address
+                                        call fsm_move_data_page
+                                        cpi fsm_operation_ok
+                                        jnz fsm_get_selected_file_header_flags_end
+                                        lhld fsm_selected_file_header_page_address
+                                        xchg 
+                                        lxi b,fsm_header_dimension
+                                        call unsigned_multiply_word 
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_get_selected_file_header_flags_end
+                                        dad d 
+fsm_load_selected_file_header_end:      pop b 
+                                        pop d 
+                                        ret 
 
 
 
@@ -772,20 +841,17 @@ fsm_create_file_header_write_bytes:     push d
 ;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
 
 ;A <- esito dell'operazione 
-;BC <- posizione dell'intestazione nella pagina
-;DE <- numero di pagina che contiene l'intestazione
 
-
-fsm_search_file_header:                     push h 
+fsm_select_file_header:                     push h 
                                             push d 
                                             push b
                                             lxi h,0 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
-                                            jnz fsm_search_file_header_end
+                                            jnz fsm_select_file_header_end
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok                ;BC -> dimensione del buffer 
-                                            jnz fsm_search_file_header_end      ;DE -> pagina corrente
+                                            jnz fsm_select_file_header_end      ;DE -> pagina corrente
                                             lxi d,0                             ;HL -> puntatore al buffer
                                             lxi b,fsm_uncoded_page_dimension    ;SP -> [pozizione nel buffer][psw][b][d][h]
                                             push h 
@@ -797,12 +863,12 @@ fsm_search_file_header:                     push h
                                             mov a,h 
                                             aci 0 
                                             mov h,a 
-fsm_search_file_header_search_loop:         mov a,m 
+fsm_select_file_header_select_loop:         mov a,m 
                                             ani fsm_header_valid_bit
-                                            jz fsm_search_file_header_end_of_list 
+                                            jz fsm_select_file_header_end_of_list 
                                             mov a,m 
                                             ani fsm_header_deleted_bit
-                                            jnz fsm_search_file_header_search_loop2
+                                            jnz fsm_select_file_header_select_loop2
                                             push h 
                                             push d 
                                             inx h 
@@ -825,7 +891,7 @@ fsm_search_file_header_search_loop:         mov a,m
                                             mvi a,fsm_header_name_dimension
                                             call string_ncompare
                                             ora a 
-                                            jz fsm_search_file_header_search_loop_next
+                                            jz fsm_select_file_header_select_loop_next
                                             lxi d,fsm_header_name_dimension
                                             dad d 
                                             lxi d,8 
@@ -847,7 +913,7 @@ fsm_search_file_header_search_loop:         mov a,m
                                             mvi a,fsm_header_extension_dimension
                                             call string_ncompare
                                             ora a 
-                                            jz fsm_search_file_header_search_loop_next
+                                            jz fsm_select_file_header_select_loop_next
                                             pop d 
                                             pop h 
                                             xthl 
@@ -857,12 +923,18 @@ fsm_search_file_header_search_loop:         mov a,m
                                             lxi d,fsm_header_dimension
                                             call unsigned_divide_word
                                             xchg 
+                                            mov l,e  
+                                            mov h,d  
+                                            shld fsm_selected_file_header_php_address
+                                            mov l,c 
+                                            mov h,b 
+                                            shld fsm_selected_file_header_page_address
                                             mvi a,fsm_operation_ok
-                                            jmp fsm_search_file_header_end
-fsm_search_file_header_search_loop_next:    pop d 
+                                            jmp fsm_select_file_header_end
+fsm_select_file_header_select_loop_next:    pop d 
                                             pop h 
                                             lxi b,fsm_uncoded_page_dimension
-fsm_search_file_header_search_loop2:        mvi a,fsm_header_dimension
+fsm_select_file_header_select_loop2:        mvi a,fsm_header_dimension
                                             add l 
                                             mov l,a 
                                             mov a,h 
@@ -880,37 +952,35 @@ fsm_search_file_header_search_loop2:        mvi a,fsm_header_dimension
                                             mov a,h 
                                             sbb b
                                             xthl 
-                                            jc fsm_search_file_header_search_loop
+                                            jc fsm_select_file_header_select_loop
                                             mov l,e 
                                             mov h,d 
                                             call fsm_get_page_link
                                             cpi fsm_operation_ok
-                                            jnz fsm_search_file_header_end       
+                                            jnz fsm_select_file_header_end       
                                             mov a,l 
                                             ana h 
                                             cpi $ff 
-                                            jz fsm_search_file_header_end_of_list 
+                                            jz fsm_select_file_header_end_of_list 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok 
-                                            jnz fsm_search_file_header_end      
+                                            jnz fsm_select_file_header_end      
                                             mov e,l 
                                             mov d,h     
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok
-                                            jnz fsm_search_file_header_end
+                                            jnz fsm_select_file_header_end
                                             xthl 
                                             lxi h,0 
                                             xthl 
-                                            jmp fsm_search_file_header_search_loop
-fsm_search_file_header_end_of_list:         mvi a,fsm_header_not_found 
+                                            jmp fsm_select_file_header_select_loop
+fsm_select_file_header_end_of_list:         mvi a,fsm_header_not_found 
                                             lxi d,0 
                                             lxi b,0 
-fsm_search_file_header_end:                 inx sp 
-                                            inx sp 
-                                            inx sp 
-                                            inx sp 
-                                            inx sp 
-                                            inx sp 
+fsm_select_file_header_end:                 inx sp 
+                                            inx sp
+                                            pop b  
+                                            pop d 
                                             pop h 
                                             ret 
 
