@@ -560,6 +560,31 @@ fsm_get_selected_file_header_flags:     push h
 fsm_get_selected_file_header_flags_end: pop h 
                                         ret 
 
+;fsm_set_selected_file_header_flags imposta le flags al file selezionato precedentemente
+; A <- esito dell'operazione
+; B <- flags 
+
+fsm_set_selected_file_header_flags:         push h 
+                                            push psw 
+                                            ani fsm_header_valid_bit
+                                            jnz fsm_set_selected_file_header_flags_next
+                                            mvi a,fsm_bad_argument
+                                            jmp fsm_set_selected_file_header_flags_end
+fsm_set_selected_file_header_flags_next:    xthl 
+                                            mov a,h 
+                                            xthl 
+                                            ani fsm_header_deleted_bit
+                                            jz fsm_set_selected_file_header_flags_next2
+                                            mvi a,fsm_bad_argument
+                                            jmp fsm_set_selected_file_header_flags_end
+fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_set_selected_file_header_flags_end
+                                            mov b,m 
+fsm_set_selected_file_header_flags_end:     inx sp 
+                                            inx sp 
+                                            pop h 
+
 ;fsm_get_selected_file_header_first_page_address restituisce il primo indirizzo della pagina che punta al corpo del file selezionato precedentemente 
 ;A <- esito dell'operazione 
 ;HL <- indirizzo alla prima pagina
@@ -575,6 +600,7 @@ fsm_get_selected_file_header_first_page_address:        push d
                                                         xchg 
 fsm_get_selected_file_header_first_page_address_end:    pop d  
                                                         ret 
+
 
 ;fsm_get_selected_file_header_dimension restituisce la dimensione del file selezionato precedentemente 
 ;A <- esito dell'operazione
@@ -674,8 +700,8 @@ fsm_get_selected_file_header_name_end:                  pop b
                                                         pop h 
                                                         ret 
 
-;fsm_get_selected_file_header_extension restituisce il nome del file selezionato 
 
+;fsm_get_selected_file_header_extension restituisce il nome del file selezionato 
 ;A <- esito dell'operazione 
 ;SP <- nome del file (una stringa non limitata in lunghezza con $00 come carattere terminatore)
 
