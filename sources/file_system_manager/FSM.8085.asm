@@ -140,22 +140,30 @@ fsm_selected_disk_bps_number            .equ $0065
 fsm_selected_disk_sectors_number        .equ $0066
 fsm_selected_disk_spp_number            .equ $006A
 fsm_selected_disk_data_first_sector     .equ $006B
+
 fsm_page_buffer_segment_id              .equ $006D
 fsm_page_buffer_segment_address         .equ $006E
+
 fsm_selected_disk_data_page_number      .equ $0070
 fsm_selected_disk_fat_page_number       .equ $0072
-fsm_selected_disk_loaded_page           .equ $0073
+
 
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
 ;bit 7 -> pagina caricata in memoria
 ;bit 6 -> tipo di pagina (FAT 0 o data 1)
 ;bit 5 -> disco selezionato precedentemente 
 ;bit 4 -> il disco selezionato è formattato 
+;bit 3 -> è stata selezionata un'intestazione
 
-fsm_selected_disk_loaded_page_flags     .equ $0075
+fsm_selected_disk_loaded_page               .equ $0073
+fsm_selected_disk_loaded_page_flags         .equ $0075
+fsm_selected_disk_free_page_number          .equ $0076
+fsm_selected_disk_first_free_page_address   .equ $0078
 
-fsm_selected_file_header_page_address   .equ $0076
-fsm_selected_file_header_php_address    .equ $0078
+fsm_selected_file_header_page_address       .equ $007A
+fsm_selected_file_header_php_address        .equ $007C
+
+
 
 fsm_coded_page_dimension            .equ 16
 fsm_uncoded_page_dimension          .equ 2048
@@ -301,6 +309,24 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 lda fsm_selected_disk_loaded_page_flags
                                 ori %00010000
                                 sta fsm_selected_disk_loaded_page_flags
+                                lxi h,0 
+                                call fsm_move_data_page
+                                call fsm_reselect_mms_segment
+                                cpi fsm_operation_ok
+                                jnz fsm_select_disk_end
+                                lxi d,fsm_disk_name_max_lenght
+                                dad d 
+                                mov a,m 
+                                sta fsm_selected_disk_free_page_number
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_free_page_number+1 
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_first_free_page_address
+                                inx h 
+                                mov a,m 
+                                sta fsm_selected_disk_first_free_page_address+1 
                                 call fsm_reset_file_header_scan_pointer
                                 mvi a,fsm_operation_ok
 fsm_select_disk_end:            pop d 
@@ -1236,84 +1262,38 @@ fsm_truncate_page_end:          pop b
                                 pop h 
                                 ret 
 
+;fsm_get_first_free_page_list aggiunge il numero di pagine 
+
 ;fsm_get_first_free_page_address preleva la prima pagina libera disponibile (aggiorna la lista concatenata delle pagine libere)
 ;HL <- indirizzo della pagina libera
 ;A <- esito dell'operazione
 
 fsm_get_first_free_page_address:        push d 
-                                        push b 
-                                        lxi h,0 
-                                        call fsm_move_data_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        call fsm_reselect_mms_segment
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        mvi a,fsm_disk_name_max_lenght
-                                        add l 
-                                        mov l,a 
-                                        mov a,h
-                                        aci 0 
-                                        mov h,a 
-                                        mov a,m 
-                                        mov e,m 
-                                        inx h 
-                                        mov d,m
-                                        dcx h  
-                                        ora m 
+                                        lhld fsm_selected_disk_free_page_number
+                                        mov a,l 
+                                        ora h 
                                         jnz fsm_get_first_free_page_address_next
-                                        mvi a,fsm_not_enough_spage_left 
-                                        lxi h,$ffff
+                                        mvi a,fsm_not_enough_spage_left
                                         jmp fsm_get_first_free_page_address_end
-fsm_get_first_free_page_address_next:   dcx d 
-                                        mov m,e 
-                                        inx h 
-                                        mov m,d 
-                                        inx h 
-                                        mov c,m 
-                                        inx h 
-                                        mov b,m
-                                        mov l,c  
-                                        mov h,b 
+fsm_get_first_free_page_address_next:   dcx h 
+                                        shld fsm_selected_disk_free_page_number
+                                        lhld fsm_selected_disk_first_free_page_address
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_get_first_free_page_address_end
-                                        push d 
-                                        push h
-                                        mov l,c 
-                                        mov h,b 
-                                        lxi d,$ffff 
-                                        call fsm_set_page_link
-                                        pop h 
-                                        pop d 
+                                        mov e,l 
+                                        mov d,h 
+                                        call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_get_first_free_page_address_end
+                                        shld fsm_selected_disk_first_free_page_address
                                         xchg 
-                                        lxi h,0 
-                                        call fsm_move_data_page
+                                        lxi d,$ffff
+                                        call fsm_set_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_get_first_free_page_address_end
-                                        call fsm_reselect_mms_segment
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        mvi a,fsm_disk_name_max_lenght+2
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mov m,e 
-                                        inx h 
-                                        mov m,d 
-                                        lxi h,0 
-                                        call fsm_write_data_page
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        mov l,c 
-                                        mov h,b 
                                         mvi a,fsm_operation_ok
-fsm_get_first_free_page_address_end:    pop b 
-                                        pop d 
+fsm_get_first_free_page_address_end:    pop d 
                                         ret 
 
 
@@ -1323,72 +1303,22 @@ fsm_get_first_free_page_address_end:    pop b
 
 fsm_set_first_free_page_address:        push h 
                                         push d 
-                                        push b
-                                        mov c,l 
-                                        mov b,h 
-                                        lxi h,0 
-                                        call fsm_move_data_page
-                                        cpi fsm_operation_ok
+                                        xchg 
+                                        call fsm_get_page_link
+                                        cpi fsm_operation_ok 
                                         jnz fsm_set_first_free_page_address_end
-                                        call fsm_reselect_mms_segment
-                                        cpi fsm_operation_ok
-                                        jnz fsm_set_first_free_page_address_end
-                                        mvi a,fsm_disk_name_max_lenght
-                                        add l 
-                                        mov l,a 
-                                        mov a,h 
-                                        aci 0 
-                                        mov h,a 
-                                        mov e,m 
-                                        inx h 
-                                        mov d,m 
-                                        dcx h 
-                                        inx d 
-                                        mov m,e 
-                                        inx h 
-                                        mov m,d 
-                                        inx h 
-                                        mov e,m 
-                                        mov m,c 
-                                        inx h 
-                                        mov d,m 
-                                        mov m,b 
-                                        mov l,c 
-                                        mov h,b 
+                                        xchg 
                                         call fsm_set_page_link
-                                        cpi fsm_operation_ok
+                                        cpi fsm_operation_ok 
                                         jnz fsm_set_first_free_page_address_end
+                                        shld fsm_selected_disk_first_free_page_address
+                                        lhld fsm_selected_disk_free_page_number
+                                        dcx h 
+                                        shld fsm_selected_disk_free_page_number
                                         mvi a,fsm_operation_ok
-fsm_set_first_free_page_address_end:    pop b 
-                                        pop d 
+fsm_set_first_free_page_address_end:    pop d 
                                         pop h 
                                         ret 
-
-;fsm_get_free_page_number ricava il numero di pagine libere del disco 
-;A <- esito dell'operazioni
-;HL <- numero di pagine disponibili
-
-fsm_get_free_page_number:       lxi h,0 
-                                call fsm_move_data_page
-                                cpi fsm_operation_ok
-                                jnz fsm_get_free_page_number_end
-                                call fsm_reselect_mms_segment
-                                cpi fsm_operation_ok
-                                jnz fsm_get_free_page_number_end
-                                mvi a,fsm_disk_name_max_lenght
-                                add l 
-                                mov l,a 
-                                mov a,h
-                                aci 0 
-                                mov h,a 
-                                push d 
-                                mov e,m 
-                                inx h 
-                                mov d,m 
-                                xchg 
-                                pop d 
-                                mvi a,fsm_operation_ok
-fsm_get_free_page_number_end:   ret 
 
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
@@ -1702,6 +1632,27 @@ fsm_move_data_page_load:        mov l,e
                                 call fsm_read_data_page
                                 cpi fsm_operation_ok
                                 jnz fsm_move_data_page_end
+                                mov a,e 
+                                ora d 
+                                jnz fsm_move_data_page_next
+                                call fsm_reselect_mms_segment
+                                cpi fsm_operation_ok
+                                jnz fsm_move_data_page_end
+                                lxi d, fsm_disk_name_max_lenght
+                                dad d 
+                                xchg 
+                                lhld fsm_selected_disk_free_page_number
+                                mov a,l
+                                stax d 
+                                inx d 
+                                mov a,h 
+                                stax d 
+                                lhld fsm_selected_disk_first_free_page_address
+                                mov a,l
+                                stax d 
+                                inx d 
+                                mov a,h 
+                                stax d 
 fsm_move_data_page_next:        mvi a,fsm_operation_ok
 fsm_move_data_page_end:         pop h 
                                 pop d 
