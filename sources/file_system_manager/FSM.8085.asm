@@ -309,29 +309,16 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 lda fsm_selected_disk_loaded_page_flags
                                 ori %00010000
                                 sta fsm_selected_disk_loaded_page_flags
-                                lxi h,0 
-                                call fsm_move_data_page
-                                call fsm_reselect_mms_segment
+                                call fsm_reset_file_header_scan_pointer
+                                call fsm_load_disk_free_pages_informations
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
-                                lxi d,fsm_disk_name_max_lenght
-                                dad d 
-                                mov a,m 
-                                sta fsm_selected_disk_free_page_number
-                                inx h 
-                                mov a,m 
-                                sta fsm_selected_disk_free_page_number+1 
-                                inx h 
-                                mov a,m 
-                                sta fsm_selected_disk_first_free_page_address
-                                inx h 
-                                mov a,m 
-                                sta fsm_selected_disk_first_free_page_address+1 
-                                call fsm_reset_file_header_scan_pointer
                                 mvi a,fsm_operation_ok
 fsm_select_disk_end:            pop d 
                                 pop h 
                                 ret 
+
+
 
 ;fsm_disk_format formatta il disco e prepara il file system di base 
 ; HL -> dimensione della sezione riservata al sistema (in bytes)
@@ -907,7 +894,8 @@ fsm_create_file_header_deleted_replace:     call fsm_create_file_header_write_by
                                             jmp fsm_create_file_header_next
 fsm_create_file_header_end_of_page_list:    mov l,e 
                                             mov h,d 
-                                            call fsm_append_page
+                                            mvi a,1
+                                            call fsm_append_pages
                                             cpi fsm_operation_ok
                                             jnz fsm_create_file_header_end
                                             mov e,l 
@@ -1157,110 +1145,49 @@ fsm_select_file_header_end2:                pop b
                                             ret 
 
 
-;fsm_append_new_page concatena la prima pagina libera alla lista concatenata 
+;fsm_append_pages concatena il numero di pagine libere desiderato alla lista 
+; A -> numero di pagine da aggiungere
 ; HL -> indirizzo di partenza della lista 
 ; A <- esito dell'operazione 
 ; HL <- indirizzo della nuova pagina aggiunta
 
-fsm_append_page:        push d 
+fsm_append_pages:       push d 
                         push b 
-fsm_append_page_loop:   mov e,l 
+                        push psw 
+fsm_append_pages_loop:  mov e,l 
                         mov d,h 
                         call fsm_get_page_link
                         cpi fsm_operation_ok
-                        jnz fsm_append_page_end
+                        jnz fsm_append_pages_end
                         mov a,h
                         cpi $ff 
-                        jnz fsm_append_page_loop
+                        jnz fsm_append_pages_loop
                         mov a,l 
                         cpi $ff 
-                        jnz fsm_append_page_loop
-                        call fsm_get_first_free_page_address
+                        jnz fsm_append_pages_loop
+                        xthl 
+                        mov a,h 
+                        xthl 
+                        call fsm_get_first_free_page_list
                         cpi fsm_operation_ok
-                        jnz fsm_append_page_end
+                        jnz fsm_append_pages_end
                         mov c,l 
                         mov b,h 
                         xchg 
                         call fsm_set_page_link
                         cpi fsm_operation_ok
-                        jnz fsm_append_page_end
+                        jnz fsm_append_pages_end
                         call fsm_writeback_page
                         cpi fsm_operation_ok
-                        jnz fsm_append_page_end
+                        jnz fsm_append_pages_end
                         mvi a,fsm_operation_ok
                         mov l,c 
                         mov h,b 
-fsm_append_page_end:    pop b 
+fsm_append_pages_end:   inx sp 
+                        inx sp 
+                        pop b 
                         pop d 
                         ret 
-
-;fsm_truncate_page rimuove l'ultima pagina dalla lista concatenata e la inserisce in quella delle pagine libere
-;HL -> indirizzo della pagina che contiene l'indirizzo da liberare 
-;A <- esito dell'operazione 
-
-fsm_truncate_page:              push h 
-                                push d 
-                                push b 
-                                mov e,l 
-                                mov d,h
-                                call fsm_get_page_link
-                                cpi $ff 
-                                jnz fsm_truncate_page_loop
-                                mov a,l 
-                                cpi $ff 
-                                jnz fsm_truncate_page_loop 
-                                call fsm_list_is_empty
-                                jmp fsm_truncate_page_end
-fsm_truncate_page_loop:         mov c,l 
-                                mov b,h 
-                                call fsm_get_page_link
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end
-                                mov a,h
-                                cpi $ff 
-                                jz fsm_truncate_page_loop_end2
-                                mov a,l 
-                                cpi $ff 
-                                jz fsm_truncate_page_loop_end2
-                                mov e,l 
-                                mov d,h 
-                                call fsm_get_page_link
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end
-                                mov a,h
-                                cpi $ff 
-                                jnz fsm_truncate_page_loop
-                                mov a,l 
-                                cpi $ff 
-                                jnz fsm_truncate_page_loop
-                                xchg 
-                                call fsm_set_first_free_page_address
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end 
-                                mov l,c 
-                                mov h,b 
-                                lxi d,$ffff
-                                call fsm_set_page_link
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end
-                                mvi a,fsm_operation_ok
-                                call fsm_writeback_page
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end
-                                jmp fsm_truncate_page_end
-fsm_truncate_page_loop_end2:    mov l,c 
-                                mov h,b 
-                                call fsm_set_first_free_page_address
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end 
-                                call fsm_writeback_page
-                                cpi fsm_operation_ok
-                                jnz fsm_truncate_page_end
-                                mvi a,fsm_list_is_empty
-fsm_truncate_page_end:          pop b 
-                                pop d 
-                                pop h 
-                                ret 
 
 ;fsm_get_first_free_page_list restituisce una lista concatenata di pagine libere 
 ;A <- numero di pagine da prelevare
@@ -1269,7 +1196,7 @@ fsm_truncate_page_end:          pop b
 fsm_get_first_free_page_list:           push d
                                         push b 
                                         push psw 
-                                        cpi 0 
+                                        ora a 
                                         jnz fsm_get_first_free_page_list_next
                                         mvi a,fsm_bad_argument
                                         lxi h,$ffff
@@ -1282,6 +1209,7 @@ fsm_get_first_free_page_list_next:      lhld fsm_selected_disk_free_page_number
                                         mov a,h 
                                         sbi 0 
                                         mov h,a 
+                                        jz fsm_get_first_free_page_list_next2
                                         jnc fsm_get_first_free_page_list_next2
                                         mvi a,fsm_not_enough_spage_left
                                         lxi h,$ffff
@@ -1291,61 +1219,33 @@ fsm_get_first_free_page_list_next2:     shld fsm_selected_disk_free_page_number
                                         mov c,l 
                                         mov b,h 
 fsm_get_first_free_page_list_loop:      xthl 
-                                        dcr a 
+                                        dcr h 
                                         xthl 
                                         jz fsm_get_first_free_page_list_loop_end 
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_get_first_free_page_list_end
                                         jmp fsm_get_first_free_page_list_loop
-fsm_get_first_free_page_list_loop_end:  lxi d,$ffff 
-                                        call fsm_set_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_list_end
+fsm_get_first_free_page_list_loop_end:  mov e,l 
+                                        mov d,h 
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_get_first_free_page_list_end
                                         shld fsm_selected_disk_first_free_page_address
+                                        lxi h,$ffff 
+                                        xchg 
+                                        call fsm_set_page_link
+                                        cpi fsm_operation_ok
+                                        jnz fsm_get_first_free_page_list_end
                                         mov l,c 
                                         mov h,b 
-                                        call fsm_operation_ok
+                                        mvi a,fsm_operation_ok
 fsm_get_first_free_page_list_end:       inx sp 
                                         inx sp 
                                         pop b 
                                         pop d 
                                         ret      
-
-;fsm_get_first_free_page_address preleva la prima pagina libera disponibile (aggiorna la lista concatenata delle pagine libere)
-;HL <- indirizzo della pagina libera
-;A <- esito dell'operazione
-
-fsm_get_first_free_page_address:        push d 
-                                        lhld fsm_selected_disk_free_page_number
-                                        mov a,l 
-                                        ora h 
-                                        jnz fsm_get_first_free_page_address_next
-                                        mvi a,fsm_not_enough_spage_left
-                                        jmp fsm_get_first_free_page_address_end
-fsm_get_first_free_page_address_next:   dcx h 
-                                        shld fsm_selected_disk_free_page_number
-                                        lhld fsm_selected_disk_first_free_page_address
-                                        call fsm_get_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        mov e,l 
-                                        mov d,h 
-                                        call fsm_get_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        shld fsm_selected_disk_first_free_page_address
-                                        xchg 
-                                        lxi d,$ffff
-                                        call fsm_set_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_first_free_page_address_end
-                                        mvi a,fsm_operation_ok
-fsm_get_first_free_page_address_end:    pop d 
-                                        ret 
+                                
 
 ;fsm_set_first_free_page_list preleva il numero di pagine concatenate desiderato e le aggiunge alla lista delle pagine libere 
 ;Dopo l'operazione, la lista di partenza viene agiuntata, in modo da evitare problemi di inconsistenza
@@ -1353,90 +1253,88 @@ fsm_get_first_free_page_address_end:    pop d
 ;HL -> indirizzo alla prima pagina della lista da liberare 
 
 ;A <- esito dell'operazione 
+;HL -> indirizzo alla prima pagina della sottolista troncata (da riallacciare sempre riallacciare la lista di partenza dopo aver chiamato la funzione)
 
-fsm_set_first_free_page_list:           push h 
-                                        push d 
+fsm_set_first_free_page_list:           push d 
                                         push b 
                                         push psw 
                                         mov c,l 
                                         mov b,h 
-fsm_set_first_free_page_list_loop:      xthl 
-                                        dcr a  
-                                        xthl
+                                        mov e,a 
+fsm_set_first_free_page_list_loop:      dcr e 
                                         jz fsm_set_first_free_page_list_loop_end 
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_set_first_free_page_list_end
                                         mov a,l 
-                                        ani h 
+                                        ana h 
                                         cpi $ff 
                                         jnz fsm_set_first_free_page_list_loop
                                         mvi a,fsm_bad_argument 
                                         jmp fsm_set_first_free_page_list_end
-fsm_set_first_free_page_list_loop_end:  mov e,l 
+fsm_set_first_free_page_list_loop_end:  mov e,l             
                                         mov d,h 
-                                        xthl 
-                                        mov l,e 
-                                        mov h,d 
-                                        xthl 
                                         call fsm_get_page_link
                                         cpi fsm_operation_ok
                                         jnz fsm_set_first_free_page_list_end
-                                        mov l,c 
-                                        mov h,b 
-                                        call fsm_set_page_link
-                                        cpi fsm_operation_ok
-                                        jnz fsm_set_first_free_page_list_end
-                                        mov l,e 
-                                        mov h,d 
-                                        shld fsm_selected_disk_first_free_page_address
-
-
-                                        call fsm_get_page_link
-                                        cpi fsm_operation_ok
-                                        jnz 
-                                        shld fsm_selected_disk_ne
-
-                                        xthl 
-                                        mov l,c 
-                                        mov h,b 
-                                        xthl 
-                                        mov l,c 
-                                        mov h,b 
-                                        pop b 
-                                        call fsm_set_page_link
+                                        push h 
                                         lhld fsm_selected_disk_first_free_page_address
-                                        
+                                        xchg 
                                         call fsm_set_page_link
-                                        
+                                        pop d 
+                                        cpi fsm_operation_ok
+                                        jnz fsm_set_first_free_page_list_end
+                                        mov l,c 
+                                        mov h,b 
+                                        shld fsm_selected_disk_first_free_page_address
+                                        lhld fsm_selected_disk_free_page_number
+                                        xchg 
+                                        xthl 
+                                        mov a,e 
+                                        add h 
+                                        mov e,a 
+                                        mov a,d 
+                                        aci 0 
+                                        mov d,a 
+                                        xthl 
+                                        xchg 
+                                        shld fsm_selected_disk_free_page_number
+                                        xchg 
+                                        mvi a,fsm_operation_ok
 fsm_set_first_free_page_list_end:       inx sp 
                                         inx sp 
                                         pop b
                                         pop d 
-                                        pop h 
                                         ret 
-;fsm_set_first_free_page_address inserisce la pagina fornita nella lista delle pagine libere (aggiorna la lista concatenata delle pagine libere)
-;HL -> indirizzo della pagina da concatenare
-;A <- esito dell'operazione
 
-fsm_set_first_free_page_address:        push h 
-                                        push d 
-                                        xchg 
-                                        call fsm_get_page_link
-                                        cpi fsm_operation_ok 
-                                        jnz fsm_set_first_free_page_address_end
-                                        xchg 
-                                        call fsm_set_page_link
-                                        cpi fsm_operation_ok 
-                                        jnz fsm_set_first_free_page_address_end
-                                        shld fsm_selected_disk_first_free_page_address
-                                        lhld fsm_selected_disk_free_page_number
-                                        dcx h 
-                                        shld fsm_selected_disk_free_page_number
-                                        mvi a,fsm_operation_ok
-fsm_set_first_free_page_address_end:    pop d 
-                                        pop h 
-                                        ret 
+;fsm_load_disk_free_pages_informations ricarica le informazioni sulle pagine libere disponibili nel disco
+;A <- esito dell'operazione 
+
+fsm_load_disk_free_pages_informations:      push h 
+                                            push d 
+                                            lxi h,0 
+                                            call fsm_read_data_page
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_select_disk_end
+                                            lxi d,fsm_disk_name_max_lenght
+                                            dad d 
+                                            mov a,m 
+                                            sta fsm_selected_disk_free_page_number
+                                            inx h 
+                                            mov a,m 
+                                            sta fsm_selected_disk_free_page_number+1 
+                                            inx h 
+                                            mov a,m 
+                                            sta fsm_selected_disk_first_free_page_address
+                                            inx h 
+                                            mov a,m 
+                                            sta fsm_selected_disk_first_free_page_address+1 
+                                            mvi a,fsm_operation_ok
+fsm_load_disk_free_pages_informations_end:  pop d 
+                                            pop h 
+                                            ret 
+
 
 ;fsm_get_page_link legge l'indirizzo della pagina concatenata datta fat table
 ;HL -> indirizzo della pagina di riferimento
