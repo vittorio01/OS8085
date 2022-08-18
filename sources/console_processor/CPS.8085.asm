@@ -7,10 +7,9 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk
-                lxi b,file_name
-                lxi d,extension_name
-                call fsm_select_file_header
-                call fsm_get_selected_file_header_extension
+                lxi h,0
+                mvi a,2
+                call fsm_append_pages
                 hlt
 
 file_name:  .text "HEADER5"
