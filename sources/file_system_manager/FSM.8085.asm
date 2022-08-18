@@ -190,6 +190,7 @@ fsm_device_not_found                .equ $25
 fsm_not_enough_spage_left           .equ $26
 fsm_list_is_empty                   .equ $27
 fsm_header_not_found                .equ $28
+fsm_header_not_selected             .equ $2a
 fsm_end_of_disk                     .equ $29
 fsm_operation_ok                    .equ $ff 
 
@@ -798,7 +799,12 @@ fsm_get_selected_file_header_extension_end:                 pop b
 
 fsm_load_selected_file_header:          push d 
                                         push b 
-                                        lhld fsm_selected_file_header_page_address
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %00001000
+                                        jnz fsm_load_selected_file_header_next
+                                        mvi a,fsm_header_not_selected 
+                                        jmp fsm_load_selected_file_header_end
+fsm_load_selected_file_header_next:     lhld fsm_selected_file_header_page_address
                                         call fsm_move_data_page
                                         cpi fsm_operation_ok
                                         jnz fsm_get_selected_file_header_flags_end
@@ -1089,6 +1095,9 @@ fsm_select_file_header_select_loop:         mov a,m
                                             mov l,e 
                                             mov h,d 
                                             shld fsm_selected_file_header_page_address
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ori %00001000
+                                            sta fsm_selected_disk_loaded_page_flags
                                             mvi a,fsm_operation_ok
                                             jmp fsm_select_file_header_end
 fsm_select_file_header_select_loop_next:    pop d 
