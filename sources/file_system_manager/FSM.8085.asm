@@ -192,6 +192,7 @@ fsm_list_is_empty                   .equ $27
 fsm_header_not_found                .equ $28
 fsm_header_not_selected             .equ $2a
 fsm_end_of_disk                     .equ $29
+fsm_header_exist                    .equ $2A
 fsm_operation_ok                    .equ $ff 
 
 fsm_functions:  .org FSM 
@@ -714,6 +715,79 @@ fsm_get_selected_file_header_name_end:                  pop b
                                                         pop h 
                                                         ret 
 
+;fsm_set_selected_file_header_name_and_extension modfica il nome e l'estenzione del file desiderato
+;BC -> nome del file 
+;DE -> estensione 
+
+;A <- esito dell'operazione 
+fsm_set_selected_file_header_name_and_extension:        push h 
+                                                        push d 
+                                                        push b 
+                                                        call fsm_load_selected_file_header
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_set_selected_file_header_name_and_extension_end
+                                                        inx h 
+                                                        push d 
+                                                        push b 
+                                                        pop d 
+                                                        pop b 
+                                                        mvi a,fsm_header_name_dimension
+                                                        call string_ncompare
+                                                        lxi d,fsm_header_name_dimension
+                                                        dad d 
+                                                        mov e,c 
+                                                        mov d,b 
+                                                        mov c,a 
+                                                        mvi a,fsm_header_extension_dimension
+                                                        call string_ncompare
+                                                        ana c 
+                                                        jz fsm_set_selected_file_header_name_and_extension_next
+                                                        inx sp 
+                                                        inx sp 
+                                                        mvi a,fsm_operation_ok
+                                                        jmp fsm_set_selected_file_header_name_and_extension_end
+fsm_set_selected_file_header_name_and_extension_next:   xthl 
+                                                        mov c,l
+                                                        mov b,h 
+                                                        xthl 
+                                                        inx sp 
+                                                        inx sp 
+                                                        xthl 
+                                                        mov e,l 
+                                                        mov d,h 
+                                                        xthl 
+                                                        dcx sp 
+                                                        dcx sp 
+                                                        call fsm_search_file_header
+                                                        cpi fsm_header_not_found
+                                                        jz fsm_set_selected_file_header_name_and_extension_next2
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_set_selected_file_header_name_and_extension_end
+                                                        mvi a,fsm_header_exist
+                                                        jmp fsm_set_selected_file_header_name_and_extension_end
+fsm_set_selected_file_header_name_and_extension_next2:  call fsm_load_selected_file_header
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_set_selected_file_header_name_and_extension_end
+                                                        push b 
+                                                        push d 
+                                                        pop b 
+                                                        pop d 
+                                                        inx h 
+                                                        mvi a,fsm_header_name_dimension
+                                                        call string_ncopy
+                                                        lxi d,fsm_header_name_dimension
+                                                        dad d 
+                                                        mvi a,fsm_header_extension_dimension
+                                                        mov e,c 
+                                                        mov d,b 
+                                                        call string_ncopy
+                                                        mvi a,fsm_operation_ok
+fsm_set_selected_file_header_name_and_extension_end:    pop b 
+                                                        pop d 
+                                                        pop h 
+                                                        ret 
+
+
 
 ;fsm_get_selected_file_header_extension restituisce il nome del file selezionato 
 ;A <- esito dell'operazione 
@@ -1002,22 +1076,50 @@ fsm_create_file_header_write_bytes:     push d
                                         lxi b,fsm_uncoded_page_dimension
                                         ret 
 
-;fsm_search_file_header restituisce le coordinate dell'intestazone desiderata
+;fsm_select_file_header restituisce le coordinate dell'intestazone desiderata
 ;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
 ;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
-
 ;A <- esito dell'operazione 
 
 fsm_select_file_header:                     push h 
                                             push d 
                                             push b
+                                            call fsm_search_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_select_file_header_end
+                                            xchg 
+                                            shld fsm_selected_file_header_php_address
+                                            mov l,c 
+                                            mov h,b 
+                                            shld fsm_selected_file_header_page_address
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ori %00001000
+                                            sta fsm_selected_disk_loaded_page_flags
+                                            mvi a,fsm_operation_ok
+fsm_select_file_header_end:                 pop b  
+                                            pop d 
+                                            pop h 
+                                            ret 
+
+
+;fsm_search_file_header restituisce le coordinate dell'intestazone desiderata
+;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
+;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+
+;A <- esito dell'operazione 
+;BC -> puntatore alla pagina dell'intestazione 
+;DE -> numero di intestazione nella pagina 
+
+fsm_search_file_header:                     push h 
+                                            push d 
+                                            push b 
                                             lxi h,0 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_end2
+                                            jnz fsm_search_file_header_end2
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok                ;BC -> dimensione del buffer 
-                                            jnz fsm_select_file_header_end      ;DE -> pagina corrente
+                                            jnz fsm_search_file_header_end      ;DE -> pagina corrente
                                             lxi d,0                             ;HL -> puntatore al buffer
                                             lxi b,fsm_uncoded_page_dimension    ;SP -> [pozizione nel buffer][psw][b][d][h]
                                             push h 
@@ -1029,12 +1131,12 @@ fsm_select_file_header:                     push h
                                             mov a,h 
                                             aci 0 
                                             mov h,a 
-fsm_select_file_header_select_loop:         mov a,m 
+fsm_search_file_header_search_loop:         mov a,m 
                                             ani fsm_header_valid_bit
-                                            jz fsm_select_file_header_end_of_list 
+                                            jz fsm_search_file_header_end_of_list 
                                             mov a,m 
                                             ani fsm_header_deleted_bit
-                                            jnz fsm_select_file_header_select_loop2
+                                            jnz fsm_search_file_header_search_loop2
                                             push h 
                                             push d 
                                             inx h 
@@ -1057,7 +1159,7 @@ fsm_select_file_header_select_loop:         mov a,m
                                             mvi a,fsm_header_name_dimension
                                             call string_ncompare
                                             ora a 
-                                            jz fsm_select_file_header_select_loop_next
+                                            jz fsm_search_file_header_search_loop_next
                                             lxi d,fsm_header_name_dimension
                                             dad d 
                                             lxi d,8 
@@ -1079,7 +1181,7 @@ fsm_select_file_header_select_loop:         mov a,m
                                             mvi a,fsm_header_extension_dimension
                                             call string_ncompare
                                             ora a 
-                                            jz fsm_select_file_header_select_loop_next
+                                            jz fsm_search_file_header_search_loop_next
                                             pop d 
                                             pop h 
                                             xthl 
@@ -1087,23 +1189,25 @@ fsm_select_file_header_select_loop:         mov a,m
                                             mov c,e 
                                             mov b,d 
                                             lxi d,fsm_header_dimension
-                                            call unsigned_divide_word
+                                            call unsigned_divide_word 
                                             xchg 
-                                            mov l,c   
-                                            mov h,b  
-                                            shld fsm_selected_file_header_php_address
-                                            mov l,e 
-                                            mov h,d 
-                                            shld fsm_selected_file_header_page_address
-                                            lda fsm_selected_disk_loaded_page_flags
-                                            ori %00001000
-                                            sta fsm_selected_disk_loaded_page_flags
+                                            mov e,c 
+                                            mov d,b 
+                                            mov c,l 
+                                            mov b,h 
                                             mvi a,fsm_operation_ok
-                                            jmp fsm_select_file_header_end
-fsm_select_file_header_select_loop_next:    pop d 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            inx sp 
+                                            pop h 
+                                            ret 
+fsm_search_file_header_search_loop_next:    pop d 
                                             pop h 
                                             lxi b,fsm_uncoded_page_dimension
-fsm_select_file_header_select_loop2:        mvi a,fsm_header_dimension
+fsm_search_file_header_search_loop2:        mvi a,fsm_header_dimension
                                             add l 
                                             mov l,a 
                                             mov a,h 
@@ -1121,34 +1225,34 @@ fsm_select_file_header_select_loop2:        mvi a,fsm_header_dimension
                                             mov a,h 
                                             sbb b
                                             xthl 
-                                            jc fsm_select_file_header_select_loop
+                                            jc fsm_search_file_header_search_loop
                                             mov l,e 
                                             mov h,d 
                                             call fsm_get_page_link
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_end       
+                                            jnz fsm_search_file_header_end       
                                             mov a,l 
                                             ana h 
                                             cpi $ff 
-                                            jz fsm_select_file_header_end_of_list 
+                                            jz fsm_search_file_header_end_of_list 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok 
-                                            jnz fsm_select_file_header_end      
+                                            jnz fsm_search_file_header_end      
                                             mov e,l 
                                             mov d,h     
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_file_header_end
+                                            jnz fsm_search_file_header_end
                                             xthl 
                                             lxi h,0 
                                             xthl 
-                                            jmp fsm_select_file_header_select_loop
-fsm_select_file_header_end_of_list:         mvi a,fsm_header_not_found 
+                                            jmp fsm_search_file_header_search_loop
+fsm_search_file_header_end_of_list:         mvi a,fsm_header_not_found 
                                             lxi d,0 
                                             lxi b,0 
-fsm_select_file_header_end:                 inx sp 
+fsm_search_file_header_end:                 inx sp 
                                             inx sp
-fsm_select_file_header_end2:                pop b  
+fsm_search_file_header_end2:                pop b 
                                             pop d 
                                             pop h 
                                             ret 
