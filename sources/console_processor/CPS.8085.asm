@@ -10,9 +10,8 @@ system_boot:    lxi sp,stack_memory_start
                 lxi b,file_name
                 lxi d,extension_name
                 call fsm_select_file_header
-                lxi b,file_name2
-                lxi d,extension_name2
-                call fsm_set_selected_file_header_name_and_extension
+                lxi h,4096
+                call fsm_selected_file_append_data_bytes
                 hlt
 
 file_name:  .text "HEADER5"
@@ -21,9 +20,4 @@ file_name:  .text "HEADER5"
 extension_name: .text "EXT5"
                 .b 0
 
-file_name2:  .text "HEADER6"
-            .b 0
-
-extension_name2: .text "EXT6"
-                .b 0
 CPS_level_end:
