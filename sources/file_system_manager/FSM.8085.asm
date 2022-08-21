@@ -170,6 +170,7 @@ fsm_uncoded_page_dimension          .equ 2048
 
 fsm_format_marker_lenght            .equ 6 
 
+fsm_header_per_page_number          .equ 64 
 fsm_header_dimension                .equ 32 
 fsm_disk_name_max_lenght            .equ 20
 fsm_header_name_dimension           .equ 20
@@ -552,6 +553,330 @@ fsm_disk_set_name_disk_selected:    push h
                                     mvi a,fsm_operation_ok
 fsm_disk_set_name_end:              pop h 
                                     ret 
+
+;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
+;hL -> numero di bytes da aggiungere 
+;A <- esito dell'operazione
+
+fsm_selected_file_append_data_bytes:        push b 
+                                            push d  
+                                            push h 
+                                            xchg   
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                            dad b 
+                                            mov a,e 
+                                            add m 
+                                            mov e,a 
+                                            inx h 
+                                            mov a,d  
+                                            adc m 
+                                            mov d,a 
+                                            inx h 
+                                            mov a,m  
+                                            aci 0
+                                            mov c,a 
+                                            inx h 
+                                            mov a,m 
+                                            aci 0
+                                            mov b,a 
+                                            lxi h,0 
+                                            push h 
+                                            lxi h,fsm_uncoded_page_dimension 
+                                            push h 
+                                            push b 
+                                            push d 
+                                            call unsigned_divide_long
+                                            pop h 
+                                            mov a,l 
+                                            ora h  
+                                            pop h 
+                                            ora l 
+                                            ora h 
+                                            jz fsm_selected_file_append_data_bytes_next
+                                            mvi a,1 
+fsm_selected_file_append_data_bytes_next:   pop d 
+                                            pop d 
+                                            add e 
+                                            mov e,a 
+                                            mov a,d 
+                                            aci 0 
+                                            mov d,a 
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                            add l 
+                                            mov l,a 
+                                            mov a,h 
+                                            aci 0 
+                                            mov h,a 
+                                            push d 
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            inx h 
+                                            mov c,m 
+                                            inx h 
+                                            mov b,m 
+                                            lxi h,0 
+                                            push h 
+                                            lxi h,fsm_uncoded_page_dimension
+                                            push h 
+                                            push b 
+                                            push d 
+                                            call unsigned_divide_long
+                                            pop h 
+                                            mov a,l 
+                                            ora h 
+                                            pop h 
+                                            ora l 
+                                            ora h 
+                                            jz fsm_selected_file_append_data_bytes_next2
+                                            mvi a,1 
+fsm_selected_file_append_data_bytes_next2:  pop d 
+                                            pop d 
+                                            add e 
+                                            mov e,a 
+                                            mov a,d 
+                                            aci 0 
+                                            mov d,a 
+                                            pop b 
+                                            mov a,c 
+                                            sub e 
+                                            mov c,a 
+                                            mov a,b 
+                                            sbb d 
+                                            mov b,a 
+                                            mov a,c 
+                                            ora b 
+                                            hlt 
+                                            jz fsm_selected_file_append_data_bytes_next3
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            mov a,l
+                                            ana h 
+                                            cpi $ff 
+                                            jnz fsm_selected_file_append_data_bytes_next4
+                                            mov a,c 
+                                            call fsm_get_first_free_page_list
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            mov c,l 
+                                            mov b,h 
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                            dad d
+                                            mov m,c  
+                                            inx h 
+                                            mov m,b 
+                                            lxi d,$fffB
+                                            dad d
+                                            jmp fsm_selected_file_append_data_bytes_next5
+fsm_selected_file_append_data_bytes_next4:  mov a,c 
+                                            call fsm_append_pages
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end 
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_append_data_bytes_end
+                                            lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                            dad d 
+fsm_selected_file_append_data_bytes_next5:  xthl 
+                                            mov e,l 
+                                            mov d,h 
+                                            xthl
+                                            mov a,e 
+                                            add m 
+                                            mov m,a 
+                                            inx h 
+                                            mov a,d 
+                                            adc m 
+                                            mov m,a 
+                                            inx h 
+                                            mov a,m 
+                                            aci 0 
+                                            mov m,a 
+                                            inx h 
+                                            mov a,m 
+                                            aci 0 
+                                            mov m,a 
+fsm_selected_file_append_data_bytes_next3:  mvi a,fsm_operation_ok
+fsm_selected_file_append_data_bytes_end:    pop h                      
+                                            pop d   
+                                            pop b   
+                                            ret 
+
+;fsm_selected_file_truncate_data_bytes rimuove i bytes desiderati dal file (partendo dalla fine)
+
+;HL -> numero di bytes da eliminare
+;A <- esito dell'operazione
+
+fsm_selected_file_truncate_data_bytes:          push b 
+                                                push d 
+                                                push h 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_end 
+                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                dad d 
+                                                mov a,m 
+                                                inx h 
+                                                xthl 
+                                                sub l 
+                                                mov e,a 
+                                                xthl 
+                                                mov a,m 
+                                                inx h 
+                                                xthl 
+                                                sbb h 
+                                                mov d,a 
+                                                xthl 
+                                                mov a,m 
+                                                sbi 0 
+                                                mov c,a 
+                                                inx h 
+                                                mov a,m 
+                                                sbi 0 
+                                                mov b,a 
+                                                jnc fsm_selected_file_truncate_data_bytes_next 
+                                                lxi b,0 
+                                                lxi d,0 
+fsm_selected_file_truncate_data_bytes_next:     lxi h,0 
+                                                push h 
+                                                lxi h,fsm_uncoded_page_dimension
+                                                push h 
+                                                push b 
+                                                push d 
+                                                call unsigned_divide_long
+                                                pop b
+                                                mov a,c 
+                                                ora b 
+                                                pop b 
+                                                ora c 
+                                                ora b 
+                                                jz fsm_selected_file_truncate_data_bytes_next2
+                                                mvi a,1 
+fsm_selected_file_truncate_data_bytes_next2:    pop b 
+                                                add c 
+                                                mov c,a 
+                                                mov a,b 
+                                                aci 0 
+                                                mov b,a 
+                                                inx sp 
+                                                inx sp 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_end
+                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+4 
+                                                lxi h,0 
+                                                push h 
+                                                lxi h,fsm_uncoded_page_dimension
+                                                push h 
+                                                mov d,m 
+                                                dcx h 
+                                                mov e,m 
+                                                push d 
+                                                mov d,m 
+                                                dcx h 
+                                                mov e,m 
+                                                push d 
+                                                call unsigned_divide_long 
+                                                pop d
+                                                mov a,e 
+                                                ora d 
+                                                pop d 
+                                                ora e 
+                                                ora d 
+                                                jz fsm_selected_file_truncate_data_bytes_next3
+                                                mvi a,1 
+fsm_selected_file_truncate_data_bytes_next3:    pop d 
+                                                add e 
+                                                mov e,a 
+                                                mov a,d 
+                                                aci 0 
+                                                mov d,a 
+                                                inx sp 
+                                                inx sp 
+                                                mov a,e 
+                                                sub c 
+                                                mov e,a 
+                                                mov a,d 
+                                                sbb b 
+                                                mov d,a 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_next5
+                                                push d 
+                                                mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                                add l 
+                                                mov l,a 
+                                                mov a,h
+                                                aci 0 
+                                                mov h,a 
+                                                mov e,m 
+                                                inx h 
+                                                mov d,m 
+                                                xchg 
+                                                pop d 
+                                                mov a,c 
+                                                ora a
+                                                jz fsm_selected_file_truncate_data_bytes_next4
+                                                mov b,a 
+fsm_selected_file_truncate_data_bytes_loop:     call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_end
+                                                dcr b
+                                                jnz fsm_selected_file_truncate_data_bytes_loop
+fsm_selected_file_truncate_data_bytes_next4:    mov a,c 
+                                                push h 
+                                                call fsm_set_first_free_page_list
+                                                cpi fsm_operation_ok
+                                                pop h 
+                                                jnz fsm_selected_file_truncate_data_bytes_end
+                                                lxi d,$ffff 
+                                                call fsm_set_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_end
+fsm_selected_file_truncate_data_bytes_next5:    call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_truncate_data_bytes_end 
+                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                mov a,m 
+                                                xthl 
+                                                sub l 
+                                                xthl 
+                                                mov m,a 
+                                                inx h 
+                                                mov a,m 
+                                                xthl
+                                                sbb h 
+                                                xthl 
+                                                mov m,a 
+                                                inx h 
+                                                mov a,m 
+                                                sbi 0 
+                                                mov m,a 
+                                                inx h 
+                                                mov a,m 
+                                                sbi 0 
+                                                mov m,a 
+                                                mvi a,fsm_operation_ok
+fsm_selected_file_truncate_data_bytes_end:      pop h 
+                                                pop d 
+                                                pop b 
+                                                ret 
 
 ;fsm_reset_file_header_scan_pointer inizializza il puntatore al file corrente
 
@@ -1256,7 +1581,6 @@ fsm_search_file_header_end2:                pop b
                                             pop d 
                                             pop h 
                                             ret 
-
 
 ;fsm_append_pages concatena il numero di pagine libere desiderato alla lista 
 ; A -> numero di pagine da aggiungere
@@ -2341,5 +2665,3 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
                                             mvi a,fsm_operation_ok
 fsm_seek_disk_sector_error:                 pop h 
                                             ret 
-
-
