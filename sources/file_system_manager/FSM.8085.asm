@@ -598,12 +598,13 @@ fsm_selected_file_append_data_bytes:        push b
                                             jz fsm_selected_file_append_data_bytes_next
                                             mvi a,1 
 fsm_selected_file_append_data_bytes_next:   pop d 
-                                            pop d 
+                                            inx sp 
+                                            inx sp 
                                             add e 
                                             mov e,a 
                                             mov a,d 
                                             aci 0 
-                                            mov d,a 
+                                            mov d,a  
                                             call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
                                             jnz fsm_selected_file_append_data_bytes_end
@@ -637,7 +638,8 @@ fsm_selected_file_append_data_bytes_next:   pop d
                                             jz fsm_selected_file_append_data_bytes_next2
                                             mvi a,1 
 fsm_selected_file_append_data_bytes_next2:  pop d 
-                                            pop d 
+                                            inx sp 
+                                            inx sp 
                                             add e 
                                             mov e,a 
                                             mov a,d 
@@ -652,7 +654,6 @@ fsm_selected_file_append_data_bytes_next2:  pop d
                                             mov b,a 
                                             mov a,c 
                                             ora b 
-                                            hlt 
                                             jz fsm_selected_file_append_data_bytes_next3
                                             call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
@@ -780,14 +781,16 @@ fsm_selected_file_truncate_data_bytes_next2:    pop b
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_end
                                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+4 
-                                                lxi h,0 
-                                                push h 
-                                                lxi h,fsm_uncoded_page_dimension
-                                                push h 
+                                                dad d
+                                                lxi d,0 
+                                                push d
+                                                lxi d,fsm_uncoded_page_dimension
+                                                push d
                                                 mov d,m 
                                                 dcx h 
                                                 mov e,m 
                                                 push d 
+                                                dcx h 
                                                 mov d,m 
                                                 dcx h 
                                                 mov e,m 
@@ -845,6 +848,8 @@ fsm_selected_file_truncate_data_bytes_next4:    mov a,c
                                                 cpi fsm_operation_ok
                                                 pop h 
                                                 jnz fsm_selected_file_truncate_data_bytes_end
+                                                hlt 
+                                                
                                                 lxi d,$ffff 
                                                 call fsm_set_page_link
                                                 cpi fsm_operation_ok

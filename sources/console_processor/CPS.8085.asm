@@ -12,6 +12,8 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_select_file_header
                 lxi h,4096
                 call fsm_selected_file_append_data_bytes
+                lxi h,2048
+                call fsm_selected_file_truncate_data_bytes
                 hlt
 
 file_name:  .text "HEADER5"
