@@ -719,6 +719,63 @@ fsm_selected_file_append_data_bytes_end:    pop h
                                             pop b   
                                             ret 
 
+;fsm_selected_file_clear elimina tutto il contenuto del file selezionato precedentemente 
+; A <- esito dell'operazione 
+
+fsm_selected_file_wipe:         push d 
+                                push h 
+                                call fsm_load_selected_file_header
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_truncate_data_bytes_end 
+                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                mov e,m 
+                                inx h 
+                                mov d,m 
+                                xchg 
+                                push d 
+                                push h 
+fsm_selected_file_wipe_next:    mov a,l 
+                                ana h 
+                                cpi $ff 
+                                jz fsm_selected_file_wipe_next2
+                                mov e,l 
+                                mov d,h 
+                                inx b 
+                                call fsm_get_page_link
+                                cpi fsm_operation_ok
+                                jz fsm_selected_file_wipe_next 
+fsm_selected_file_wipe_next3:   inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                jmp fsm_selected_file_wipe_end 
+fsm_selected_file_wipe_next2:   lhld fsm_selected_disk_first_free_page_address
+                                xchg 
+                                call fsm_set_page_link
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_wipe_next3
+                                lhld fsm_selected_disk_free_page_number
+                                dad b 
+                                shld fsm_selected_disk_free_page_number
+fsm_selected_file_wipe_next4:   pop h 
+                                shld fsm_selected_disk_first_free_page_address
+                                pop h 
+                                mvi m,$ff 
+                                dcx h 
+                                mvi m,$ff 
+                                dcx h 
+                                mvi m,0 
+                                dcx h 
+                                mvi m,0 
+                                dcx h 
+                                mvi m,0 
+                                dcx h 
+                                mvi m,0 
+                                mvi a,fsm_operation_ok
+fsm_selected_file_wipe_end:     pop h 
+                                pop d 
+                                ret 
+
 ;fsm_selected_file_truncate_data_bytes rimuove i bytes desiderati dal file (partendo dalla fine)
 
 ;HL -> numero di bytes da eliminare
@@ -817,7 +874,7 @@ fsm_selected_file_truncate_data_bytes_next3:    pop d
                                                 mov e,a 
                                                 mov a,d 
                                                 sbb b 
-                                                mov d,a 
+                                                mov d,a  
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_next5
@@ -833,23 +890,33 @@ fsm_selected_file_truncate_data_bytes_next3:    pop d
                                                 mov d,m 
                                                 xchg 
                                                 pop d 
+                                                push d 
                                                 mov a,c 
                                                 ora a
+                                                jnz fsm_selected_file_truncate_data_bytes_loop 
+                                                call fsm_selected_file_wipe 
+                                                jmp fsm_selected_file_truncate_data_bytes_end 
+fsm_selected_file_truncate_data_bytes_loop:     dcx b 
+                                                mov a,c 
+                                                ora b 
                                                 jz fsm_selected_file_truncate_data_bytes_next4
-                                                mov b,a 
-fsm_selected_file_truncate_data_bytes_loop:     call fsm_get_page_link
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jz fsm_selected_file_truncate_data_bytes_loop
+                                                inx sp 
+                                                inx sp 
+                                                jmp fsm_selected_file_truncate_data_bytes_end
+fsm_selected_file_truncate_data_bytes_next4:    pop b 
+                                                mov e,l 
+                                                mov d,h 
+                                                call fsm_get_page_link
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_end
-                                                dcr b
-                                                jnz fsm_selected_file_truncate_data_bytes_loop
-fsm_selected_file_truncate_data_bytes_next4:    mov a,c 
-                                                push h 
+                                                mov a,c 
                                                 call fsm_set_first_free_page_list
                                                 cpi fsm_operation_ok
-                                                pop h 
                                                 jnz fsm_selected_file_truncate_data_bytes_end
-                                                hlt 
-                                                
+                                                xchg 
                                                 lxi d,$ffff 
                                                 call fsm_set_page_link
                                                 cpi fsm_operation_ok
