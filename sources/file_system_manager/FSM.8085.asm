@@ -734,6 +734,7 @@ fsm_selected_file_wipe:         push d
                                 xchg 
                                 push d 
                                 push h 
+                                lxi b,0 
 fsm_selected_file_wipe_next:    mov a,l 
                                 ana h 
                                 cpi $ff 
@@ -834,7 +835,11 @@ fsm_selected_file_truncate_data_bytes_next2:    pop b
                                                 mov b,a 
                                                 inx sp 
                                                 inx sp 
-                                                call fsm_load_selected_file_header
+                                                ora c 
+                                                jnz fsm_selected_file_truncate_data_bytes_next22
+                                                call fsm_selected_file_wipe 
+                                                jmp fsm_selected_file_truncate_data_bytes_end 
+fsm_selected_file_truncate_data_bytes_next22:   call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_end
                                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+4 
@@ -877,7 +882,7 @@ fsm_selected_file_truncate_data_bytes_next3:    pop d
                                                 mov d,a  
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
-                                                jnz fsm_selected_file_truncate_data_bytes_next5
+                                                jnz fsm_selected_file_truncate_data_bytes_end
                                                 push d 
                                                 mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+5 
                                                 add l 
@@ -891,11 +896,6 @@ fsm_selected_file_truncate_data_bytes_next3:    pop d
                                                 xchg 
                                                 pop d 
                                                 push d 
-                                                mov a,c 
-                                                ora a
-                                                jnz fsm_selected_file_truncate_data_bytes_loop 
-                                                call fsm_selected_file_wipe 
-                                                jmp fsm_selected_file_truncate_data_bytes_end 
 fsm_selected_file_truncate_data_bytes_loop:     dcx b 
                                                 mov a,c 
                                                 ora b 
