@@ -728,11 +728,11 @@ fsm_selected_file_wipe:         push d
                                 cpi fsm_operation_ok
                                 jnz fsm_selected_file_truncate_data_bytes_end 
                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                dad d 
                                 mov e,m 
                                 inx h 
                                 mov d,m 
                                 xchg 
-                                push d 
                                 push h 
                                 lxi b,0 
 fsm_selected_file_wipe_next:    mov a,l 
@@ -747,8 +747,6 @@ fsm_selected_file_wipe_next:    mov a,l
                                 jz fsm_selected_file_wipe_next 
 fsm_selected_file_wipe_next3:   inx sp 
                                 inx sp 
-                                inx sp 
-                                inx sp 
                                 jmp fsm_selected_file_wipe_end 
 fsm_selected_file_wipe_next2:   lhld fsm_selected_disk_first_free_page_address
                                 xchg 
@@ -760,7 +758,11 @@ fsm_selected_file_wipe_next2:   lhld fsm_selected_disk_first_free_page_address
                                 shld fsm_selected_disk_free_page_number
 fsm_selected_file_wipe_next4:   pop h 
                                 shld fsm_selected_disk_first_free_page_address
-                                pop h 
+                                call fsm_load_selected_file_header
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_wipe_end
+                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+6 
+                                dad d 
                                 mvi m,$ff 
                                 dcx h 
                                 mvi m,$ff 
@@ -880,6 +882,8 @@ fsm_selected_file_truncate_data_bytes_next3:    pop d
                                                 mov a,d 
                                                 sbb b 
                                                 mov d,a  
+                                                ora e 
+                                                jz fsm_selected_file_truncate_data_bytes_next5
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_end
@@ -925,6 +929,7 @@ fsm_selected_file_truncate_data_bytes_next5:    call fsm_load_selected_file_head
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_truncate_data_bytes_end 
                                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                dad d 
                                                 mov a,m 
                                                 xthl 
                                                 sub l 
