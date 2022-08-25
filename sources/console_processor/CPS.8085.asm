@@ -10,9 +10,9 @@ system_boot:    lxi sp,stack_memory_start
                 lxi b,file_name
                 lxi d,extension_name
                 call fsm_select_file_header
-                lxi h,2048
+                lxi h,4096
                 call fsm_selected_file_append_data_bytes
-                lxi h,2048
+                lxi h,1020
                 call fsm_selected_file_truncate_data_bytes
                 hlt
 
