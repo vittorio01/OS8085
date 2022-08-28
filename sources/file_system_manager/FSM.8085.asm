@@ -271,13 +271,24 @@ fsm_select_next2:               sta fsm_selected_disk_bps_number
                                 call fsm_seek_disk_sector
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end       
+                                mov a,b 
+                                call bios_mass_memory_select_sector
+                                cpi bios_operation_ok
+                                jnz fsm_select_disk_end
+                                mov a,c 
+                                call bios_mass_memory_select_head
+                                cpi bios_operation_ok
+                                jnz fsm_select_disk_end
+                                xchg 
+                                call bios_mass_memory_select_track
+                                cpi bios_operation_ok
+                                jnz fsm_select_disk_end
                                 call fsm_reselect_mms_segment
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
                                 call bios_mass_memory_read_sector
                                 cpi bios_operation_ok
                                 jnz fsm_select_disk_end    
-
                                 call fsm_reselect_mms_segment
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
@@ -1057,6 +1068,57 @@ fsm_increment_file_header_scan_pointer_end2:    pop b
                                                 pop d 
                                                 pop h 
                                                 ret 
+
+;fsm_delete_selected_file_header elimina l'intestazione selezionata precedentemente 
+; A <- esito dell'operazione 
+
+fsm_delete_selected_file_header:        push h 
+                                        push d 
+                                        push b 
+                                        call fsm_load_selected_file_header
+                                        cpi fsm_operation_ok
+                                        jnz fsm_delete_selected_file_header_end
+                                        lhld fsm_selected_file_header_page_address
+                                        xchg 
+                                        lda fsm_selected_file_header_php_address
+                                        mov c,a 
+                                        lda fsm_selected_file_header_php_address+1 
+                                        mov b,a 
+                                        call fsm_increment_file_header_scan_pointer
+                                        cpi fsm_end_of_list
+                                        jz fsm_delete_selected_file_header_last
+                                        cpi fsm_operation_ok
+                                        jnz fsm_delete_selected_file_header_end
+                                        xchg 
+                                        shld fsm_selected_file_header_page_address 
+                                        mov l,c 
+                                        mov h,b 
+                                        shld fsm_selected_file_header_php_address
+                                        call fsm_load_selected_file_header
+                                        cpi fsm_operation_ok
+                                        jnz fsm_delete_selected_file_header_end
+                                        mvi a,fsm_header_deleted_bit
+                                        ora m 
+                                        mov m,a 
+                                        mvi a,fsm_operation_ok
+                                        jmp fsm_delete_selected_file_header_end
+fsm_delete_selected_file_header_last:   xchg 
+                                        shld fsm_selected_file_header_page_address 
+                                        mov l,c 
+                                        mov h,b 
+                                        shld fsm_selected_file_header_php_address
+                                        call fsm_load_selected_file_header
+                                        cpi fsm_operation_ok
+                                        jnz fsm_delete_selected_file_header_end
+                                        mvi a,fsm_header_valid_bit
+                                        xri $ff 
+                                        ana m 
+                                        mov m,a 
+                                        mvi a,fsm_operation_ok
+fsm_delete_selected_file_header_end:    pop b 
+                                        pop d 
+                                        pop h 
+                                        ret 
 
 ;fsm_get_selected_file_header_flags restituisce le caratteristiche del file 
 ; A <- esito dell'operazione
@@ -2289,19 +2351,15 @@ fsm_writeback_page:     push h
                         lda fsm_selected_disk_loaded_page_flags
                         ani %10000000
                         jz fsm_writeback_page_end
-                        lda fsm_selected_disk_loaded_page_flags
-                        ani %01000000
-                        jz fsm_writeback_page_fat 
-                        lhld fsm_selected_disk_loaded_page
+                        lxi h,0 
+                        call fsm_move_data_page
+                        cpi fsm_operation_ok
+                        jnz fsm_writeback_page_end
+                        lxi h,0
                         call fsm_write_data_page
                         cpi fsm_operation_ok
                         jnz fsm_writeback_page_end
-                        jmp fsm_writeback_page_ok
-fsm_writeback_page_fat: lda fsm_selected_disk_loaded_page
-                        call fsm_write_fat_page
-                        cpi fsm_operation_ok
-                        jnz fsm_writeback_page_end
-fsm_writeback_page_ok:  mvi a,fsm_operation_ok
+                        mvi a,fsm_operation_ok
 fsm_writeback_page_end: pop h 
                         ret 
 
