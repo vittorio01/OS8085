@@ -1075,9 +1075,6 @@ fsm_increment_file_header_scan_pointer_end2:    pop b
 fsm_delete_selected_file_header:        push h 
                                         push d 
                                         push b 
-                                        call fsm_load_selected_file_header
-                                        cpi fsm_operation_ok
-                                        jnz fsm_delete_selected_file_header_end
                                         lhld fsm_selected_file_header_page_address
                                         xchg 
                                         lda fsm_selected_file_header_php_address
@@ -1747,7 +1744,6 @@ fsm_search_file_header_search_loop:         mov a,m
                                             mov b,d 
                                             lxi d,fsm_header_dimension
                                             call unsigned_divide_word 
-                                            xchg 
                                             mov e,c 
                                             mov d,b 
                                             mov c,l 
