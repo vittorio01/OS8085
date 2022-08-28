@@ -193,7 +193,8 @@ fsm_list_is_empty                   .equ $27
 fsm_header_not_found                .equ $28
 fsm_header_not_selected             .equ $2a
 fsm_end_of_disk                     .equ $29
-fsm_header_exist                    .equ $2A
+fsm_header_exist                    .equ $2A 
+fsm_end_of_list                     .equ $2B 
 fsm_operation_ok                    .equ $ff 
 
 fsm_functions:  .org FSM 
@@ -243,9 +244,13 @@ fsm_select_disk_next:           sta fsm_selected_disk
                                 call bios_mass_memory_select_drive
                                 ora a  
                                 jnz fsm_select_next2
+                                mvi a,%00000000
+                                sta fsm_selected_disk_loaded_page_flags
                                 mvi a,fsm_device_not_found
                                 jmp fsm_select_disk_end
 fsm_select_next2:               sta fsm_selected_disk_bps_number
+                                mvi a,%00100000
+                                sta fsm_selected_disk_loaded_page_flags
                                 mov a,b 
                                 sta fsm_selected_disk_spt_number
                                 mov a,c 
@@ -265,16 +270,17 @@ fsm_select_next2:               sta fsm_selected_disk_bps_number
                                 lxi d,0 
                                 call fsm_seek_disk_sector
                                 cpi fsm_operation_ok
-                                jnz fsm_select_disk_end 
+                                jnz fsm_select_disk_end       
                                 call fsm_reselect_mms_segment
                                 cpi fsm_operation_ok
-                                jnz fsm_select_disk_end 
+                                jnz fsm_select_disk_end
                                 call bios_mass_memory_read_sector
                                 cpi bios_operation_ok
+                                jnz fsm_select_disk_end    
+
+                                call fsm_reselect_mms_segment
+                                cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
-                                mvi a,%00100000
-                                sta fsm_selected_disk_loaded_page_flags
-                                lhld fsm_page_buffer_segment_address
                                 inx h 
                                 inx h 
                                 inx h 
@@ -285,13 +291,14 @@ fsm_select_next2:               sta fsm_selected_disk_bps_number
                                 jnz fsm_select_disk_formatted_disk
                                 mvi a,fsm_unformatted_disk 
                                 jmp fsm_select_disk_end
-fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
-                                mvi a,fsm_format_marker_lenght+7 
-                                add l 
-                                mov l,a 
-                                mov a,h 
-                                aci 0 
-                                mov h,a 
+fsm_select_disk_formatted_disk: lda fsm_selected_disk_loaded_page_flags
+                                ori %00010000
+                                sta fsm_selected_disk_loaded_page_flags
+                                call fsm_reselect_mms_segment
+                                cpi fsm_operation_ok
+                                jnz fsm_select_disk_end
+                                lxi d,fsm_format_marker_lenght+7 
+                                dad d 
                                 mov a,m 
                                 sta fsm_selected_disk_spp_number
                                 inx h 
@@ -309,9 +316,6 @@ fsm_select_disk_formatted_disk: lhld fsm_page_buffer_segment_address
                                 inx h 
                                 mov a,m 
                                 sta fsm_selected_disk_data_first_sector+1
-                                lda fsm_selected_disk_loaded_page_flags
-                                ori %00010000
-                                sta fsm_selected_disk_loaded_page_flags
                                 call fsm_reset_file_header_scan_pointer
                                 call fsm_load_disk_free_pages_informations
                                 cpi fsm_operation_ok
@@ -964,6 +968,95 @@ fsm_reset_file_header_scan_pointer: push h
                                     shld fsm_selected_file_header_php_address 
                                     pop h 
                                     ret 
+
+;fsm_increment_file_header_scan_pointer seleziona la prima intestazione valida successiva a quella corrente
+; A <- esito dell'operazione 
+
+fsm_increment_file_header_scan_pointer:         push h 
+                                                push d 
+                                                push b 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok                
+                                                jnz fsm_increment_file_header_scan_pointer_end2  
+                                                push h 
+                                                xchg 
+                                                call fsm_reselect_mms_segment
+                                                cpi fsm_operation_ok
+                                                jnz fsm_increment_file_header_scan_pointer_end 
+                                                mov a,e 
+                                                sub l 
+                                                mov l,a 
+                                                mov a,d 
+                                                sbb h                               ;BC -> dimensione del buffer
+                                                mov h,a                             ;DE -> pagina corrente
+                                                lxi d,0                             ;HL -> puntatore al buffer
+                                                lxi b,fsm_uncoded_page_dimension    ;SP -> [pozizione nel buffer][b][d][h]
+                                                xthl 
+fsm_increment_file_header_scan_pointer_loop:    mvi a,fsm_header_dimension
+                                                add l 
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0 
+                                                mov h,a 
+                                                xthl 
+                                                mvi a,fsm_header_dimension
+                                                add l 
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0 
+                                                mov h,a 
+                                                mov a,l  
+                                                sub c 
+                                                mov a,h 
+                                                sbb b
+                                                xthl 
+                                                jc fsm_increment_file_header_scan_pointer_loop2
+                                                mov l,e 
+                                                mov h,d 
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_increment_file_header_scan_pointer_end     
+                                                mov a,l 
+                                                ana h 
+                                                cpi $ff 
+                                                jz fsm_increment_file_header_scan_pointer_eol 
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok 
+                                                jnz fsm_increment_file_header_scan_pointer_end     
+                                                mov e,l 
+                                                mov d,h     
+                                                call fsm_reselect_mms_segment
+                                                cpi fsm_operation_ok
+                                                jnz fsm_increment_file_header_scan_pointer_end 
+                                                xthl 
+                                                lxi h,0 
+                                                xthl 
+                                                jmp fsm_increment_file_header_scan_pointer_loop
+fsm_increment_file_header_scan_pointer_loop2:   mov a,m 
+                                                ani fsm_header_valid_bit
+                                                jz fsm_increment_file_header_scan_pointer_eol 
+                                                mov a,m 
+                                                ani fsm_header_deleted_bit
+                                                jnz fsm_increment_file_header_scan_pointer_loop
+                                                xchg  
+                                                shld fsm_selected_file_header_page_address
+                                                xthl 
+                                                mov c,l 
+                                                mov b,h 
+                                                lxi d,fsm_header_dimension
+                                                call unsigned_divide_word
+                                                mov l,c 
+                                                mov h,b 
+                                                shld fsm_selected_file_header_php_address
+                                                mvi a,fsm_operation_ok
+                                                jmp fsm_increment_file_header_scan_pointer_end  
+fsm_increment_file_header_scan_pointer_eol:     mvi a,fsm_end_of_list  
+fsm_increment_file_header_scan_pointer_end:     inx sp 
+                                                inx sp
+fsm_increment_file_header_scan_pointer_end2:    pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
 
 ;fsm_get_selected_file_header_flags restituisce le caratteristiche del file 
 ; A <- esito dell'operazione
@@ -1828,9 +1921,11 @@ fsm_load_disk_free_pages_informations:      push h
                                             push d 
                                             lxi h,0 
                                             call fsm_read_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_load_disk_free_pages_informations_end
                                             call fsm_reselect_mms_segment
                                             cpi fsm_operation_ok
-                                            jnz fsm_select_disk_end
+                                            jnz fsm_load_disk_free_pages_informations_end
                                             lxi d,fsm_disk_name_max_lenght
                                             dad d 
                                             mov a,m 

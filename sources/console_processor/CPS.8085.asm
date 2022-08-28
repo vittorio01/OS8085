@@ -7,19 +7,17 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk
+                jmp system_boot 
                 lxi b,file_name
                 lxi d,extension_name
                 call fsm_select_file_header
-                lxi h,4096
-                call fsm_selected_file_append_data_bytes
-                lxi h,1020
-                call fsm_selected_file_truncate_data_bytes
+                call fsm_increment_file_header_scan_pointer
                 hlt
 
-file_name:  .text "HEADER5"
+file_name:  .text "HEADER4"
             .b 0
 
-extension_name: .text "EXT5"
+extension_name: .text "EXT4"
                 .b 0
 
 CPS_level_end:
