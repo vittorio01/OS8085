@@ -545,13 +545,7 @@ fsm_disk_external_generated_error:      pop h
 ;DE -> puntatore alla stringa del nome 
 ;A <- esito dell'operazione
 
-fsm_disk_set_name:                  lda fsm_selected_disk_loaded_page_flags
-                                    ani %00110000
-                                    xri $ff 
-                                    jnz fsm_disk_set_name_disk_selected
-                                    mvi a,fsm_disk_not_selected
-                                    ret 
-fsm_disk_set_name_disk_selected:    push h
+fsm_disk_set_name:                  push h
                                     lxi h,0 
                                     call fsm_move_data_page
                                     cpi fsm_operation_ok
@@ -567,6 +561,85 @@ fsm_disk_set_name_disk_selected:    push h
                                     jnz fsm_disk_set_name_end
                                     mvi a,fsm_operation_ok
 fsm_disk_set_name_end:              pop h 
+                                    ret 
+
+;fsm_disk_get_name restituisce il nome del disco 
+; A <- esito dell'operazione 
+; SP <- [nome del disco]
+
+fsm_disk_get_name:                  push h 
+                                    push d
+                                    push b 
+                                    lxi h,0 
+                                    call fsm_move_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    call fsm_reselect_mms_segment
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    lxi d,fsm_disk_name_max_lenght
+fsm_disk_get_name_loop:             mov a,m 
+                                    ora a  
+                                    jz fsm_disk_get_name_loop_end
+                                    inx h 
+                                    dcx d 
+                                    mov a,e 
+                                    ora d 
+                                    jnz fsm_disk_get_name_loop
+fsm_disk_get_name_loop_end:         xchg 
+                                    lxi d,fsm_disk_name_max_lenght+1
+                                    mov a,e 
+                                    sub l 
+                                    mov e,a 
+                                    mov c,a 
+                                    mov a,d 
+                                    sbb h 
+                                    mov d,a
+                                    mov b,a 
+                                    lxi h,0 
+                                    dad sp 
+                                    mov a,l 
+                                    sub e 
+                                    mov l,a 
+                                    mov a,h 
+                                    sbb d 
+                                    mov h,a 
+                                    mvi d,4 
+fsm_disk_get_name_stack_push:       xthl 
+                                    mov a,l 
+                                    xthl 
+                                    mov m,a 
+                                    inx h 
+                                    xthl 
+                                    mov a,h 
+                                    xthl 
+                                    mov m,a 
+                                    inx h 
+                                    inx sp 
+                                    inx sp 
+                                    dcr d 
+                                    jnz fsm_disk_get_name_stack_push
+                                    mov e,l 
+                                    mov d,h 
+                                    mov a,e 
+                                    sui 8 
+                                    mov l,a 
+                                    mov a,d 
+                                    sbi 0 
+                                    mov h,a 
+                                    sphl 
+                                    call fsm_reselect_mms_segment
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    xchg 
+                                    mvi a,fsm_disk_name_max_lenght
+                                    call string_ncopy
+                                    dad b 
+                                    mvi m,0 
+                                    mvi a,fsm_operation_ok 
+fsm_disk_get_name_end:              pop b 
+                                    pop d 
+                                    pop h 
                                     ret 
 
 ;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
