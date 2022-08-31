@@ -132,6 +132,7 @@
 ;-  numero di blocchi liberi (2 bytes)
 ;-  puntatore al primo blocco libero (2 bytes)
 
+
 fsm_selected_disk                       .equ $0060
 fsm_selected_disk_head_number           .equ $0061
 fsm_selected_disk_tph_number            .equ $0062 
@@ -154,6 +155,7 @@ fsm_selected_disk_fat_page_number       .equ $0072
 ;bit 5 -> disco selezionato precedentemente 
 ;bit 4 -> il disco selezionato è formattato 
 ;bit 3 -> è stata selezionata un'intestazione
+;bit 2 -> è stato impostato il puntatore in un file 
 
 fsm_selected_disk_loaded_page               .equ $0073
 fsm_selected_disk_loaded_page_flags         .equ $0075
@@ -163,7 +165,8 @@ fsm_selected_disk_first_free_page_address   .equ $0078
 fsm_selected_file_header_page_address       .equ $007A
 fsm_selected_file_header_php_address        .equ $007C
 
-
+fsm_selected_file_data_pointer_page_address .equ $007E 
+fsm_selected_file_data_pointer_offset       .equ $0080
 
 fsm_coded_page_dimension            .equ 16
 fsm_uncoded_page_dimension          .equ 2048
@@ -195,6 +198,7 @@ fsm_header_not_selected             .equ $2a
 fsm_end_of_disk                     .equ $29
 fsm_header_exist                    .equ $2A 
 fsm_end_of_list                     .equ $2B 
+fsm_data_pointer_not_setted         .equ $2C 
 fsm_operation_ok                    .equ $ff 
 
 fsm_functions:  .org FSM 
@@ -638,6 +642,96 @@ fsm_disk_get_name_stack_push:       xthl
                                     mvi m,0 
                                     mvi a,fsm_operation_ok 
 fsm_disk_get_name_end:              pop b 
+                                    pop d 
+                                    pop h 
+                                    ret 
+
+;fsm_selected_file_set_data_pointer imposta la posizione del puntatore nel file precedentemente selezionato 
+;BCDE -> posizione 
+; A <- esito dell'operazione 
+fsm_selected_file_set_data_pointer:         push h 
+                                            push d 
+                                            push b 
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_set_data_pointer_end
+                                            inx h 
+                                            mov a,m 
+                                            sub e 
+                                            inx h 
+                                            mov a,m 
+                                            sbb d 
+                                            inx h 
+                                            mov a,m 
+                                            sbb c 
+                                            inx h 
+                                            mov a,m 
+                                            sbb b 
+                                            jnc fsm_selected_file_set_data_pointer_error
+                                            push b 
+                                            push d 
+                                            lxi h,0 
+                                            push h 
+                                            lxi h,fsm_uncoded_page_dimension
+                                            push h 
+                                            call unsigned_divide_long 
+                                            pop h 
+                                            shld fsm_selected_file_data_pointer_offset
+                                            pop h 
+                                            pop h 
+                                            shld fsm_selected_file_data_pointer_page_address
+                                            pop h 
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ori %00000100
+                                            sta fsm_selected_disk_loaded_page_flags
+                                            mvi a,fsm_operation_ok
+                                            jmp fsm_selected_file_set_data_pointer_end
+fsm_selected_file_set_data_pointer_error:   mvi a,fsm_bad_argument                    
+fsm_selected_file_set_data_pointer_end:     pop b 
+                                            pop d 
+                                            pop h 
+                                            ret                       
+
+;fsm_selected_file_get_bytes legge i dati del file precedentemente selezionato (il puntatoreper scorrere il file viene impostato dalla funzione fsm_selected_file_set_data_pointer)
+;i dati prelevati vengono restituiti tramite un segmento di memoria di tipo user 
+; HL -> numero di bytes da prelevare 
+; A -> esito dell'operazione 
+; b -> id del segmento dati 
+
+fsm_selected_file_get_bytes:        push h 
+                                    push d 
+                                    push b 
+                                    xchg 
+                                    call fsm_load_selected_file_header
+                                    cpi fsm_operation_ok
+                                    jnz fsm_selected_file_get_bytes_end
+                                    lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                    mov e,m 
+                                    inx h 
+                                    mov d,m 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %00000100
+                                    jnz fsm_selected_file_get_bytes_next 
+                                    mvi a,fsm_data_pointer_not_setted 
+                                    jmp fsm_selected_file_get_bytes_end
+fsm_selected_file_get_bytes_next:   xchg 
+                                    call mms_create_low_memory_user_data_segment
+                                    ora a 
+                                    jnz fsm_selected_file_get_bytes_next2
+                                    call mms_data_segment_generated_error_code
+                                    jmp fsm_selected_file_get_bytes_end
+fsm_selected_file_get_bytes_next2:  push h 
+                                    mov l,a                                              
+                                    call mms_read_selected_user_segment_data_address        ;BC -> offset nel segmento di sistema
+                                    push h                                                  ;DE -> pagina corrente
+                                    call fsm_reselect_mms_segment                           ;SP -> [id del segmento][dimensione del segmento]
+                                    cpi fsm_operation_ok
+                                    jnz fsm_selected_file_get_bytes_end
+                                    
+
+                                    pop h 
+                                    pop h 
+fsm_selected_file_get_bytes_end:    pop b 
                                     pop d 
                                     pop h 
                                     ret 

@@ -155,6 +155,7 @@ mms_functions:  .org MMS
                 jmp mms_delete_selected_low_memory_system_data_segment
                 ;jmp mms_delete_all_low_memory_user_data_segment 
                 jmp mms_read_selected_system_segment_data_address
+                jmp mms_read_selected_user_segment_data_address
                 jmp mms_read_selected_system_segment_byte 
                 jmp mms_write_selected_system_segment_byte
                 jmp mms_read_selected_user_segment_byte 
@@ -410,6 +411,22 @@ mms_read_selected_data_address_segment_not_found:   mvi a,mms_segment_data_not_f
                                                     sta mms_data_segment_generated_error_code
                                                     lxi h,0 
                                                     ret 
+
+;La funzione mms_read_selected_user_segment_data_address restituisce l'indirizzo al corpo del segmento selezionato in precedenza (funziona solo con segmenti utente)
+;A  <- risultato dell'operazione
+;HL <- indirizzo al corpo del segmento (se non è stato selezionato nessun segmento allora diventa $0000)
+mms_read_selected_user_segment_data_address:            lda mms_system_data_selected_segment_id
+                                                        ora a 
+                                                        jz mms_read_selected_data_address_segment_not_found
+                                                        lhld mms_user_data_selected_segment_address
+                                                        mvi a,mms_operation_ok
+                                                        sta mms_data_segment_generated_error_code
+                                                        ret 
+
+mms_read_selected_user_data_address_segment_not_found:  mvi a,mms_segment_data_not_found_error_code
+                                                        sta mms_data_segment_generated_error_code
+                                                        lxi h,0 
+                                                        ret 
 
 
 ;la funzione mms_select_low_memory_system_data_segment permette di selezionare un segmento di sistema
