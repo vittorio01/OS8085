@@ -673,23 +673,24 @@ fsm_selected_file_set_data_pointer:             push h
                                                 jnc fsm_selected_file_set_data_pointer_error
                                                 push b 
                                                 push d 
+                                                lxi b,0
+                                                push b
+                                                lxi b,fsm_uncoded_page_dimension
+                                                push b
+                                                hlt 
+                                                call unsigned_divide_long 
+                                                hlt 
+                                                pop b 
+                                                shld fsm_selected_file_data_pointer_offset
+                                                inx sp 
+                                                inx sp  
+                                                pop b
+                                                inx sp 
+                                                inx sp 
                                                 mov e,m 
                                                 inx h 
                                                 mov d,m 
-                                                lxi h,0 
-                                                push h 
-                                                lxi h,fsm_uncoded_page_dimension
-                                                push h 
-                                                call unsigned_divide_long 
-                                                pop h 
-                                                shld fsm_selected_file_data_pointer_offset
-                                                pop h 
-                                                pop h 
-                                                inx sp 
-                                                inx sp 
-                                                mov c,l 
-                                                mov b,h 
-                                                xchg 
+                                                hlt 
 fsm_selected_file_set_data_pointer_loop:        mov a,c 
                                                 ora b 
                                                 jz fsm_selected_file_set_data_pointer_loop_end 
