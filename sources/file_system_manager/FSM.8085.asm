@@ -656,8 +656,12 @@ fsm_selected_file_set_data_pointer:             push h
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_set_data_pointer_end
-                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1
-                                                dad d 
+fsm_selected_file_set_data_pointer_next:        mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                                add l 
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0 
+                                                mov h,a  
                                                 mov a,e 
                                                 sub m
                                                 inx h 
@@ -671,26 +675,26 @@ fsm_selected_file_set_data_pointer:             push h
                                                 sbb m
                                                 inx h 
                                                 jnc fsm_selected_file_set_data_pointer_error
+                                                push h  
+                                                lxi h,0 
+                                                push h 
+                                                lxi h,fsm_uncoded_page_dimension
+                                                push h 
                                                 push b 
-                                                push d 
-                                                lxi b,0
-                                                push b
-                                                lxi b,fsm_uncoded_page_dimension
-                                                push b
-                                                hlt 
+                                                push d  
                                                 call unsigned_divide_long 
-                                                hlt 
-                                                pop b 
+                                                pop h
                                                 shld fsm_selected_file_data_pointer_offset
                                                 inx sp 
                                                 inx sp  
                                                 pop b
                                                 inx sp 
                                                 inx sp 
+                                                pop h 
                                                 mov e,m 
                                                 inx h 
                                                 mov d,m 
-                                                hlt 
+                                                xchg 
 fsm_selected_file_set_data_pointer_loop:        mov a,c 
                                                 ora b 
                                                 jz fsm_selected_file_set_data_pointer_loop_end 
