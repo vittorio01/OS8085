@@ -168,8 +168,8 @@ fsm_selected_file_header_php_address        .equ $007C
 fsm_selected_file_data_pointer_page_address .equ $007E 
 fsm_selected_file_data_pointer_offset       .equ $0080
 
-fsm_coded_page_dimension            .equ 16
-fsm_uncoded_page_dimension          .equ 2048
+fsm_coded_page_dimension            .equ 4
+fsm_uncoded_page_dimension          .equ 512
 
 fsm_format_marker_lenght            .equ 6 
 
@@ -212,6 +212,7 @@ fsm_format_marker   .text "SFS1.0"
                     .b $00
 
 fsm_default_disk_name   .text "NO NAME"
+                        .b $00
 
 
 
@@ -531,15 +532,15 @@ fsm_disk_format_jump2:                  pop d
                                         call bios_mass_memory_write_sector
                                         cpi bios_operation_ok
                                         jnz fsm_disk_external_generated_error
+                                        jnz fsm_disk_external_generated_error
+                                        mvi a,%00110000
+                                        sta fsm_selected_disk_loaded_page_flags
                                         call fsm_clear_fat_table
                                         cpi fsm_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         lxi d,fsm_default_disk_name
                                         call fsm_disk_set_name
                                         cpi fsm_operation_ok
-                                        jnz fsm_disk_external_generated_error
-                                        mvi a,%00110000
-                                        sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok 
 fsm_disk_external_generated_error:      pop h 
                                         pop d 
