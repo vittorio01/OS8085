@@ -182,4 +182,27 @@ bios_memory_transfer:       mov a,b
 bios_memory_transfer_end:   mvi a,bios_operation_ok 
                             ret 
 
+;bios_memory_transfer_reverse viene utilizzata per la copia di grandi quantità di dati all'interno della memoria. Dato che alcuni dispositivi DMA possono gestire il trasferimento mem-to-mem si preferisce mantenere 
+;questa funzione nel bios. Nel caso non sia presente un dispositivo DMA o non sia disponibile la funzionalità, è possibile implementare una copoa software dei dati
+; BC -> numero di bytes da trasferire 
+; DE -> indirizzo sorgente
+; HL -> indirizzo destinazione
+
+; A <- esito dell'operazione 
+; BC <- $0000
+; DE <- indirizzo sorgente dopo l'esecuzione
+; HL <- indirizzo destinazione dopo l'esecuzione 
+
+bios_memory_transfer_reverse:       mov a,b     
+                                    ora c 
+                                    jz bios_memory_transfer_reverse_end
+                                    ldax d 
+                                    mov m,a 
+                                    dcx b 
+                                    dcx h 
+                                    dcx d 
+                                    jmp bios_memory_transfer_reverse
+bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok 
+                                    ret 
+
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche

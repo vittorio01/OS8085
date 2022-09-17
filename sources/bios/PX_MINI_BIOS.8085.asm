@@ -400,4 +400,26 @@ bios_memory_transfer:       mov a,b
 bios_memory_transfer_end:   mvi a,bios_operation_ok 
                             ret 
 
+;bios_memory_transfer_reverse ha la funzione analoga di bios_memory_transfer ma trasferisce i dati decrementando a partire dall'indirizzo fornito
+; BC -> numero di bytes da trasferire 
+; DE -> indirizzo sorgente
+; HL -> indirizzo destinazione
+
+; A <- esito dell'operazione 
+; BC <- $0000
+; DE <- indirizzo sorgente dopo l'esecuzione
+; HL <- indirizzo destinazione dopo l'esecuzione 
+
+bios_memory_transfer_reverse:       mov a,b     
+                                    ora c 
+                                    jz bios_memory_transfer_reverse_end
+                                    ldax d 
+                                    mov m,a 
+                                    dcx b 
+                                    dcx h 
+                                    dcx d 
+                                    jmp bios_memory_transfer_reverse
+bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok 
+                                    ret 
+
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
