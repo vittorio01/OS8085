@@ -547,6 +547,37 @@ fsm_disk_external_generated_error:      pop h
                                         pop b 
                                         ret 
 
+;fsm_reload_free_pages_informations carica le informazioni sulle pagine libere in ram 
+
+fsm_reload_free_pages_informations:     push h 
+                                        push d 
+                                        lxi h,0 
+                                        call fsm_read_data_page
+                                        cpi fsm_operation_ok
+                                        jnz fsm_reload_free_pages_informations_end
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_reload_free_pages_informations_end
+                                        lxi d,fsm_disk_name_max_lenght
+                                        dad d 
+                                        mov e,m 
+                                        inx h 
+                                        mov d,m 
+                                        inx h 
+                                        xchg 
+                                        shld fsm_selected_disk_free_page_number
+                                        xchg 
+                                        mov e,m 
+                                        inx h 
+                                        mov d,m 
+                                        inx h 
+                                        xchg 
+                                        shld fsm_selected_disk_first_free_page_address
+                                        mvi a,fsm_operation_ok
+fsm_reload_free_pages_informations_end: pop d 
+                                        pop h 
+                                        ret 
+
 ;fsm_disk_set_name sostituisce il nome del disco con quello fornito
 ;DE -> puntatore alla stringa del nome 
 ;A <- esito dell'operazione
@@ -718,6 +749,7 @@ fsm_selected_file_set_data_pointer_end:         pop b
 
 ;fsm_selected_file_get_bytes legge i dati del file precedentemente selezionato (il puntatoreper scorrere il file viene impostato dalla funzione fsm_selected_file_set_data_pointer)
 ;i dati prelevati vengono restituiti tramite un segmento di memoria di tipo user 
+; A -> segmento dati da scrivere
 ; HL -> numero di bytes da prelevare 
 ; A <- esito dell'operazione 
 ; b <- id del segmento dati 
@@ -788,6 +820,9 @@ fsm_selected_file_get_bytes_loop:       mov a,m
                                         cpi fsm_operation_ok
                                         jnz fsm_selected_file_get_bytes_end2
                                         xchg 
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_get_bytes_end2
                                         lxi b,fsm_uncoded_page_dimension
                                         jmp fsm_selected_file_get_bytes_loop
 fsm_selected_file_get_bytes_eof:        mvi a,fsm_end_of_file 
@@ -813,6 +848,113 @@ fsm_selected_file_get_bytes_end2:       inx sp
                                         inx sp 
                                         inx sp 
 fsm_selected_file_get_bytes_end:        pop d  
+                                        pop h 
+                                        ret 
+
+;fsm_selected_file_set_bytes scrive i dati sul file precedentemente selezionato (il puntatore per scorrere il file viene impostato dalla funzione fsm_selected_file_set_data_pointer)
+;i vengono prelevati da un segmento di tipo user
+; A -> segmento user
+; HL -> numero di bytes da scrivere
+; A <- esito dell'operazione 
+
+fsm_selected_file_set_bytes:            push h 
+                                        push d 
+                                        mov d,a 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %00000100
+                                        jnz fsm_selected_file_set_bytes_next 
+                                        mvi a,fsm_data_pointer_not_setted
+                                        jmp fsm_selected_file_set_bytes_end
+fsm_selected_file_set_bytes_next:       mov a,l 
+                                        ora h 
+                                        jnz fsm_selected_file_set_bytes_next2
+                                        mvi a,fsm_bad_argument
+                                        jmp fsm_selected_file_set_bytes_end
+fsm_selected_file_set_bytes_next2:      mov a,d 
+                                        ora a 
+                                        jnz fsm_selected_file_set_bytes_next3
+                                        mvi a,fsm_bad_argument
+                                        jmp fsm_selected_file_set_bytes_end
+fsm_selected_file_set_bytes_next3:      call mms_select_low_memory_user_data_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end
+                                        push h
+                                        lhld fsm_selected_file_data_pointer_page_address
+                                        xchg 
+                                        lhld fsm_selected_file_data_pointer_offset
+                                        mov c,l 
+                                        mov b,h 
+                                        lxi h,0 
+                                        push h 
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        dad b 
+                                        push h 
+                                        lxi h,fsm_uncoded_page_dimension
+                                        mov a,l                     ;BC -> posizione nel buffer (complementare)
+                                        sub c                       ;DE -> pagina corrente 
+                                        mov c,a                     ;HL -> posizione nel buffer
+                                        mov a,h                     ;SP -> [posizione nel buffer dati][numero di bytes da scrivere]
+                                        sbb b 
+                                        mov b,a 
+                                        pop h 
+                                        xchg 
+                                        call fsm_move_data_page
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        xchg 
+fsm_selected_file_set_bytes_loop:       mov a,m 
+                                        xthl 
+                                        call mms_write_selected_user_segment_byte
+                                        jc fsm_selected_file_set_bytes_loop_end 
+                                        inx h 
+                                        xthl 
+                                        inx h 
+                                        dcx b 
+                                        mov a,c 
+                                        ora b 
+                                        jnz fsm_selected_file_set_bytes_loop
+                                        xchg 
+                                        call fsm_set_page_link
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        mov a,l 
+                                        ana h 
+                                        cpi $ff 
+                                        jz fsm_selected_file_set_bytes_eof
+                                        call fsm_move_data_page
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        xchg 
+                                        call fsm_reselect_mms_segment
+                                        cpi fsm_operation_ok
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        lxi b,fsm_uncoded_page_dimension
+                                        jmp fsm_selected_file_set_bytes_loop
+fsm_selected_file_set_bytes_eof:        mvi a,fsm_end_of_file 
+                                        inx sp 
+                                        inx sp 
+                                        xthl 
+                                        mov b,a 
+                                        inx sp 
+                                        inx sp 
+                                        mvi c,0
+                                        jmp fsm_selected_file_set_bytes_end
+fsm_selected_file_set_bytes_loop_end:   call mms_read_data_segment_operation_error_code
+                                        cpi mms_segment_segmentation_fault_error_code
+                                        jnz fsm_selected_file_set_bytes_end2
+                                        inx sp 
+                                        inx sp 
+                                        pop psw 
+                                        mov b,a 
+                                        mvi a,fsm_operation_ok
+                                        jmp fsm_selected_file_set_bytes_end
+fsm_selected_file_set_bytes_end2:       inx sp 
+                                        inx sp 
+                                        inx sp 
+                                        inx sp 
+fsm_selected_file_set_bytes_end:        pop d  
                                         pop h 
                                         ret 
 
@@ -950,6 +1092,7 @@ fsm_selected_file_append_data_bytes_next2:  pop d
 fsm_selected_file_append_data_bytes_next4:  mov a,c 
                                             call fsm_append_pages
                                             cpi fsm_operation_ok
+                                            hlt 
                                             jnz fsm_selected_file_append_data_bytes_end 
                                             call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
@@ -1400,6 +1543,7 @@ fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
 fsm_set_selected_file_header_flags_end:     inx sp 
                                             inx sp 
                                             pop h 
+                                            ret 
 
 ;fsm_get_selected_file_header_first_page_address restituisce il primo indirizzo della pagina che punta al corpo del file selezionato precedentemente 
 ;A <- esito dell'operazione 
@@ -1682,14 +1826,14 @@ fsm_load_selected_file_header:          push d
 fsm_load_selected_file_header_next:     lhld fsm_selected_file_header_page_address
                                         call fsm_move_data_page
                                         cpi fsm_operation_ok
-                                        jnz fsm_get_selected_file_header_flags_end
+                                        jnz fsm_load_selected_file_header_end
                                         lhld fsm_selected_file_header_php_address
                                         xchg 
                                         lxi b,fsm_header_dimension
                                         call unsigned_multiply_word 
                                         call fsm_reselect_mms_segment
                                         cpi fsm_operation_ok
-                                        jnz fsm_get_selected_file_header_flags_end
+                                        jnz fsm_load_selected_file_header_end
                                         dad d 
                                         mvi a,fsm_operation_ok
 fsm_load_selected_file_header_end:      pop b 
@@ -1931,7 +2075,7 @@ fsm_search_file_header:                     push h
                                             mov l,a 
                                             mov a,h 
                                             aci 0 
-                                            mov h,a 
+                                            mov h,a
 fsm_search_file_header_search_loop:         mov a,m 
                                             ani fsm_header_valid_bit
                                             jz fsm_search_file_header_end_of_list 
@@ -2063,43 +2207,46 @@ fsm_search_file_header_end2:                pop b
 ; A <- esito dell'operazione 
 ; HL <- indirizzo della nuova pagina aggiunta
 
-fsm_append_pages:       push d 
-                        push b 
-                        push psw 
-fsm_append_pages_loop:  mov e,l 
-                        mov d,h 
-                        call fsm_get_page_link
-                        cpi fsm_operation_ok
-                        jnz fsm_append_pages_end
-                        mov a,h
-                        cpi $ff 
-                        jnz fsm_append_pages_loop
-                        mov a,l 
-                        cpi $ff 
-                        jnz fsm_append_pages_loop
-                        xthl 
-                        mov a,h 
-                        xthl 
-                        call fsm_get_first_free_page_list
-                        cpi fsm_operation_ok
-                        jnz fsm_append_pages_end
-                        mov c,l 
-                        mov b,h 
-                        xchg 
-                        call fsm_set_page_link
-                        cpi fsm_operation_ok
-                        jnz fsm_append_pages_end
-                        call fsm_writeback_page
-                        cpi fsm_operation_ok
-                        jnz fsm_append_pages_end
-                        mvi a,fsm_operation_ok
-                        mov l,c 
-                        mov h,b 
-fsm_append_pages_end:   inx sp 
-                        inx sp 
-                        pop b 
-                        pop d 
-                        ret 
+fsm_append_pages:           push d 
+                            push b 
+                            push psw 
+                            mov a,h 
+                            ana l 
+                            cpi $ff 
+                            jnz fsm_append_pages_loop
+                            mvi a,fsm_bad_argument
+                            jmp fsm_append_pages_end
+fsm_append_pages_loop:      mov e,l 
+                            mov d,h
+                            call fsm_get_page_link
+                            cpi fsm_operation_ok
+                            jnz fsm_append_pages_end
+                            mov a,h
+                            ana l
+                            cpi $ff 
+                            jnz fsm_append_pages_loop
+fsm_append_pages_loop_end:  xthl 
+                            mov a,h 
+                            xthl 
+                            call fsm_get_first_free_page_list
+                            cpi fsm_operation_ok
+                            jnz fsm_append_pages_end
+                            mov c,l 
+                            mov b,h 
+                            xchg 
+                            mov e,c
+                            mov d,b 
+                            call fsm_set_page_link
+                            cpi fsm_operation_ok
+                            jnz fsm_append_pages_end
+                            mvi a,fsm_operation_ok
+                            mov l,c 
+                            mov h,b 
+fsm_append_pages_end:       inx sp 
+                            inx sp 
+                            pop b 
+                            pop d 
+                            ret 
 
 ;fsm_get_first_free_page_list restituisce una lista concatenata di pagine libere 
 ;A <- numero di pagine da prelevare
@@ -2420,8 +2567,8 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 dad b 
                                                 xchg 
                                                 lhld fsm_selected_disk_data_page_number
+                                                dcx h 
                                                 xchg 
-                                                dcx d 
                                                 mov m,e 
                                                 inx h 
                                                 mov m,d 
@@ -2429,6 +2576,7 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 mvi m,1 
                                                 inx h 
                                                 mvi m,0 
+                                                shld fsm_selected_disk_first_free_page_address
                                                 call fsm_reselect_mms_segment
                                                 cpi fsm_operation_ok
                                                 jnz fsm_clear_fat_table_reset_end
@@ -2449,6 +2597,9 @@ fsm_clear_fat_table_loop_end2:                  inx sp
                                                 inx sp 
                                                 inx sp 
                                                 inx sp 
+                                                call fsm_reload_free_pages_informations
+                                                cpi fsm_operation_ok
+                                                jnz fsm_clear_fat_table_reset_end
                                                 mvi a,fsm_operation_ok
 fsm_clear_fat_table_reset_end:                  pop b 
                                                 pop d 
