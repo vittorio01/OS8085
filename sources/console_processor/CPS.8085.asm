@@ -4,15 +4,24 @@ cps_functions:      .org CPS
 system_boot:    lxi sp,stack_memory_start
                 ;call bios_warm_boot
                 call mms_low_memory_initialize
-                mvi a,%1100000
-                lxi h,1024 
+                mvi a,%10100000
+                lxi h,64 
                 call mms_create_low_memory_data_segment
-                mvi a,%1100000
-                lxi h,512
+                mvi a,%11000000
+                lxi h,128
                 call mms_create_low_memory_data_segment
-                mvi a,1
-                call mms_select_low_memory_data_segment
-                call mms_delete_selected_low_memory_data_segment
+                mvi a,%10100000
+                lxi h,64 
+                call mms_create_low_memory_data_segment
+                mvi a,%11000000
+                lxi h,128
+                call mms_create_low_memory_data_segment
+                mvi a,%10100000
+                lxi h,256
+                call mms_create_low_memory_data_segment
+                call mms_delete_all_temporary_segments
+                mvi a,$33
+                lhld mms_data_low_pointer
                 hlt 
                 ;call fsm_init
                 ;mvi a,$41
