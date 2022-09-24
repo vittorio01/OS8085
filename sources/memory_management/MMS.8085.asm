@@ -131,9 +131,10 @@ mms_segment_number_overflow_error_code      .equ $14
 mms_segment_bad_argument                    .equ $15
 
 mms_source_segment_not_selected             .equ $16 
-mms_destination_segment_not_found           .equ $17 
-mms_source_segment_overflow                 .equ $18 
-mms_destination_segment_overflow            .equ $19 
+mms_destination_segment_not_selected        .equ $17
+mms_destination_segment_not_found           .equ $18 
+mms_source_segment_overflow                 .equ $19 
+mms_destination_segment_overflow            .equ $1A 
 
 mms_operation_ok                            .equ $ff
 
@@ -141,10 +142,22 @@ mms_functions:  .org MMS
                 jmp mms_low_memory_initialize
                 jmp mms_free_low_ram_bytes
                 jmp mms_load_low_memory_program 
+                jmp mms_get_low_memory_program_dimension
                 jmp mms_unload_low_memory_program 
+                jmp mms_create_low_memory_data_segment
+                jmp mms_select_low_memory_data_segment
+                jmp mms_delete_selected_low_memory_data_segment
+                jmp mms_read_selected_data_segment_byte
+                jmp mms_write_selected_data_segment_byte
+                jmp mms_read_data_segment_operation_error_code
+                jmp mms_segment_data_transfer
+                jmp mms_set_selected_data_segment_flags
+                jmp mms_get_selected_data_segment_flags
+                jmp mms_delete_all_temporary_segments
+                jmp mms_program_bytes_write 
+                jmp mms_program_bytes_read 
+
                 
-            
-                 
 ;Implementazioni delle system calls della mms
 
 ;La funzione mms_low_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
@@ -215,6 +228,213 @@ mms_unload_low_memory_program:  push h
                                 shld mms_program_high_pointer
                                 pop h 
                                 ret 
+
+;mms_get_low_mmory_program_dimension restituisce la dimensione della zona programma allocata
+; HL <- dimensione dedicata all'allocazione del programma (0000 se la zona non è stata allocata)
+
+mms_get_low_memory_program_dimension:       push d 
+                                            lhld mms_program_high_pointer
+                                            lxi d,low_memory_start
+                                            mov a,l 
+                                            sub e 
+                                            mov l,a 
+                                            mov a,h 
+                                            sbb d 
+                                            mov h,a 
+mms_get_low_memory_program_dimension_end:   pop d    
+                                            ret 
+;mms_program_bytes_write esegue la copia dei dati da un segmento in memoria selezionato alla sezione programma 
+;BC -> numero di bytes 
+;DE -> offset di dati nel segmento
+;HL -> offset dei dati nella zona del programma
+
+;A <- esito dell'operazione 
+;BC <- numero di bytes non copiati 
+;DE <- offset nel segmento dati (dopo l'esecuzione)
+;BC <- offset nella zona del programma (dopo l'esecuzione)
+mms_program_bytes_write:        push b
+                                push h 
+                                push d 
+                                lda mms_data_selected_segment_id
+                                ora a 
+                                jnz mms_program_bytes_write_next
+                                mvi a,mms_source_segment_not_selected
+                                jmp mms_program_bytes_write_end
+mms_program_bytes_write_next:   dad b 
+                                xchg 
+                                call mms_get_low_memory_program_dimension
+                                mov a,e 
+                                sub l 
+                                mov a,d 
+                                sbb h 
+                                jc mms_program_bytes_write_next2
+                                mvi a,mms_destination_segment_overflow
+                                jmp mms_program_bytes_write_end
+mms_program_bytes_write_next2:  pop d 
+                                push d 
+                                lhld mms_data_selected_segment_dimension
+                                xchg 
+                                dad b 
+                                mov a,l 
+                                sub e 
+                                mov a,h 
+                                sbb d 
+                                jc mms_program_bytes_write_next3
+                                mvi a,mms_source_segment_overflow
+                                jmp mms_program_bytes_write_end
+mms_program_bytes_write_next3:  pop d 
+                                pop h 
+                                push h 
+                                push d 
+                                lxi b,low_memory_start 
+                                dad b 
+                                xchg 
+                                mov c,l 
+                                mov b,h
+                                lhld mms_data_selected_segment_address
+                                dad b 
+                                xchg 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                xthl 
+                                mov c,l 
+                                mov b,h 
+                                xthl 
+                                dcx sp 
+                                dcx sp 
+                                dcx sp 
+                                dcx sp 
+                                call bios_memory_transfer
+                                cpi bios_operation_ok
+                                jnz mms_program_bytes_write_end
+                                mov c,l 
+                                mov b,h 
+                                lhld mms_data_selected_segment_address
+                                mov a,e 
+                                sub l 
+                                mov e,a 
+                                mov a,d 
+                                sbb h 
+                                mov d,a 
+                                lxi h,low_memory_start
+                                mov a,c 
+                                sub l 
+                                mov l,a 
+                                mov a,b 
+                                sbb h 
+                                mov h,a 
+                                lxi b,0 
+                                mvi a,mms_operation_ok
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                ret 
+mms_program_bytes_write_end:    pop d
+                                pop h
+                                pop b
+                                ret 
+
+;mms_program_bytes_read esegue la copia dei dati dalla sezione programma a un segmento dati in memoria selezionato
+;DE -> offset di dati nella zona del programma
+;HL -> offset dei dati nel segmento di destinazione
+
+;A <- esito dell'operazione 
+;BC <- numero di bytes non copiati 
+;DE <- offset di dati nella zona del programma (dopo l'esecuzione)
+;BC <- offset dei dati nel segmento di destinazione (dopo l'esecuzione)
+
+mms_program_bytes_read:         push b
+                                push h 
+                                push d 
+                                lda mms_data_selected_segment_id
+                                ora a 
+                                jnz mms_program_bytes_read_next
+                                mvi a,mms_destination_segment_not_selected
+                                jmp mms_program_bytes_read_end
+mms_program_bytes_read_next:    dad b 
+                                xchg 
+                                lhld mms_data_selected_segment_dimension
+                                mov a,e 
+                                sub l 
+                                mov a,d 
+                                sbb h 
+                                jc mms_program_bytes_read_next2
+                                mvi a,mms_destination_segment_overflow
+                                jmp mms_program_bytes_read_end
+mms_program_bytes_read_next2:   pop d 
+                                push d 
+                                call mms_get_low_memory_program_dimension
+                                xchg 
+                                dad b 
+                                mov a,l 
+                                sub e 
+                                mov a,h 
+                                sbb d 
+                                jc mms_program_bytes_read_next3
+                                mvi a,mms_source_segment_overflow
+                                jmp mms_program_bytes_read_end
+mms_program_bytes_read_next3:   pop d 
+                                pop h 
+                                push h 
+                                push d 
+                                lxi b,low_memory_start 
+                                dad b 
+                                xchg 
+                                mov c,l 
+                                mov b,h
+                                lhld mms_data_selected_segment_address
+                                dad b 
+                                xchg 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                xthl 
+                                mov c,l 
+                                mov b,h 
+                                xthl 
+                                dcx sp 
+                                dcx sp 
+                                dcx sp 
+                                dcx sp 
+                                call bios_memory_transfer
+                                cpi bios_operation_ok
+                                jnz mms_program_bytes_read_end
+                                mov c,l 
+                                mov b,h 
+                                lxi h,low_memory_start
+                                mov a,e 
+                                sub l 
+                                mov e,a 
+                                mov a,d 
+                                sbb h 
+                                mov d,a 
+                                lhld mms_data_selected_segment_address
+                                mov a,c 
+                                sub l 
+                                mov l,a 
+                                mov a,b 
+                                sbb h 
+                                mov h,a 
+                                lxi b,0 
+                                mvi a,mms_operation_ok
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                inx sp 
+                                ret 
+mms_program_bytes_read_end:     pop d
+                                pop h
+                                pop b
+                                ret 
+
 
 ;la funzione mms_create_low_memory_user_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 ; A  -> flags del segmento
@@ -605,7 +825,6 @@ mms_set_selected_data_segment_flags:            push h
                                                 ora a 
                                                 jnz mms_set_selected_data_segment_flags_next 
                                                 mvi a,mms_segment_data_not_found_error_code  
-                                                jmp mms_set_selected_data_segment_flags_end
                                                 sta mms_data_segment_generated_error_code
                                                 jmp mms_set_selected_data_segment_flags_end
 mms_set_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
@@ -621,6 +840,27 @@ mms_set_selected_data_segment_flags_next:       lhld mms_data_selected_segment_a
 mms_set_selected_data_segment_flags_end:        inx sp 
                                                 inx sp 
                                                 pop h
+                                                ret 
+
+;mms_get_selected_data_segment_flags legge le flags del segmento selezionato
+;A <- flags (se si verifica un errore ritorna il codice di esecuzione)
+;PSW <- se il segmento non è stato selezionato viene generato un errore (CY=1) e 
+mms_get_selected_data_segment_flags:            push h
+                                                lda mms_data_selected_segment_id
+                                                ora a 
+                                                jnz mms_get_selected_data_segment_flags_next 
+                                                mvi a,mms_segment_data_not_found_error_code  
+                                                sta mms_data_segment_generated_error_code
+                                                stc 
+                                                jmp mms_get_selected_data_segment_flags_end
+mms_get_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
+                                                dcx h 
+                                                dcx h 
+                                                dcx h 
+                                                mov a,m 
+                                                stc 
+                                                cmc 
+mms_get_selected_data_segment_flags_end:        pop h
                                                 ret 
 
 ;mms_segment_data_transfer copia i dati da un segmento ad un altro (il segmento sorgente è quello selezionato precedentemente)
@@ -786,6 +1026,8 @@ mms_segment_data_transfer_end:      pop h
                                     ret               
 
 ;mms_delete_all_temporary_segments elimina tutti i segmenti temporanei non di sistema presenti in RAM 
+;A -> esito dell'operazione 
+
 mms_delete_all_temporary_segments:          push h 
                                             push d 
 mms_delete_all_temporary_segments_loop:     lhld mms_data_low_pointer
@@ -842,7 +1084,7 @@ mms_delete_all_temporary_segments_end2:     pop d
 
 
 
-;mms_data_bitstream_number_request vefifica se è disponibile un valore nel bitstream user e, in caso positivo, restituisce l'ID da associare al segmento
+;mms_data_bitstream_number_request verifica se è disponibile un valore nel bitstream user e, in caso positivo, restituisce l'ID da associare al segmento
 
 mms_data_bitstream_number_request:              push h 
                                                 push b 
