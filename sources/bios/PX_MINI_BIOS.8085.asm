@@ -67,8 +67,11 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_select_sector 
                 jmp bios_mass_memory_select_track 
                 jmp bios_mass_memory_select_head 
-                jmp bios_mass_memory_write_enable_status 
+                jmp bios_mass_memory_status 
                 jmp bios_mass_memory_get_bps
+                jmp bios_mass_memory_get_spt
+                jmp bios_mass_memory_get_tph 
+                jmp bios_mass_memory_get_head_number 
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
@@ -166,10 +169,7 @@ bios_console_input_read_character:  in bios_serial_data_port
 
 ;bios_mass_memory_select_drive
 ; A -> dispositivo da selezionare (sono diponibili 25 identificativi da $41 a $5A)
-; A <- bytes per settore codificati in potenza di 2 da 128. Assume $00 se l'operazione non ha avuto successo 
-; B <- numero di settori per traccia
-; C <- numero di testine
-; DE <- numero di tracce
+; A <- esito dell'operazione
 
 bios_mass_memory_select_drive:              cpi bios_mass_memory_rom_id
                                             jnz bios_mass_memory_select_drive_not_found
@@ -178,10 +178,7 @@ bios_mass_memory_select_drive:              cpi bios_mass_memory_rom_id
                                             ani %00001111
                                             ori %10000000
                                             sta bios_mass_memory_select_mask
-                                            mvi a,bios_mass_memory_rom_bps_coded_number
-                                            mvi b,bios_mass_memory_rom_spt_number
-                                            mvi c,bios_mass_memory_rom_heads_number
-                                            lxi d,bios_mass_memory_rom_tracks_number
+                                            mvi a,bios_operation_ok
                                             ret 
 
 bios_mass_memory_select_drive_not_found:    xra a 
@@ -202,6 +199,36 @@ bios_mass_memory_get_bps:                   lda bios_mass_memory_select_mask
 bios_mass_memory_get_bps_not_selected:      xra a 
                                             ret 
 
+;bios_mass_memory_get_spt restituisce il numero di settori per traccia (00 se il disco non è stato selezionato)
+;A <- numero di settori per traccia
+bios_mass_memory_get_spt:                   lda bios_mass_memory_select_mask
+                                            ani %10000000
+                                            jz bios_mass_memory_get_spt_not_selected
+                                            mvi a,bios_mass_memory_rom_spt_number
+                                            ret 
+bios_mass_memory_get_spt_not_selected:      xra a 
+                                            ret 
+
+;bios_mass_memory_get_tph restituisce il numero di tracce per testina 
+;HL <- numero di settori per traccia (0000 se il disco non è stato selezionato)
+
+bios_mass_memory_get_tph:                   lda bios_mass_memory_select_mask
+                                            ani %10000000
+                                            jz bios_mass_memory_get_tph_not_selected
+                                            lxi h,bios_mass_memory_rom_tracks_number
+                                            ret 
+bios_mass_memory_get_tph_not_selected:      lxi h,0 
+                                            ret 
+
+;bios_mass_memory_get_head_number restituisce il numero di testine del disco (00 se il disco non è stato selezionato)
+;A <- numero di testine
+bios_mass_memory_get_head_number:                   lda bios_mass_memory_select_mask
+                                                    ani %10000000
+                                                    jz bios_mass_memory_get_head_number_not_selected
+                                                    mvi a,bios_mass_memory_rom_heads_number
+                                                    ret 
+bios_mass_memory_get_head_number_not_selected:      xra a 
+                                                    ret 
 
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
@@ -273,15 +300,15 @@ bios_mass_memory_head_selected:     sta bios_mass_memory_selected_head
                                     mvi a,bios_operation_ok
                                     ret
 
-;bios_mass_memory_write_enable_status verifica se la memoria di massa è abilitata alla scrittura.
-; A <- esito dell'operazione ($ff se è scrivibile, $00 se è di sola lettura)
-bios_mass_memory_write_enable_status:       lda bios_mass_memory_selected_device    
-                                            ora a 
-                                            jnz bios_mass_memory_write_status_dselected
-                                            mvi a,bios_mass_memory_device_not_selected
-                                            ret 
-bios_mass_memory_write_status_dselected:    mvi a,bios_mass_memory_rom_write_enable
-                                            ret 
+;bios_mass_memory_status restituisce lo stato della memoria di massa
+; A <- esito dell'operazione ($ff se è operativo)
+bios_mass_memory_status:                lda bios_mass_memory_selected_device    
+                                        ora a 
+                                        jnz bios_mass_memory_status_dselected
+                                        mvi a,bios_mass_memory_device_not_selected
+                                        ret 
+bios_mass_memory_status_dselected:      mvi a,bios_operation_ok
+                                        ret 
 
 ;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.
 ;-  bios_mass_memory_write_sector scrive i dati nel settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo in memoria dei dati da scrivere

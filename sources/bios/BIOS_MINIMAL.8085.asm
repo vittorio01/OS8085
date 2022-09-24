@@ -33,7 +33,11 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_select_sector 
                 jmp bios_mass_memory_select_track 
                 jmp bios_mass_memory_select_head 
-                jmp bios_mass_memory_write_enable_status 
+                jmp bios_mass_memory_get_bps
+                jmp bios_mass_memory_get_spt
+                jmp bios_mass_memory_get_tph 
+                jmp bios_mass_memory_get_head_number 
+                jmp bios_mass_memory_status 
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
@@ -103,22 +107,38 @@ bios_console_input_read_character:  ;da implementare
 
 ;bios_mass_memory_select_drive
 ; A -> dispositivo da selezionare (sono diponibili 25 identificativi da $41 a $5A)
-; A <- bytes per settore codificati in potenza di 2 da 128. Assume $00 se l'operazione non ha avuto successo 
-; B <- numero di settori per traccia
-; C <- numero di testine
-; DE <- numero di tracce
+; A <- esito dell'operazione
 
 bios_mass_memory_select_drive:  ;da implementare
                                 ret 
 
 ;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
-;(viene utilizzata dalla mms per stabilire il numero di bytes da trasferire)
 
 ;A <- bytes per settore (codificato in multipli di 128 bytes) 
 ;     assume 0 se non è stato selezionato un dispositivo
 
-bios_mass_memory_get_bps:                   ;da implementare
-                                            ret 
+bios_mass_memory_get_bps:           ;da implementare
+                                    ret 
+
+;bios_mass_memory_get_spt restituisce il numero di settori per traccia
+;A <- bytes settori per traccia
+;     assume 0 se non è stato selezionato un dispositivo
+
+bios_mass_memory_get_spt:           ;da implementare 
+                                    ret 
+
+;bios_mass_memory_get_tph restituisce il numero di tracce per testina
+;HL <- traccia per testina
+;     assume 0 se non è stato selezionato un dispositivo
+bios_mass_memory_get_tph:           ;da implementare
+                                    ret 
+
+
+;bios_mass_memory_get_head_number restituisce il numero di destine del dispositivo
+;A <- numero di testine
+;     assume 0 se non è stato selezionato un dispositivo
+bios_mass_memory_get_head_number:   ;da implementare
+                                    ret 
 
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
@@ -138,10 +158,10 @@ bios_mass_memory_select_track:  ;da implementare
 bios_mass_memory_select_head:   ;da implementare
                                 ret 
 
-;bios_mass_memory_write_enable_status verifica se la memoria di massa è abilitata alla scrittura.
-; A <- esito dell'operazione
-bios_mass_memory_write_enable_status:   ;da implementare
-                                        ret 
+;bios_mass_memory_status verifica lo stato del dispositivo selezionato 
+; A <- stato del dispositivo ($ff se è operativo)
+bios_mass_memory_status:    ;da implementare
+                            ret 
 
 ;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.
 ;-  bios_mass_memory_write_sector scrive i dati nel settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo in memoria dei dati da scrivere
