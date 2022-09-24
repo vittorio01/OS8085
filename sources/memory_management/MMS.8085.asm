@@ -267,7 +267,7 @@ mms_get_low_memory_program_dimension_end:   pop d
 ;A <- esito dell'operazione 
 ;BC <- numero di bytes non copiati 
 ;DE <- offset nel segmento dati (dopo l'esecuzione)
-;BC <- offset nella zona del programma (dopo l'esecuzione)
+;HL <- offset nella zona del programma (dopo l'esecuzione)
 mms_program_bytes_write:        push b
                                 push h 
                                 push d 
@@ -356,13 +356,14 @@ mms_program_bytes_write_end:    pop d
                                 ret 
 
 ;mms_program_bytes_read esegue la copia dei dati dalla sezione programma a un segmento dati in memoria selezionato
+;BC -> bytes da copiare
 ;DE -> offset di dati nella zona del programma
 ;HL -> offset dei dati nel segmento di destinazione
 
 ;A <- esito dell'operazione 
 ;BC <- numero di bytes non copiati 
 ;DE <- offset di dati nella zona del programma (dopo l'esecuzione)
-;BC <- offset dei dati nel segmento di destinazione (dopo l'esecuzione)
+;HL <- offset dei dati nel segmento di destinazione (dopo l'esecuzione)
 
 mms_program_bytes_read:         push b
                                 push h 
@@ -399,13 +400,13 @@ mms_program_bytes_read_next3:   pop d
                                 push h 
                                 push d 
                                 lxi b,low_memory_start 
+                                xchg 
                                 dad b 
                                 xchg 
                                 mov c,l 
                                 mov b,h
                                 lhld mms_data_selected_segment_address
                                 dad b 
-                                xchg 
                                 inx sp 
                                 inx sp 
                                 inx sp 
