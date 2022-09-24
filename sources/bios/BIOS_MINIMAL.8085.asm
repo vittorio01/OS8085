@@ -111,6 +111,15 @@ bios_console_input_read_character:  ;da implementare
 bios_mass_memory_select_drive:  ;da implementare
                                 ret 
 
+;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
+;(viene utilizzata dalla mms per stabilire il numero di bytes da trasferire)
+
+;A <- bytes per settore (codificato in multipli di 128 bytes) 
+;     assume 0 se non è stato selezionato un dispositivo
+
+bios_mass_memory_get_bps:                   ;da implementare
+                                            ret 
+
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
 ; A <- esito dell'operazione

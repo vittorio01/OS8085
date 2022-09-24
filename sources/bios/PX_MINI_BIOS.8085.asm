@@ -68,6 +68,7 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_select_track 
                 jmp bios_mass_memory_select_head 
                 jmp bios_mass_memory_write_enable_status 
+                jmp bios_mass_memory_get_bps
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
@@ -183,8 +184,25 @@ bios_mass_memory_select_drive:              cpi bios_mass_memory_rom_id
                                             lxi d,bios_mass_memory_rom_tracks_number
                                             ret 
 
-bios_mass_memory_select_drive_not_found:    mvi a,bios_mass_memory_bad_argument
+bios_mass_memory_select_drive_not_found:    xra a 
                                             ret 
+
+;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
+;(viene utilizzata dalla mms per stabilire il numero di bytes da trasferire)
+
+;A <- bytes per settore (codificato in multipli di 128 bytes) 
+;     assume 0 se non è stato selezionato un dispositivo
+
+bios_mass_memory_get_bps:                   lda bios_mass_memory_select_mask
+                                            ani %10000000
+                                            jz bios_mass_memory_get_bps_not_selected
+                                            mvi a,bios_mass_memory_rom_bps_coded_number
+                                            ret 
+
+bios_mass_memory_get_bps_not_selected:      xra a 
+                                            ret 
+
+
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
 ; A <- esito dell'operazione
