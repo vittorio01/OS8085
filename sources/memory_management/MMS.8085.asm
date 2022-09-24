@@ -94,6 +94,15 @@
 ;- Per aumentare la velocità di alcune operazioni, esistono alcune funzioni dedicate appositamente:
 ;- copia di dati fra due segmenti
 
+
+;- vengono inserite delle funzioni per la manipolazione dei programmi nella memoria e per la gestione della memoria di massa. In particolare:
+;   *   vengono inserite due funzioni per copiare i dati da un segmento nella zona riservata ai programmi e viceversa
+;   *   vengono inserite due funzioni per gestire la copia di un settore in un segmento e viceversa
+
+;- viene inserita una funzione per eliminare tutti i segmenti temporanei nella memoria
+
+;- viene inserita una funzione per l'esecuzione del programma caricato precedentemente
+
 ;L'intestazione prevede quindi:
 ;----------------------------------------------------------------
 ;- Tipologia di segmento - Identificativo - dimensione in bytes -
@@ -103,11 +112,14 @@
 ;                              - bit 7  -> indica la presenza di un segmento valido
 ;                              - bit 6  -> indica la tipologia di segmento (1 di sistema o 0 utente)
 ;                              - bit 5  -> nel caso di un segmento utente indica se è permanente o temporaneo (un segmento di sistema deve essere per forza permanente)
-;- Idetificativo            -> 1 byte che indica l'identificativo del segmento (può assumere un numero fra 1 e 255)
+;                              i bit rimanenti possono essere utilizzati per evidenziare caratteristiche minori che non si distinguono dal punto di vista della mms
+;- Identificativo           -> 1 byte che indica l'identificativo del segmento (può assumere un numero fra 1 e 255)
 ;- dimensione in bytes      -> 2 bytes che indicano la dimensione del segmento
 
 ;Per l'assegnazione dei segmenti viene inserita una tabella in bitstream di lunghezza complessiva di 32 bytes (256 bit) per tenere traccia dei numeri di segmenti assegnati.
 ;In particolare nel bitstream un bit segnato a 1 indica un numero assegnato (il numero viene identificato dalla posizione del bit nel bitstream)
+
+
 
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0050
@@ -135,6 +147,8 @@ mms_destination_segment_not_selected        .equ $17
 mms_destination_segment_not_found           .equ $18 
 mms_source_segment_overflow                 .equ $19 
 mms_destination_segment_overflow            .equ $1A 
+mms_program_not_loaded                      .equ $1B
+mms_mass_memory_not_selected                .equ $1C
 
 mms_operation_ok                            .equ $ff
 
@@ -144,6 +158,7 @@ mms_functions:  .org MMS
                 jmp mms_load_low_memory_program 
                 jmp mms_get_low_memory_program_dimension
                 jmp mms_unload_low_memory_program 
+                jmp mms_start_low_memory_loaded_program 
                 jmp mms_create_low_memory_data_segment
                 jmp mms_select_low_memory_data_segment
                 jmp mms_delete_selected_low_memory_data_segment
@@ -156,8 +171,9 @@ mms_functions:  .org MMS
                 jmp mms_delete_all_temporary_segments
                 jmp mms_program_bytes_write 
                 jmp mms_program_bytes_read 
+                jmp mms_mass_memory_read_sector
+                jmp mms_mass_memory_write_sector
 
-                
 ;Implementazioni delle system calls della mms
 
 ;La funzione mms_low_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
@@ -435,6 +451,26 @@ mms_program_bytes_read_end:     pop d
                                 pop b
                                 ret 
 
+;mms_start_low_memory_loaded_program esegue il programma caricato precedentemente in memoria 
+; A <- errore di esecuzione (nel caso in cui il programma non sia partito)
+
+mms_start_low_memory_loaded_program:        push h 
+                                            push d 
+                                            lhld mms_program_high_pointer
+                                            lxi d,low_memory_start
+                                            mov a,e 
+                                            sub l 
+                                            mov a,d 
+                                            sbb h 
+                                            jnc mms_start_low_memory_loaded_program_end
+                                            lxi h,stack_memory_start
+                                            sphl 
+                                            lxi h,low_memory_start 
+                                            pchl 
+mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded 
+                                            pop d 
+                                            pop h 
+                                            ret     
 
 ;la funzione mms_create_low_memory_user_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 ; A  -> flags del segmento
@@ -874,7 +910,6 @@ mms_get_selected_data_segment_flags_end:        pop h
 ;DE -> indirizzo di partenza dopo l'operazione (offset rispetto all'indirizzo del segmento)
 ;HL -> indirizzo di destinazione dopo l'esecuzione (offset rispetto all'indirizzo del segmento)
 
-
 mms_segment_data_transfer:          push psw 
                                     push b
                                     push d 
@@ -1082,7 +1117,135 @@ mms_delete_all_temporary_segments_end2:     pop d
                                             pop h 
                                             ret 
 
+;mms_mass_memory_read_sector preleva un settore dalla memoria di massa e salva i dati nel segmento selezionato
+;HL -> offset nel segmento dati
 
+;A <- esito dell'operazione
+;HL -> offset nel segmento dati (dopo l'esecuzione)
+
+mms_mass_memory_read_sector:        push d
+                                    push b 
+                                    push h 
+                                    lda mms_data_selected_segment_id
+                                    ora a 
+                                    jnz mms_mass_memory_read_sector_next 
+                                    mvi a,mms_destination_segment_not_selected
+                                    pop h
+                                    jmp mms_mass_memory_read_sector_end 
+mms_mass_memory_read_sector_next:   call bios_mass_memory_get_bps
+                                    ora a 
+                                    jnz mms_mass_memory_read_sector_next2
+                                    mvi a,mms_mass_memory_not_selected 
+                                    pop h
+                                    jmp mms_mass_memory_read_sector_end 
+mms_mass_memory_read_sector_next2:  mvi b,7 
+                                    mvi d,0 
+                                    mov e,a 
+mms_mass_memory_read_sector_loop:   mov a,e 
+                                    add a   
+                                    mov e,a 
+                                    mov a,d 
+                                    ral
+                                    mov d,a 
+                                    dcr b 
+                                    jnz mms_mass_memory_read_sector_loop
+                                    mov c,l 
+                                    mov b,h 
+                                    dad d 
+                                    xchg 
+                                    lhld mms_data_selected_segment_dimension
+                                    mov a,e 
+                                    sub l 
+                                    mov a,d 
+                                    sbb h 
+                                    jc mms_mass_memory_read_sector_next3 
+                                    mvi a,mms_destination_segment_overflow
+                                    pop h
+                                    jmp mms_mass_memory_read_sector_end 
+mms_mass_memory_read_sector_next3:  lhld mms_data_selected_segment_address
+                                    dad b 
+                                    call bios_mass_memory_read_sector
+                                    cpi bios_operation_ok
+                                    jnz mms_mass_memory_read_sector_end
+                                    xchg 
+                                    lhld mms_data_selected_segment_address
+                                    mov a,e 
+                                    sub l 
+                                    mov l,a 
+                                    mov a,d 
+                                    sbb h 
+                                    mov h,a 
+                                    inx sp 
+                                    inx sp
+                                    mvi a,mms_operation_ok
+mms_mass_memory_read_sector_end:    pop b 
+                                    pop d 
+                                    ret 
+
+;mms_mass_memory_write_sector salva i dati nel segmento selezionato in un settore nella memoria di massa 
+;HL -> offset nel segmento dati
+
+;A <- esito dell'operazione
+;HL -> offset nel segmento dati (dopo l'esecuzione)
+
+mms_mass_memory_write_sector:       push d
+                                    push b 
+                                    push h 
+                                    lda mms_data_selected_segment_id
+                                    ora a 
+                                    jnz mms_mass_memory_write_sector_next 
+                                    mvi a,mms_destination_segment_not_selected
+                                    pop h
+                                    jmp mms_mass_memory_write_sector_end 
+mms_mass_memory_write_sector_next:  call bios_mass_memory_get_bps
+                                    ora a 
+                                    jnz mms_mass_memory_write_sector_next2
+                                    mvi a,mms_mass_memory_not_selected 
+                                    pop h
+                                    jmp mms_mass_memory_write_sector_end 
+mms_mass_memory_write_sector_next2: mvi b,7 
+                                    mvi d,0 
+                                    mov e,a 
+mms_mass_memory_write_sector_loop:  mov a,e 
+                                    add a   
+                                    mov e,a 
+                                    mov a,d 
+                                    ral
+                                    mov d,a 
+                                    dcr b 
+                                    jnz mms_mass_memory_write_sector_loop
+                                    mov c,l 
+                                    mov b,h 
+                                    dad d 
+                                    xchg 
+                                    lhld mms_data_selected_segment_dimension
+                                    mov a,e 
+                                    sub l 
+                                    mov a,d 
+                                    sbb h 
+                                    jc mms_mass_memory_write_sector_next3 
+                                    mvi a,mms_destination_segment_overflow
+                                    pop h
+                                    jmp mms_mass_memory_write_sector_end 
+mms_mass_memory_write_sector_next3: lhld mms_data_selected_segment_address
+                                    dad b 
+                                    call bios_mass_memory_write_sector
+                                    cpi bios_operation_ok
+                                    jnz mms_mass_memory_write_sector_end
+                                    xchg 
+                                    lhld mms_data_selected_segment_address
+                                    mov a,e 
+                                    sub l 
+                                    mov l,a 
+                                    mov a,d 
+                                    sbb h 
+                                    mov h,a 
+                                    inx sp 
+                                    inx sp
+                                    mvi a,mms_operation_ok
+mms_mass_memory_write_sector_end:   pop b 
+                                    pop d 
+                                    ret 
 
 ;mms_data_bitstream_number_request verifica se è disponibile un valore nel bitstream user e, in caso positivo, restituisce l'ID da associare al segmento
 
