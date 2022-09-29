@@ -399,6 +399,7 @@ bios_mass_memory_format_drive:          lda bios_mass_memory_selected_device
                                         ora a 
                                         jz bios_mass_memory_format_device
                                         mvi a,bios_mass_memory_device_not_selected
+                                        ret
 bios_mass_memory_format_device:         push h 
                                         push d 
                                         lxi h,bios_mass_memory_rom_address_start

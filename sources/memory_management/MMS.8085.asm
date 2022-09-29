@@ -759,11 +759,10 @@ mms_read_selected_data_segment_byte:                    push h
                                                         lda mms_data_selected_segment_dimension+1 
                                                         sbb h 
                                                         dcx h 
-                                                        jz mms_read_selected_data_segment_byte
-                                                        jnc mms_read_selected_data_segment_byte_error 
+                                                        jnc mms_read_selected_data_segment_byte_next 
 mms_read_selected_data_segment_byte_error:              lda mms_data_selected_segment_dimension
                                                         mov l,a 
-                                                        lda mms_data_selected_segment_dimension
+                                                        lda mms_data_selected_segment_dimension+1
                                                         ora l 
                                                         jnz mms_read_selected_data_segment_byte_segmentation_fault
                                                         mvi a,mms_segment_data_not_found_error_code
@@ -806,7 +805,7 @@ mms_write_selected_data_segment_byte:                       push h
                                                             jnc mms_write_selected_data_segment_byte_next 
 mms_write_selected_data_segment_byte_error:                 lda mms_data_selected_segment_dimension
                                                             mov l,a 
-                                                            lda mms_data_selected_segment_dimension
+                                                            lda mms_data_selected_segment_dimension+1
                                                             ora l 
                                                             jnz mms_write_selected_data_segment_byte_segmentation_fault
                                                             mvi a,mms_segment_data_not_found_error_code
@@ -1155,11 +1154,11 @@ mms_mass_memory_read_sector_loop:   mov a,e
                                     dad d 
                                     xchg 
                                     lhld mms_data_selected_segment_dimension
-                                    mov a,e 
-                                    sub l 
-                                    mov a,d 
-                                    sbb h 
-                                    jc mms_mass_memory_read_sector_next3 
+                                    mov a,l 
+                                    sub e 
+                                    mov a,h
+                                    sbb d
+                                    jnc mms_mass_memory_read_sector_next3 
                                     mvi a,mms_destination_segment_overflow
                                     pop h
                                     jmp mms_mass_memory_read_sector_end 
@@ -1220,11 +1219,11 @@ mms_mass_memory_write_sector_loop:  mov a,e
                                     dad d 
                                     xchg 
                                     lhld mms_data_selected_segment_dimension
-                                    mov a,e 
-                                    sub l 
-                                    mov a,d 
-                                    sbb h 
-                                    jc mms_mass_memory_write_sector_next3 
+                                    mov a,l
+                                    sub e
+                                    mov a,h
+                                    sbb d
+                                    jnc mms_mass_memory_write_sector_next3 
                                     mvi a,mms_destination_segment_overflow
                                     pop h
                                     jmp mms_mass_memory_write_sector_end 
