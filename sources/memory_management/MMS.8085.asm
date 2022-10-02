@@ -127,7 +127,7 @@ mms_data_low_pointer                        .equ reserved_memory_start+$0052
 mms_data_selected_segment_id                .equ reserved_memory_start+$0054
 mms_data_selected_segment_address           .equ reserved_memory_start+$0055
 mms_data_selected_segment_dimension         .equ reserved_memory_start+$0057
-mms_data_segment_generated_error_code       .equ reserved_memory_start+$0059
+
 
 ;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram
 mms_low_memory_valid_segment_mask:          .equ %10000000
@@ -164,7 +164,6 @@ mms_functions:  .org MMS
                 jmp mms_delete_selected_low_memory_data_segment
                 jmp mms_read_selected_data_segment_byte
                 jmp mms_write_selected_data_segment_byte
-                jmp mms_read_data_segment_operation_error_code
                 jmp mms_segment_data_transfer
                 jmp mms_set_selected_data_segment_flags
                 jmp mms_get_selected_data_segment_flags
@@ -189,7 +188,7 @@ mms_low_memory_initialize:      push h
                                 lxi h,0 
                                 shld mms_data_selected_segment_address
                                 mvi a,$ff 
-                                sta mms_data_segment_generated_error_code
+                               
                                 call mms_data_bitstream_reset
                                 pop psw 
                                 pop h 
@@ -535,12 +534,12 @@ mms_create_low_memory_data_segment:                         push d
                                                             shld mms_data_selected_segment_dimension
                                                             xchg 
                                                             mvi a,mms_operation_ok
-                                                            sta mms_data_segment_generated_error_code
+                                                           
                                                             lda mms_data_selected_segment_id
                                                             jmp mms_create_low_memory_data_segment_return
 
 mms_create_low_memory_data_segment_overflow_error:          mvi a,mms_segment_number_overflow_error_code 
-                                                            sta mms_data_segment_generated_error_code
+                                                           
                                                             lxi h,0
                                                             shld mms_data_selected_segment_dimension
                                                             shld mms_data_selected_segment_address 
@@ -549,7 +548,7 @@ mms_create_low_memory_data_segment_overflow_error:          mvi a,mms_segment_nu
                                                             jmp mms_create_low_memory_data_segment_return
 
 mms_create_low_memory_data_segment_not_enough_ram_error:    mvi a,mms_not_enough_ram_error_code
-                                                            sta mms_data_segment_generated_error_code
+                                                           
                                                             lxi h,0
                                                             shld mms_data_selected_segment_dimension
                                                             shld mms_data_selected_segment_address 
@@ -558,7 +557,7 @@ mms_create_low_memory_data_segment_not_enough_ram_error:    mvi a,mms_not_enough
                                                             jmp mms_create_low_memory_data_segment_return
 
 mms_create_low_memory_data_segment_bad_argument:            mvi a,mms_segment_bad_argument
-                                                            sta mms_data_segment_generated_error_code
+                                                           
                                                             lxi h,0
                                                             shld mms_data_selected_segment_dimension
                                                             shld mms_data_selected_segment_address 
@@ -593,14 +592,14 @@ mms_select_low_memory_data_segment:         push h
                                             sta mms_data_selected_segment_dimension
                                             pop h 
                                             mvi a,mms_operation_ok
-                                            sta mms_data_segment_generated_error_code
+                                           
                                             ret 
 
 mms_select_low_memory_data_segment_not_found:   inx sp 
                                                 inx sp 
                                                 pop h 
                                                 mvi a,mms_segment_data_not_found_error_code
-                                                sta mms_data_segment_generated_error_code
+                                               
                                                 ret 
 
 ;la funzione mms_delete_selected_low_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
@@ -615,7 +614,7 @@ mms_delete_selected_low_memory_data_segment:            push h
                                                         ora a 
                                                         jnz mms_delete_selected_low_memory_data_segment2
                                                         mvi a,mms_segment_data_not_found_error_code
-                                                        sta mms_data_segment_generated_error_code
+                                                       
                                                         jmp mms_delete_data_segment_end
 mms_delete_selected_low_memory_data_segment2:           call mms_data_bitstream_reset_requested_bit
                                                         lhld mms_data_selected_segment_address
@@ -678,7 +677,7 @@ mms_delete_selected_low_memory_data_segment3:           mov c,l
                                                         shld mms_data_selected_segment_address
                                                         shld mms_data_selected_segment_dimension
 mms_delete_data_segment_end2:                           mvi a,mms_operation_ok
-                                                        sta mms_data_segment_generated_error_code
+                                                       
 mms_delete_data_segment_end:                            pop d 
                                                         pop b 
                                                         pop h 
@@ -766,13 +765,9 @@ mms_read_selected_data_segment_byte_error:              lda mms_data_selected_se
                                                         ora l 
                                                         jnz mms_read_selected_data_segment_byte_segmentation_fault
                                                         mvi a,mms_segment_data_not_found_error_code
-                                                        sta mms_data_segment_generated_error_code
-                                                        xra a 
                                                         stc 
                                                         jmp mms_read_selected_data_segment_byte_end
 mms_read_selected_data_segment_byte_segmentation_fault: mvi a,mms_segment_segmentation_fault_error_code
-                                                        sta mms_data_segment_generated_error_code
-                                                        xra a 
                                                         stc 
                                                         jmp mms_read_selected_data_segment_byte_end
 mms_read_selected_data_segment_byte_next:               lda mms_data_selected_segment_address
@@ -809,13 +804,13 @@ mms_write_selected_data_segment_byte_error:                 lda mms_data_selecte
                                                             ora l 
                                                             jnz mms_write_selected_data_segment_byte_segmentation_fault
                                                             mvi a,mms_segment_data_not_found_error_code
-                                                            sta mms_data_segment_generated_error_code
-                                                            pop psw 
+                                                            inx sp 
+                                                            inx sp 
                                                             stc 
                                                             jmp mms_write_selected_data_segment_byte_end
 mms_write_selected_data_segment_byte_segmentation_fault:    mvi a,mms_segment_segmentation_fault_error_code
-                                                            sta mms_data_segment_generated_error_code
-                                                            pop psw 
+                                                            inx sp 
+                                                            inx sp 
                                                             stc 
                                                             jmp mms_write_selected_data_segment_byte_end
 mms_write_selected_data_segment_byte_next:                  lda mms_data_selected_segment_address
@@ -831,12 +826,6 @@ mms_write_selected_data_segment_byte_next:                  lda mms_data_selecte
 mms_write_selected_data_segment_byte_end:                   pop h
                                                             ret  
 
-;mms_read_data_segment_operation_error_code restituisce il codice di errore generato dall'operazione precedente
-; A <- codice di errore ($ff se non si è verificato nessun errore)
-
-mms_read_data_segment_operation_error_code:     lda mms_data_segment_generated_error_code
-                                                ret
-
 ;mms_read_selected_system_segment_dimension restituisce la dimensione del segmento di sistema selezionato
 ;A  <- risultato dell'operazione
 ;HL <- dimensione del segmento (se esiste)
@@ -845,10 +834,10 @@ mms_read_selected_data_segment_dimension:       lhld mms_data_selected_segment_d
                                                 ora h 
                                                 jnz mms_read_selected_data_segment_dimension_next
                                                 mvi a,mms_segment_data_not_found_error_code
-                                                sta mms_data_segment_generated_error_code
+                                               
                                                 ret 
 mms_read_selected_data_segment_dimension_next:  mvi a,mms_operation_ok
-                                                sta mms_data_segment_generated_error_code
+                                               
                                                 ret 
 
 ;mms_set_selected_data_segment_flags imposta le flags del segmento selezionato
@@ -861,7 +850,7 @@ mms_set_selected_data_segment_flags:            push h
                                                 ora a 
                                                 jnz mms_set_selected_data_segment_flags_next 
                                                 mvi a,mms_segment_data_not_found_error_code  
-                                                sta mms_data_segment_generated_error_code
+                                               
                                                 jmp mms_set_selected_data_segment_flags_end
 mms_set_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
                                                 dcx h 
@@ -880,13 +869,12 @@ mms_set_selected_data_segment_flags_end:        inx sp
 
 ;mms_get_selected_data_segment_flags legge le flags del segmento selezionato
 ;A <- flags (se si verifica un errore ritorna il codice di esecuzione)
-;PSW <- se il segmento non è stato selezionato viene generato un errore (CY=1) e 
+;PSW <- se il segmento non è stato selezionato viene generato un errore (CY=1)
 mms_get_selected_data_segment_flags:            push h
                                                 lda mms_data_selected_segment_id
                                                 ora a 
                                                 jnz mms_get_selected_data_segment_flags_next 
                                                 mvi a,mms_segment_data_not_found_error_code  
-                                                sta mms_data_segment_generated_error_code
                                                 stc 
                                                 jmp mms_get_selected_data_segment_flags_end
 mms_get_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
@@ -918,13 +906,13 @@ mms_segment_data_transfer:          push psw
                                     ora a 
                                     jnz mms_segment_data_transfer_next 
                                     mvi a,mms_destination_segment_not_found 
-                                    sta mms_data_segment_generated_error_code
+                                   
                                     jmp mms_segment_data_transfer_end
 mms_segment_data_transfer_next:     lda mms_data_selected_segment_id
                                     ora a 
                                     jnz mms_segment_data_transfer_next2
                                     mvi a,mms_source_segment_not_selected
-                                    sta mms_data_segment_generated_error_code 
+                                    
                                     jmp mms_segment_data_transfer_end
 mms_segment_data_transfer_next2:    push h                                      ;SP -> [indirizzo destinazione][offset destinazione][offset sorgente][numero bytes][id segmento]
                                     dcx h 
@@ -953,7 +941,7 @@ mms_segment_data_transfer_next2:    push h                                      
                                     inx sp 
                                     inx sp 
                                     mvi a,mms_destination_segment_overflow 
-                                    sta mms_data_segment_generated_error_code
+                                   
                                     jmp mms_segment_data_transfer_end
 mms_segment_data_transfer_next3:    pop d                                       ;SP -> [offset destinazione][offset sorgente][numero bytes][id segmento]
                                     xthl 
@@ -988,7 +976,7 @@ mms_segment_data_transfer_next3:    pop d                                       
                                     inx sp 
                                     inx sp 
                                     mvi a,mms_source_segment_overflow
-                                    sta mms_data_segment_generated_error_code
+                                   
                                     jmp mms_segment_data_transfer_end
 mms_segment_data_transfer_next4:    lhld mms_data_selected_segment_address
                                     xchg 
@@ -1043,7 +1031,7 @@ mms_segment_data_transfer_next4:    lhld mms_data_selected_segment_address
                                     inx sp 
                                     inx sp                
                                     mvi a,mms_operation_ok
-                                    sta mms_data_segment_generated_error_code
+                                   
                                     inx sp 
                                     inx sp 
                                     inx sp 
