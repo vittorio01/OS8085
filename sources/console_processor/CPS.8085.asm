@@ -7,10 +7,14 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk
-                lxi b,file_name 
-                lxi d,extension_name 
+                mvi a,%10111111
+                lxi b,file_name2
+                lxi d,extension_name2
                 call fsm_create_file_header
-                
+                lxi b,file_name2
+                lxi d,extension_name2
+                call fsm_select_file_header
+                call fsm_delete_selected_file_header
                 hlt
 
 file_name:  .text "file di prova"
@@ -18,5 +22,10 @@ file_name:  .text "file di prova"
 
 extension_name: .text "prg"
                 .b 0
+
+file_name2: .text "file molto bello" 
+            .b 0 
+extension_name2:    .text "culo"
+                    .b 0
 
 CPS_level_end:
