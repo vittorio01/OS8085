@@ -32,7 +32,7 @@ BIOS        .equ mms+2048
 .include "sources/libraries/string/string_ncompare.8085.asm"
 
 .org $A000
-.incbin "bin/eprom_disk_image.sfs", $0000, $6000
+.incbin "bin/eprom_disk_image.bin", $0000, $6000
 .print "CPS -> ", CPS 
 .print "FSM -> ", FSM 
 .print "MMS -> ", MMS 
