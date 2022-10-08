@@ -751,7 +751,8 @@ mms_data_bitstream_loop:    mvi m,$ff
 ;PSW <- risultato dell'operazione (se è andata a buon fine il carry assume 0, altrimenti 1)
 ;per ricevere informazioni in caso di errore si deve chiamare la funzione mms_read_data_segment_operation_error_code
 
-mms_read_selected_data_segment_byte:                    push h 
+mms_read_selected_data_segment_byte:                    
+                                                        push h 
                                                         inx h 
                                                         lda mms_data_selected_segment_dimension
                                                         sub l 
