@@ -7,12 +7,16 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
-                lxi d,2
-                lxi h,0
-                call fsm_append_pages
-                lxi h,0 
-                lxi d,2
-                call fsm_append_pages
+                lxi b,file_name2 
+                lxi d,extension_name2
+                mvi a,%10110000
+                call fsm_create_file_header
+                call fsm_select_file_header
+                lxi b,0 
+                lxi d,4096 
+                call fsm_selected_file_append_data_bytes
+                lxi d,1024
+                call fsm_selected_file_append_data_bytes
                 hlt
 
 file_name:  .text "file di prova"
