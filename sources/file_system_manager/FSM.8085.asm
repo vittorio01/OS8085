@@ -718,6 +718,83 @@ fsm_clear_fat_table_load_page_error:            inx sp
 
 ;funzioni dedicare alla gestone del corpo dei files
 
+;fsm_selected_file_clear elimina tutto il contenuto del file selezionato precedentemente 
+; A <- esito dell'operazione 
+
+fsm_selected_file_wipe:         push d 
+                                push h 
+                                push b 
+                                call fsm_load_selected_file_header
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_wipe_end
+                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                dad d 
+                                call mms_read_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end
+                                mov e,a 
+                                inx h 
+                                call mms_read_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end
+                                mov d,a 
+                                xchg  
+                                lxi b,0 
+                                push h 
+fsm_selected_file_wipe_next:    mov a,l 
+                                ana h 
+                                cpi $ff 
+                                jz fsm_selected_file_wipe_next2
+                                mov e,l 
+                                mov d,h 
+                                inx b 
+                                call fsm_get_page_link
+                                cpi fsm_operation_ok
+                                jz fsm_selected_file_wipe_next 
+                                inx sp 
+                                inx sp 
+                                jmp fsm_selected_file_wipe_end 
+fsm_selected_file_wipe_next2:   mov a,c 
+                                ora b 
+                                jz fsm_selected_file_wipe_end2
+                                pop h  
+                                mov e,c 
+                                mov d,b 
+                                call fsm_set_first_free_page_list
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_wipe_end
+                                call fsm_load_selected_file_header
+                                cpi fsm_operation_ok
+                                jnz fsm_selected_file_wipe_end
+                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                dad d 
+                                mvi a,$ff
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end
+                                dcx h 
+                                mvi a,$ff 
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end
+                                dcx h 
+                                mvi a,0
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end 
+                                dcx h 
+                                mvi a,0
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end 
+                                dcx h 
+                                mvi a,0
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end 
+                                dcx h 
+                                mvi a,0
+                                call mms_write_selected_data_segment_byte
+                                jc fsm_selected_file_wipe_end 
+fsm_selected_file_wipe_end2:    mvi a,fsm_operation_ok
+fsm_selected_file_wipe_end:     pop b 
+                                pop h 
+                                pop d 
+                                ret 
+
 ;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
 ;BCDE -> numero di bytes da aggiungere
 ;A <- esito dell'operazione
