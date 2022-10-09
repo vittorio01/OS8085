@@ -15,8 +15,7 @@ system_boot:    lxi sp,stack_memory_start
                 lxi b,0 
                 lxi d,4096 
                 call fsm_selected_file_append_data_bytes
-                lxi d,1024
-                call fsm_selected_file_append_data_bytes
+                call fsm_selected_file_wipe
                 hlt
 
 file_name:  .text "file di prova"
