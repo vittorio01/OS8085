@@ -718,6 +718,237 @@ fsm_clear_fat_table_load_page_error:            inx sp
 
 ;funzioni dedicare alla gestone del corpo dei files
 
+;fsm_selected_file_remove_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
+;BCDE -> numero di bytes da aggiungere
+;A <- esito dell'operazione
+
+fsm_selected_file_remove_data_bytes:                push h 
+                                                    push b 
+                                                    push d  
+                                                    call fsm_load_selected_file_header
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end
+                                                    push d 
+                                                    lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    dad d 
+                                                    pop d 
+                                                                
+                                                    push b 
+                                                    push d                                           ;SP -> [numero di bytes (4)]
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end3
+                                                    mov e,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end3
+                                                    mov d,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end3
+                                                    mov c,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end3
+                                                    mov b,a 
+                                                    xthl 
+                                                    mov a,e 
+                                                    sub l 
+                                                    mov e,a 
+                                                    mov a,d 
+                                                    sbb h 
+                                                    mov d,a 
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov a,c 
+                                                    sbb l 
+                                                    mov c,a 
+                                                    mov a,b 
+                                                    sbb h 
+                                                    mov b,a 
+                                                    inx sp 
+                                                    inx sp      
+                                                    jc fsm_selected_file_remove_data_bytes_wipe   
+                                                    ora c 
+                                                    ora d 
+                                                    ora e                                   
+                                                    jnz fsm_selected_file_remove_data_bytes_no_wipe
+fsm_selected_file_remove_data_bytes_wipe:           call fsm_selected_file_wipe
+                                                    jmp fsm_selected_file_remove_data_bytes_end
+fsm_selected_file_remove_data_bytes_no_wipe:        lxi h,0 
+                                                    push h 
+                                                    lxi h,fsm_uncoded_page_dimension
+                                                    push h 
+                                                    push b 
+                                                    push d 
+                                                    call unsigned_divide_long
+                                                    pop h 
+                                                    mov a,l 
+                                                    ora h 
+                                                    pop h 
+                                                    ora l 
+                                                    ora h 
+                                                    jz fsm_selected_file_remove_data_bytes_remainder1 
+                                                    mvi a,1 
+fsm_selected_file_remove_data_bytes_remainder1:     pop h 
+                                                    add l 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    aci 0 
+                                                    mov h,a 
+                                                    inx sp 
+                                                    inx sp                          
+                                                    push h                                                              ;SP -> [numero di pagine finale]
+                                                    call fsm_load_selected_file_header
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end
+                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    dad b 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov e,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov d,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov c,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov b,a 
+                                                    lxi h,0 
+                                                    push h 
+                                                    lxi h,fsm_uncoded_page_dimension
+                                                    push h 
+                                                    push b 
+                                                    push d 
+                                                    call unsigned_divide_long
+                                                    pop h 
+                                                    mov a,l 
+                                                    ora h 
+                                                    pop h 
+                                                    ora l 
+                                                    ora h 
+                                                    jz fsm_selected_file_remove_data_bytes_remainder2
+                                                    mvi a,1
+fsm_selected_file_remove_data_bytes_remainder2:     pop h 
+                                                    add l 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    aci 0 
+                                                    mov h,a 
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop d   
+                                                    mov a,l
+                                                    sub e 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    sbb d 
+                                                    mov h,a 
+                                                    ora l
+                                                    jz fsm_selected_file_remove_data_bytes_next4
+                                                    push h                                              ;SP -> [pagine da eliminare]
+                                                    call fsm_load_selected_file_header
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end
+                                                    mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                                    add l 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    aci 0 
+                                                    mov h,a 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov c,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end4
+                                                    mov b,a 
+                                                    mov l,c  
+                                                    mov h,b
+fsm_selected_file_remove_data_bytes_loop:           mov a,e 
+                                                    ora d 
+                                                    jz fsm_selected_file_remove_data_bytes_loop_end 
+                                                    dcx d
+                                                    call fsm_get_page_link
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end4
+                                                    jmp fsm_selected_file_remove_data_bytes_loop
+fsm_selected_file_remove_data_bytes_loop_end:       pop d 
+                                                    call fsm_set_first_free_page_list
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end
+fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_header
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_file_remove_data_bytes_end
+                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                                    dad b
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    mov e,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    mov d,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    mov c,a 
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    mov b,a 
+                                                    xthl 
+                                                    mov a,e 
+                                                    sub l 
+                                                    mov e,a 
+                                                    mov a,d 
+                                                    sbb h 
+                                                    mov d,a 
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov a,c 
+                                                    sbb l 
+                                                    mov c,a 
+                                                    mov a,b 
+                                                    sbb h 
+                                                    mov b,a 
+                                                    xthl 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    mov a,b 
+                                                    call mms_write_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    dcx h 
+                                                    mov a,c 
+                                                    call mms_write_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    dcx h 
+                                                    mov a,d 
+                                                    call mms_write_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    dcx h 
+                                                    mov a,e 
+                                                    call mms_write_selected_data_segment_byte
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    mvi a,fsm_operation_ok
+                                                    jmp fsm_selected_file_remove_data_bytes_end
+fsm_selected_file_remove_data_bytes_end3:           inx sp 
+                                                    inx sp 
+fsm_selected_file_remove_data_bytes_end4:           inx sp 
+                                                    inx sp 
+fsm_selected_file_remove_data_bytes_end:            pop d   
+                                                    pop b   
+                                                    pop h 
+                                                    ret 
+
 ;fsm_selected_file_clear elimina tutto il contenuto del file selezionato precedentemente 
 ; A <- esito dell'operazione 
 
