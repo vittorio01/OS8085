@@ -719,58 +719,58 @@ fsm_clear_fat_table_load_page_error:            inx sp
 
 ;funzioni dedicare alla gestone del corpo dei files
 
-;fsm_selected_file_read_bytes restituisce i bytes contenuti nel file precedentemente selezionato in un segmento di memoria a scelta 
+;fsm_selected_file_write_bytes scrive i bytes contenuti nel file precedentemente selezionato di un segmento di memoria a scelta 
 ;A -> id del segmento di destinazione 
 ;BC -> numero di bytes da copiare 
-;DE -> offset nel segmento di destinazione 
+;HL -> offset nel segmento sorgente
 
 ;A <- esito dell'operazione 
+;BC <- numero di bytes non copiati
 
-fsm_selected_file_read_bytes:       push h 
-                                    push d 
-                                    push b 
-                                    push psw            ;SP -> [id destinazione]
-                                    mov l,e 
-                                    mov h,d 
-                                    dad b 
-                                    call mms_select_low_memory_data_segment
-                                    cpi mms_operation_ok
-                                    jnz fsm_selected_file_read_bytes_end2 
-                                    push h 
-                                    call mms_get_low_memory_program_dimension
-                                    xchg 
-                                    xthl 
-                                    mov a,l 
-                                    sub e 
-                                    mov a,h 
-                                    sbb d 
-                                    xthl 
-                                    xchg 
-                                    inx sp 
-                                    inx sp 
-                                    jc fsm_selected_file_read_bytes_next
-                                    mvi a,fsm_destination_segment_overflow 
-                                    jmp fsm_selected_file_read_bytes_end2
-fsm_selected_file_read_bytes_next:  lhld fsm_selected_file_data_pointer_page_address
-                                    call fsm_move_data_page
-                                    cpi fsm_operation_ok
-                                    jnz fsm_selected_file_read_bytes_end2
-                                    push h                                              
-                                    push b                                              ;SP -> [bytes da copiare][pagina corrente][id destinazione]
-                                    lxi h,fsm_uncoded_page_dimension
-                                    mov a,l 
-
-                                    
-                                    lhld fsm_selected_file_data_pointer_offset
-
-                                    
-
-fsm_selected_file_read_bytes_end2:  inx sp 
-                                    inx sp 
-fsm_selected_file_read_bytes_end:   pop b 
-                                    pop d 
-                                    pop h 
-                                    ret 
+fsm_selected_file_write_bytes:              push h 
+                                            push d 
+                                            push psw      
+                                            xchg                                       
+                                            lhld fsm_selected_file_data_pointer_page_address 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end2
+                                            push h                                              ;SP -> [pagina corrente][id destinazione]
+                                            lhld fsm_selected_file_data_pointer_offset  
+fsm_Selected_file_write_bytes_loop:         inx sp 
+                                            inx sp 
+                                            xthl 
+                                            mov a,h 
+                                            xthl 
+                                            inx sp 
+                                            inx sp 
+                                            call mms_segment_data_transfer
+                                            cpi mms_operation_ok
+                                            jz fsm_Selected_file_write_bytes_loop_end
+                                            cpi mms_destination_segment_overflow
+                                            jnz fsm_Selected_file_write_bytes_loop
+                                            mvi a,fsm_destination_segment_overflow
+                                            jmp fsm_selected_file_write_bytes_end
+fsm_Selected_file_write_bytes_loop2:        cpi mms_source_segment_overflow
+                                            jnz fsm_selected_file_write_bytes_end
+                                            xthl 
+                                            call fsm_get_page_link
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end
+                                            xthl 
+                                            lxi h,0 
+                                            jmp fsm_Selected_file_write_bytes_loop
+fsm_Selected_file_write_bytes_loop_end:     mvi a,fsm_operation_ok
+fsm_selected_file_write_bytes_end:          inx sp 
+                                            inx sp 
+fsm_selected_file_write_bytes_end2:         inx sp 
+                                            inx sp 
+                                            pop d 
+                                            pop h 
+                                            ret 
 
 ;fsm_selected_file_set_data_pointer imposta la posizione del puntatore nel file precedentemente selezionato 
 ;BCDE -> posizione 
