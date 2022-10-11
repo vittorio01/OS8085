@@ -203,6 +203,7 @@ fsm_header_exist                    .equ $2A
 fsm_end_of_list                     .equ $2B 
 fsm_data_pointer_not_setted         .equ $2C 
 fsm_end_of_file                     .equ $2D
+fsm_destination_segment_overflow    .equ $2E
 fsm_operation_ok                    .equ $ff 
 
 
@@ -718,7 +719,160 @@ fsm_clear_fat_table_load_page_error:            inx sp
 
 ;funzioni dedicare alla gestone del corpo dei files
 
-;fsm_selected_file_remove_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
+;fsm_selected_file_read_bytes restituisce i bytes contenuti nel file precedentemente selezionato in un segmento di memoria a scelta 
+;A -> id del segmento di destinazione 
+;BC -> numero di bytes da copiare 
+;DE -> offset nel segmento di destinazione 
+
+;A <- esito dell'operazione 
+
+fsm_selected_file_read_bytes:       push h 
+                                    push d 
+                                    push b 
+                                    push psw            ;SP -> [id destinazione]
+                                    mov l,e 
+                                    mov h,d 
+                                    dad b 
+                                    call mms_select_low_memory_data_segment
+                                    cpi mms_operation_ok
+                                    jnz fsm_selected_file_read_bytes_end2 
+                                    push h 
+                                    call mms_get_low_memory_program_dimension
+                                    xchg 
+                                    xthl 
+                                    mov a,l 
+                                    sub e 
+                                    mov a,h 
+                                    sbb d 
+                                    xthl 
+                                    xchg 
+                                    inx sp 
+                                    inx sp 
+                                    jc fsm_selected_file_read_bytes_next
+                                    mvi a,fsm_destination_segment_overflow 
+                                    jmp fsm_selected_file_read_bytes_end2
+fsm_selected_file_read_bytes_next:  lhld fsm_selected_file_data_pointer_page_address
+                                    call fsm_move_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_selected_file_read_bytes_end2
+                                    push h                                              
+                                    push b                                              ;SP -> [bytes da copiare][pagina corrente][id destinazione]
+                                    lxi h,fsm_uncoded_page_dimension
+                                    mov a,l 
+
+                                    
+                                    lhld fsm_selected_file_data_pointer_offset
+
+                                    
+
+fsm_selected_file_read_bytes_end2:  inx sp 
+                                    inx sp 
+fsm_selected_file_read_bytes_end:   pop b 
+                                    pop d 
+                                    pop h 
+                                    ret 
+
+;fsm_selected_file_set_data_pointer imposta la posizione del puntatore nel file precedentemente selezionato 
+;BCDE -> posizione 
+; A <- esito dell'operazione 
+fsm_selected_file_set_data_pointer:             push h 
+                                                push b
+                                                push d 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_set_data_pointer_end
+fsm_selected_file_set_data_pointer_next:        lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                                dad b 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov e,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov d,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov c,a 
+                                                inx h  
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov b,a 
+                                                inx h 
+                                                xthl 
+                                                mov a,l 
+                                                sub e
+                                                mov a,h 
+                                                sbb d 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov a,l 
+                                                sbb c
+                                                mov a,h
+                                                sbb b
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                jnc fsm_selected_file_set_data_pointer_error
+                                                xthl 
+                                                mov e,l 
+                                                mov d,h 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov c,l 
+                                                mov b,h 
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                push h  
+                                                lxi h,0 
+                                                push h 
+                                                lxi h,fsm_uncoded_page_dimension
+                                                push h 
+                                                push b 
+                                                push d  
+                                                call unsigned_divide_long 
+                                                pop h
+                                                shld fsm_selected_file_data_pointer_offset
+                                                inx sp 
+                                                inx sp  
+                                                pop b
+                                                inx sp 
+                                                inx sp 
+                                                pop h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov e,a
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_selected_file_set_data_pointer_end
+                                                mov d,a 
+                                                xchg 
+fsm_selected_file_set_data_pointer_loop:        mov a,c 
+                                                ora b 
+                                                jz fsm_selected_file_set_data_pointer_loop_end 
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_file_set_data_pointer_end
+                                                dcx b 
+                                                jmp fsm_selected_file_set_data_pointer_loop
+fsm_selected_file_set_data_pointer_loop_end:    shld fsm_selected_file_data_pointer_page_address
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ori %00000100
+                                                sta fsm_selected_disk_loaded_page_flags
+                                                mvi a,fsm_operation_ok
+                                                jmp fsm_selected_file_set_data_pointer_end
+fsm_selected_file_set_data_pointer_error:       mvi a,fsm_bad_argument                    
+fsm_selected_file_set_data_pointer_end:         pop d  
+                                                pop b
+                                                pop h 
+                                                ret  
+
+;fsm_selected_file_remove_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesti
 ;BCDE -> numero di bytes da aggiungere
 ;A <- esito dell'operazione
 
@@ -1026,7 +1180,7 @@ fsm_selected_file_wipe_end:     pop b
                                 pop d 
                                 ret 
 
-;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesto (massimo 64k)
+;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesti
 ;BCDE -> numero di bytes da aggiungere
 ;A <- esito dell'operazione
 

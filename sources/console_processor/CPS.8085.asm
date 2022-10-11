@@ -4,6 +4,24 @@ cps_functions:      .org CPS
 system_boot:    lxi sp,stack_memory_start
                 call bios_warm_boot
                 call mms_low_memory_initialize
+                lxi h,32 
+                call mms_load_low_memory_program
+                lxi h,64
+                call mms_create_low_memory_data_segment
+                mvi d,64
+                lxi h,low_memory_start
+loop:           mov m,d
+                inx h
+                dcr d 
+                jnz loop 
+loop_end:       lxi h,0 
+                lxi d,0 
+                lxi b,64 
+                mvi a,0
+                call mms_program_bytes_read
+                hlt 
+
+
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
@@ -15,8 +33,8 @@ system_boot:    lxi sp,stack_memory_start
                 lxi b,0 
                 lxi d,4096 
                 call fsm_selected_file_append_data_bytes
-                lxi d,4096
-                call fsm_selected_file_remove_data_bytes
+                lxi d,1024
+                call fsm_selected_file_set_data_pointer
                 hlt
 
 file_name:  .text "file di prova"

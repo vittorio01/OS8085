@@ -12,8 +12,8 @@ high_memory_start        .equ $7000
 
 
 CPS         .equ high_memory_start
-FSM         .equ CPS+1200
-MMS         .equ FSM+5120
+FSM         .equ CPS+2048
+MMS         .equ FSM+4096+2048
 BIOS        .equ mms+2048
 
 .include "sources/bios/PX_MINI_BIOS.8085.asm" 
