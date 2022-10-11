@@ -414,7 +414,7 @@ mms_program_bytes_read:         mvi a,$ff
                                 jmp mms_program_bytes_read_end
 mms_program_bytes_read_next:    dad b 
                                 xchg 
-                                lhld mms_data_selected_segment_dimension
+                                call mms_get_low_memory_program_dimension
                                 mov a,e 
                                 sub l 
                                 mov e,a 
@@ -441,7 +441,7 @@ mms_program_bytes_read_next:    dad b
                                 pop h 
 mms_program_bytes_read_next2:   pop d 
                                 push d 
-                                lxi h,low_memory_start
+                                lhld mms_data_selected_segment_dimension
                                 xchg 
                                 dad b 
                                 mov a,l 
@@ -470,7 +470,7 @@ mms_program_bytes_read_next2:   pop d
                                 pop h 
 mms_program_bytes_read_next3:   pop d 
                                 pop h 
-                                push h 
+                                push h
                                 push d 
                                 push b 
                                 lxi b,low_memory_start 
@@ -478,7 +478,9 @@ mms_program_bytes_read_next3:   pop d
                                 dad b
                                 mov c,e
                                 mov b,d
+                                xchg 
                                 lhld mms_data_selected_segment_address
+                        
                                 dad b 
                                 pop b 
                                 push b 
@@ -487,14 +489,14 @@ mms_program_bytes_read_next3:   pop d
                                 jnz mms_program_bytes_read_end
                                 mov c,l 
                                 mov b,h 
-                                lhld mms_data_selected_segment_address
+                                lxi h,low_memory_start
                                 mov a,e 
                                 sub l 
                                 mov e,a 
                                 mov a,d 
                                 sbb h 
                                 mov d,a 
-                                lxi h,low_memory_start
+                                lhld mms_data_selected_segment_address
                                 mov a,c 
                                 sub l 
                                 mov l,a 
