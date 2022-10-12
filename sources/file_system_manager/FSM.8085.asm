@@ -204,6 +204,8 @@ fsm_end_of_list                     .equ $2B
 fsm_data_pointer_not_setted         .equ $2C 
 fsm_end_of_file                     .equ $2D
 fsm_destination_segment_overflow    .equ $2E
+fsm_file_pointer_overflow           .equ $2F
+fsm_source_segment_overflow         .equ $30
 fsm_operation_ok                    .equ $ff 
 
 
@@ -726,35 +728,41 @@ fsm_clear_fat_table_load_page_error:            inx sp
 
 ;A <- esito dell'operazione 
 ;BC <- numero di bytes non copiati
+;HL -> offset dopo l'esecuzione
 
-fsm_selected_file_write_bytes:              push h 
-                                            push d 
-                                            push psw      
-                                            xchg               
-                                            call fsm_reselect_mms_segment
-                                            cpi fsm_operation_ok
-                                            jnz fsm_selected_file_write_bytes_end2                        
+fsm_selected_file_write_bytes:              push d   
+                                            push psw 
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ani %00000100
+                                            jnz fsm_selected_file_write_bytes_next 
+                                            mvi a,fsm_data_pointer_not_setted
+                                            jmp fsm_selected_file_write_bytes_end2
+fsm_selected_file_write_bytes_next:         xchg               
                                             lhld fsm_selected_file_data_pointer_page_address 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
                                             jnz fsm_selected_file_write_bytes_end2
-                                            push h                                              ;SP -> [pagina corrente][id destinazione]
+                                            push h                                              ;SP -> [pagina corrente][id sorgente]
                                             lhld fsm_selected_file_data_pointer_offset  
 fsm_Selected_file_write_bytes_loop:         inx sp 
                                             inx sp 
                                             xthl 
                                             mov a,h 
                                             xthl 
-                                            inx sp 
-                                            inx sp 
+                                            dcx sp 
+                                            dcx sp 
+                                            call mms_select_low_memory_data_segment
+                                            cpi mms_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end
+                                            lda fsm_page_buffer_segment_id
                                             call mms_segment_data_transfer
                                             cpi mms_operation_ok
-                                            jz fsm_Selected_file_write_bytes_loop_end
-                                            cpi mms_destination_segment_overflow
-                                            jnz fsm_Selected_file_write_bytes_loop2
-                                            mvi a,fsm_destination_segment_overflow
+                                            jz fsm_selected_file_write_bytes_loop_end
+                                            cpi mms_source_segment_overflow
+                                            jnz fsm_selected_file_write_bytes_loop2
+                                            mvi a,fsm_source_segment_overflow
                                             jmp fsm_selected_file_write_bytes_end
-fsm_Selected_file_write_bytes_loop2:        cpi mms_source_segment_overflow
+fsm_Selected_file_write_bytes_loop2:        cpi mms_destination_segment_overflow
                                             jnz fsm_selected_file_write_bytes_end
                                             xthl 
                                             call fsm_get_page_link
@@ -771,8 +779,73 @@ fsm_selected_file_write_bytes_end:          inx sp
                                             inx sp 
 fsm_selected_file_write_bytes_end2:         inx sp 
                                             inx sp 
+                                            xchg 
                                             pop d 
-                                            pop h 
+                                            ret 
+
+;fsm_selected_file_read_bytes scrive i bytes contenuti in un segmento nel file precedentemente selezionato
+;A -> id del segmento di destinazione 
+;BC -> numero di bytes da copiare 
+;HL -> offset nel segmento sorgente
+
+;A <- esito dell'operazione 
+;BC <- numero di bytes non copiati
+;HL <- offset dopo l'esecuzione 
+
+fsm_selected_file_read_bytes:               push d 
+                                            push psw  
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ani %00000100
+                                            jnz fsm_selected_file_read_bytes_next  
+                                            mvi a,fsm_data_pointer_not_setted
+                                            jmp fsm_selected_file_read_bytes_end2   
+fsm_selected_file_read_bytes_next:          xchg               
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_read_bytes_end2                        
+                                            lhld fsm_selected_file_data_pointer_page_address 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_read_bytes_end2
+                                            push h                                              ;SP -> [pagina corrente][id destinazione]
+                                            lhld fsm_selected_file_data_pointer_offset  
+                                            xchg
+fsm_Selected_file_read_bytes_loop:          inx sp 
+                                            inx sp 
+                                            xthl 
+                                            mov a,h 
+                                            xthl 
+                                            dcx sp 
+                                            dcx sp                  
+                                            call mms_segment_data_transfer
+                                            cpi mms_operation_ok
+                                            jz fsm_Selected_file_read_bytes_loop_end
+                                            cpi mms_destination_segment_overflow
+                                            jnz fsm_Selected_file_read_bytes_loop2
+                                            mvi a,fsm_destination_segment_overflow
+                                            jmp fsm_selected_file_read_bytes_end
+fsm_Selected_file_read_bytes_loop2:         cpi mms_source_segment_overflow
+                                            jnz fsm_selected_file_read_bytes_end
+                                            xthl 
+                                            call fsm_get_page_link
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_read_bytes_end3
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_read_bytes_end3
+                                            xthl 
+                                            lxi d,0 
+                                            jmp fsm_Selected_file_read_bytes_loop
+fsm_Selected_file_read_bytes_end3:          xthl 
+                                            jmp fsm_selected_file_read_bytes_end
+fsm_Selected_file_read_bytes_loop_end:      mvi a,fsm_operation_ok
+fsm_selected_file_read_bytes_end:           inx sp 
+                                            inx sp 
+                                            xchg 
+fsm_selected_file_read_bytes_end2:          xchg 
+                                            inx sp 
+                                            inx sp 
+                                            pop d 
                                             ret 
 
 ;fsm_selected_file_set_data_pointer imposta la posizione del puntatore nel file precedentemente selezionato 
@@ -869,7 +942,7 @@ fsm_selected_file_set_data_pointer_loop_end:    shld fsm_selected_file_data_poin
                                                 sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
                                                 jmp fsm_selected_file_set_data_pointer_end
-fsm_selected_file_set_data_pointer_error:       mvi a,fsm_bad_argument                    
+fsm_selected_file_set_data_pointer_error:       mvi a,fsm_file_pointer_overflow              
 fsm_selected_file_set_data_pointer_end:         pop d  
                                                 pop b
                                                 pop h 
