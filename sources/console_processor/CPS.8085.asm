@@ -4,7 +4,7 @@ cps_functions:      .org CPS
 system_boot:    lxi sp,stack_memory_start
                 call bios_warm_boot
                 call mms_low_memory_initialize
-                lxi h,1024
+                lxi h,512
                 call mms_create_low_memory_data_segment
                 lxi h,0
 loop:           mov a,l 
@@ -17,13 +17,13 @@ loop_end:       call fsm_init
                 lxi b,file_name2 
                 lxi d,extension_name2
                 call fsm_select_file_header
-                lxi d,0
+                lxi d,256
                 lxi b,0
                 call fsm_selected_file_set_data_pointer
-                lxi b,1024
+                lxi b,512
                 lxi h,0
                 mvi a,1
-                call fsm_selected_file_write_bytes
+                call fsm_selected_file_read_bytes
 
                 hlt
 
