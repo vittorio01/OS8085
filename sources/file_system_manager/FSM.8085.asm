@@ -730,7 +730,10 @@ fsm_clear_fat_table_load_page_error:            inx sp
 fsm_selected_file_write_bytes:              push h 
                                             push d 
                                             push psw      
-                                            xchg                                       
+                                            xchg               
+                                            call fsm_reselect_mms_segment
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end2                        
                                             lhld fsm_selected_file_data_pointer_page_address 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
@@ -748,7 +751,7 @@ fsm_Selected_file_write_bytes_loop:         inx sp
                                             cpi mms_operation_ok
                                             jz fsm_Selected_file_write_bytes_loop_end
                                             cpi mms_destination_segment_overflow
-                                            jnz fsm_Selected_file_write_bytes_loop
+                                            jnz fsm_Selected_file_write_bytes_loop2
                                             mvi a,fsm_destination_segment_overflow
                                             jmp fsm_selected_file_write_bytes_end
 fsm_Selected_file_write_bytes_loop2:        cpi mms_source_segment_overflow
