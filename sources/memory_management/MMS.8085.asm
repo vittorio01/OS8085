@@ -288,6 +288,9 @@ mms_program_bytes_write_next:   dad b
                                 sbb h 
                                 mov d,a 
                                 jc mms_program_bytes_write_next2
+                                mov a,e 
+                                ora d 
+                                jz mms_program_bytes_write_next2
                                 mov a,c 
                                 sub e 
                                 mov c,a 
@@ -317,6 +320,9 @@ mms_program_bytes_write_next2:  pop d
                                 sbb d 
                                 mov d,a 
                                 jc mms_program_bytes_write_next3
+                                mov a,e 
+                                ora d 
+                                jz mms_program_bytes_write_next3
                                 mov a,c 
                                 sub e 
                                 mov c,a 
@@ -422,6 +428,9 @@ mms_program_bytes_read_next:    dad b
                                 sbb h 
                                 mov d,a 
                                 jc mms_program_bytes_read_next2
+                                mov a,e 
+                                ora d 
+                                jz mms_program_bytes_read_next2
                                 mov a,c 
                                 sub e 
                                 mov c,a 
@@ -451,6 +460,9 @@ mms_program_bytes_read_next2:   pop d
                                 sbb d 
                                 mov d,a 
                                 jc mms_program_bytes_read_next3
+                                mov a,e 
+                                ora d 
+                                jz mms_program_bytes_read_next3
                                 mov a,c 
                                 sub e 
                                 mov c,a 
@@ -1031,6 +1043,9 @@ mms_segment_data_transfer_next2:    push h                                      
                                     sbb d 
                                     mov d,a 
                                     jc mms_segment_data_transfer_next3 
+                                    mov a,e 
+                                    ora d 
+                                    jz mms_segment_data_transfer_next3
                                     mov a,c 
                                     sub e 
                                     mov c,a 
@@ -1080,6 +1095,9 @@ mms_segment_data_transfer_next3:    pop d                                       
                                     sbb h
                                     mov h,a 
                                     jc mms_segment_data_transfer_next4
+                                    mov a,l 
+                                    ora h 
+                                    jz mms_segment_data_transfer_next4
                                     mov a,c 
                                     sub l 
                                     mov c,a 
