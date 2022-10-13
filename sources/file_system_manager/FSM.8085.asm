@@ -206,6 +206,8 @@ fsm_end_of_file                     .equ $2D
 fsm_destination_segment_overflow    .equ $2E
 fsm_file_pointer_overflow           .equ $2F
 fsm_source_segment_overflow         .equ $30
+fsm_selected_file_not_executable    .equ $31 
+fsm_program_too_big                 .equ $32 
 fsm_operation_ok                    .equ $ff 
 
 
@@ -720,6 +722,98 @@ fsm_clear_fat_table_load_page_error:            inx sp
                                                 jmp fsm_clear_fat_table_reset_end
 
 ;funzioni dedicare alla gestone del corpo dei files
+
+;fsm_load_selected_program carica in memoria il file precedentemente selezionato (verifica se è eseguibile e se rientra nella dimensione della ram disponibile)
+;A <- esito dell'operazione 
+fsm_load_selected_program:                      push h 
+                                                push d 
+                                                push b 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_load_selected_program_end
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                ani fsm_header_program_bit
+                                                jnz fsm_load_selected_program_verified
+                                                mvi a,fsm_selected_file_not_executable 
+fsm_load_selected_program_verified:             lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                dad d 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                mov e,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                mov d,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end 
+                                                mov c,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                mov b,a 
+                                                inx h
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                mov a,c 
+                                                ora b 
+                                                jz fsm_load_selected_program_dimension_check
+                                                mvi a,fsm_program_too_big 
+                                                jmp fsm_load_selected_program_end
+fsm_load_selected_program_dimension_check:      mov c,e 
+                                                mov b,d 
+                                                xchg 
+                                                call mms_free_low_ram_bytes
+                                                mov a,l 
+                                                sub c 
+                                                mov a,h 
+                                                sbb b
+                                                jnc fsm_load_selected_program_dimension_ok 
+                                                mvi a,fsm_program_too_big
+                                                jmp fsm_load_selected_program_end
+fsm_load_selected_program_dimension_ok:         mov l,c 
+                                                mov h,b 
+                                                call mms_load_low_memory_program
+                                                cpi mms_operation_ok
+                                                jnz fsm_load_selected_program_end
+                                                xchg 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end
+                                                mov e,a 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc fsm_load_selected_program_end 
+                                                mov d,a 
+                                                xchg 
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_load_selected_program_end
+                                                push h                                  ;SP -> [pagina corrente]
+                                                lxi d,0 
+                                                lxi h,0 
+fsm_load_selected_program_load_loop:            call mms_program_bytes_write
+                                                cpi mms_operation_ok
+                                                jz fsm_load_selected_program_load_loop_end
+                                                cpi fsm_source_segment_overflow
+                                                jnz fsm_load_selected_program_end2
+                                                xthl 
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_load_selected_program_end2
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_load_selected_program_end2
+                                                lxi d,0 
+                                                xthl 
+                                                jmp fsm_load_selected_program_load_loop
+fsm_load_selected_program_load_loop_end:        mvi a,fsm_operation_ok
+fsm_load_selected_program_end2:                 inx sp 
+                                                inx sp 
+fsm_load_selected_program_end:                  pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
 
 ;fsm_selected_file_write_bytes scrive i bytes contenuti nel file precedentemente selezionato di un segmento di memoria a scelta 
 ;A -> id del segmento di destinazione 
