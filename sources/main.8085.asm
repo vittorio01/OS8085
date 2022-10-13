@@ -1,6 +1,6 @@
 end_ram_address             .equ $7000
 max_system_stack_dimension  .equ 128
-reserved_memory_dimension   .equ $0080
+reserved_memory_dimension   .equ $0090
 
 
 reserved_memory_start    .equ $0000
@@ -32,7 +32,7 @@ BIOS        .equ mms+2048
 .include "sources/libraries/string/string_ncompare.8085.asm"
 
 .org $A000
-.incbin "bin/eprom_disk_image_file.bin", $0000, $6000
+.incbin "bin/eprom_disk_image_exe.bin", $0000, $6000
 .print "CPS -> ", CPS 
 .print "FSM -> ", FSM 
 .print "MMS -> ", MMS 

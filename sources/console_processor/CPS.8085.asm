@@ -4,38 +4,26 @@ cps_functions:      .org CPS
 system_boot:    lxi sp,stack_memory_start
                 call bios_warm_boot
                 call mms_low_memory_initialize
-                lxi h,512
-                call mms_create_low_memory_data_segment
-                lxi h,0
-loop:           mov a,l 
-                inx h
-                call mms_write_selected_data_segment_byte
-                jnc loop 
-loop_end:       call fsm_init
+                call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
-                lxi b,file_name2 
-                lxi d,extension_name2
+                lxi b,file_name
+                lxi d,extension_name
                 call fsm_select_file_header
-                lxi d,256
-                lxi b,0
-                call fsm_selected_file_set_data_pointer
-                lxi b,512
-                lxi h,0
-                mvi a,1
-                call fsm_selected_file_read_bytes
-
+                call fsm_load_selected_program
                 hlt
 
-file_name:  .text "file di prova"
+file_name:  .text "MAIN_PROGRAM"
             .b 0
 
-extension_name: .text "prg"
+extension_name: .text "BEF"
                 .b 0
 
-file_name2: .text "file molto bello" 
-            .b 0 
-extension_name2:    .text "culo"
-                    .b 0
-
+test_program:       mvi a,$AA 
+                    lxi h,$AAAA 
+                    lxi d,$BBBB 
+                    lxi b,$CCCC 
+                    hlt 
+test_program_end:       
+test_program_dim .equ test_program_end-test_program 
 CPS_level_end:
