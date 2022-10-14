@@ -158,8 +158,6 @@ fsm_selected_disk_fat_page_number       .equ $0072
 ;bit 3 -> è stata selezionata un'intestazione
 ;bit 2 -> è stato impostato il puntatore in un file 
 
-rst6_address                                .equ $0030          ;viene utilizzato l'interrupt RST6 per generare eccezioni 
-
 fsm_selected_disk_loaded_page               .equ $0073
 fsm_selected_disk_loaded_page_flags         .equ $0075
 fsm_selected_disk_free_page_number          .equ $0076
@@ -208,19 +206,48 @@ fsm_file_pointer_overflow           .equ $2F
 fsm_source_segment_overflow         .equ $30
 fsm_selected_file_not_executable    .equ $31 
 fsm_program_too_big                 .equ $32 
+fsm_read_only_file                  .equ $33 
 fsm_operation_ok                    .equ $ff 
 
 
 fsm_functions:  .org FSM 
-                jmp fsm_init 
-                ;jmp fsm_disk_format 
-                ;jmp fsm_disk_wipe 
-                ;jmp fsm_disk_mount 
+                ;funzioni dedicate alla gestione del disco 
+                jmp fsm_init                                        ;inizializza le risorse della fsm
+                jmp fsm_close                                       ;chiude le risorse della fsm
+                jmp fsm_select_disk                                 ;seleziona il drive desiderato
+                jmp fsm_format_disk                                 ;formatta il disco precedentemente selezionato
+                jmp fsm_wipe_disk                                   ;elimina tutti i file nel disco (non elimina la zona riservata al sistema)
+                jmp fsm_disk_set_name                               ;imposta il nome al disco
+                jmp fsm_disk_get_name                               ;legge il nome del disco
+                jmp fsm_disk_get_free_space                         ;restituisce il numero di bytes disponibili nel disco 
+                ;funzioni dedicate alla gestione delle intestazioni 
+                jmp fsm_search_file_header                          ;ricerca il file desiderato
+                jmp fsm_select_file_header                          ;seleziona il file desiderato
+                jmp fsm_create_file_header                          ;crea il file desiderato        
+                jmp fsm_get_selected_file_header_name               ;restituisce il nome del file selezionato
+                jmp fsm_get_selected_file_header_extension          ;restituisce l'estenzione del file selezionato
+                jmp fsm_get_selected_file_header_flags              ;restituisce le informazioni sul tipo di file selezionato
+                jmp fsm_get_selected_file_header_dimension          ;restituisce la dimensione del file selezionato
+                jmp fsm_set_selected_file_header_name_and_extension ;imposta nome ed estenzione al file selezionato 
+                jmp fsm_set_selected_file_header_flags              ;imposta le informazioni sul file selezionato
+                jmp fsm_delete_selected_file_header                 ;elimina il file selezionato
+                jmp fsm_reset_file_header_scan_pointer              ;resetta il puntatore alla lista dei files diponibili  
+                jmp fsm_increment_file_header_scan_pointer          ;incrementa il puntatore alla lista dei files disponibili
+                ;funzioni dedicate alla gestione del corpo dei files 
+                jmp fsm_selected_file_append_data_bytes             ;aumenta la dimensione del file selezionato
+                jmp fsm_selected_file_remove_data_bytes             ;diminuisce la dimensione del file selezionato
+                jmp fsm_selected_file_write_bytes                   ;scrive dei dati sul file selezionato
+                jmp fsm_selected_file_read_bytes                    ;legge dei dati dal file selezionato
+                jmp fsm_selected_file_wipe                          ;elimina tutto il contenuto del file 
+                jmp fsm_selected_file_set_data_pointer              ;imposta il puntatore nel corpo del file 
+                jmp fsm_load_selected_program                       ;carica il programma nella memoria e lo predispone per essere avviato
+
+
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
 
-fsm_default_disk_name   .text "NO NAME"
+fsm_default_disk_name   .text "NEW DISK"
                         .b $00
 
 
@@ -238,6 +265,19 @@ fsm_init:       push h
                 cpi fsm_operation_ok
                 jnz fsm_init_end 
 fsm_init_end:   pop h 
+                ret 
+
+;fsm_close chiude tutte le risorse della fsm 
+;A <- esito dell'operazione 
+
+fsm_close:      call fsm_writeback_page
+                cpi fsm_operation_ok
+                rnz 
+                lda fsm_page_buffer_segment_id
+                call mms_delete_selected_low_memory_data_segment
+                cpi mms_operation_ok
+                rnz 
+                mvi a,fsm_operation_ok
                 ret 
 
 ;fsm_select_disk seleziona il disco desiderato 
@@ -352,24 +392,24 @@ fsm_select_disk_end:            pop d
 ;fsm_disk_format formatta il disco e prepara il file system di base 
 ; HL -> dimensione della sezione riservata al sistema (in bytes)
 
-fsm_disk_format:                        push b 
+fsm_format_disk:                        push b 
                                         push d 
                                         push h 
                                         lda fsm_selected_disk_loaded_page_flags
                                         ani %00100000
-                                        jnz fsm_disk_format_next
-                                        mvi a,fsm_bad_argument
+                                        jnz fsm_format_disk_next
+                                        mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_disk_format_next:                   call bios_mass_memory_format_device               
+fsm_format_disk_next:                   call bios_mass_memory_format_device               
                                         cpi bios_operation_ok 
                                         jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
                                         call bios_mass_memory_select_drive
                                         ora a 
-                                        jnz fsm_disk_format_next2
+                                        jnz fsm_format_disk_next2
                                         mvi a,fsm_device_not_found
                                         jmp fsm_disk_external_generated_error
-fsm_disk_format_next2:                  call bios_mass_memory_get_bps
+fsm_format_disk_next2:                  call bios_mass_memory_get_bps
                                         sta fsm_selected_disk_bps_number
                                         mvi a,%00100000
                                         sta fsm_selected_disk_loaded_page_flags
@@ -407,9 +447,9 @@ fsm_disk_format_next2:                  call bios_mass_memory_get_bps
                                         call unsigned_divide_word
                                         mov a,e 
                                         ora d 
-                                        jz fsm_disk_format_jump1
+                                        jz fsm_format_disk_jump1
                                         inx b 
-fsm_disk_format_jump1:                  inx b 
+fsm_format_disk_jump1:                  inx b 
                                         mov l,c 
                                         mov h,b 
                                         shld fsm_selected_disk_data_first_sector
@@ -520,9 +560,9 @@ fsm_disk_format_jump1:                  inx b
                                         ora d 
                                         ora c 
                                         ora b 
-                                        jz fsm_disk_format_jump2 
+                                        jz fsm_format_disk_jump2 
                                         mvi a,1
-fsm_disk_format_jump2:                  pop d 
+fsm_format_disk_jump2:                  pop d 
                                         pop b 
                                         add e 
                                         mov e,a 
@@ -563,7 +603,7 @@ fsm_disk_format_jump2:                  pop d
                                         jnz fsm_disk_external_generated_error
                                         mvi a,%00110000
                                         sta fsm_selected_disk_loaded_page_flags
-                                        call fsm_clear_fat_table 
+                                        call fsm_wipe_disk 
                                         cpi fsm_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         lxi d,fsm_default_disk_name
@@ -581,7 +621,13 @@ fsm_disk_external_generated_error:      pop h
 ;A <- esito dell'operazione
 
 fsm_disk_set_name:                  push h
-                                    lxi h,0 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %00110000
+                                    xri $ff 
+                                    jnz fsm_disk_set_name_next 
+                                    mvi a,fsm_disk_not_selected
+                                    jmp fsm_disk_set_name_end
+fsm_disk_set_name_next:             lxi h,0 
                                     call fsm_move_data_page
                                     cpi fsm_operation_ok
                                     jnz fsm_disk_set_name_end
@@ -598,22 +644,131 @@ fsm_disk_set_name:                  push h
 fsm_disk_set_name_end:              pop h 
                                     ret 
 
-;fsm_fat_reset inizializza la fat table del dispositivo selezionato
-fsm_clear_fat_table:                            lda fsm_selected_disk_loaded_page_flags
+;fsm_disk_get_name restituisce il nome del disco 
+; A <- esito dell'operazione 
+; SP <- [nome del disco]
+
+fsm_disk_get_name:                  push h 
+                                    push d
+                                    push b 
+                                    lda fsm_selected_disk_loaded_page_flags
+                                    ani %00110000
+                                    xri $ff 
+                                    jnz fsm_disk_get_name_next 
+                                    mvi a,fsm_disk_not_selected
+                                    jmp fsm_disk_set_name_end
+fsm_disk_get_name_next:             lxi h,0 
+                                    call fsm_move_data_page
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    call fsm_reselect_mms_segment
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    lxi h,0 
+                                    lxi d,fsm_disk_name_max_lenght
+fsm_disk_get_name_loop:             call mms_read_selected_data_segment_byte
+                                    jc fsm_disk_get_name_end
+                                    ora a  
+                                    jz fsm_disk_get_name_loop_end
+                                    inx h 
+                                    dcx d 
+                                    mov a,e 
+                                    ora d 
+                                    jnz fsm_disk_get_name_loop
+fsm_disk_get_name_loop_end:         xchg 
+                                    lxi d,fsm_disk_name_max_lenght+1
+                                    mov a,e 
+                                    sub l 
+                                    mov e,a 
+                                    mov c,a 
+                                    mov a,d 
+                                    sbb h 
+                                    mov d,a
+                                    mov b,a 
+                                    lxi h,0 
+                                    dad sp 
+                                    mov a,l 
+                                    sub e 
+                                    mov l,a 
+                                    mov a,h 
+                                    sbb d 
+                                    mov h,a 
+                                    mvi d,4 
+fsm_disk_get_name_stack_push:       xthl 
+                                    mov a,l 
+                                    xthl 
+                                    mov m,a 
+                                    inx h 
+                                    xthl 
+                                    mov a,h 
+                                    xthl 
+                                    mov m,a 
+                                    inx h 
+                                    inx sp 
+                                    inx sp 
+                                    dcr d 
+                                    jnz fsm_disk_get_name_stack_push
+                                    mov e,l 
+                                    mov d,h 
+                                    mov a,e 
+                                    sui 8 
+                                    mov l,a 
+                                    mov a,d 
+                                    sbi 0 
+                                    mov h,a 
+                                    sphl 
+                                    call fsm_reselect_mms_segment
+                                    cpi fsm_operation_ok
+                                    jnz fsm_disk_get_name_end
+                                    lxi h,0
+                                    xchg 
+                                    mvi a,fsm_disk_name_max_lenght
+                                    call string_segment_source_ncopy
+                                    dad b 
+                                    mvi m,0 
+                                    mvi a,fsm_operation_ok 
+fsm_disk_get_name_end:              pop b 
+                                    pop d 
+                                    pop h 
+                                    ret 
+
+;fsm_disk_get_free_space restituisce il numero di bytes disponibili nel disco 
+;A <- esito dell'operazione 
+;BCDE <- dimensione dello spazio disponibile 
+
+fsm_disk_get_free_space:            lda fsm_selected_disk_loaded_page_flags
+                                    ani %00110000
+                                    xri $ff 
+                                    jnz fsm_disk_get_free_space_next 
+                                    mvi a,fsm_disk_not_selected
+                                    ret 
+fsm_disk_get_free_space_next:       push h 
+                                    lhld fsm_selected_disk_free_page_number
+                                    xchg 
+                                    pop h 
+                                    lxi b,fsm_uncoded_page_dimension
+                                    call unsigned_multiply_word
+                                    mvi a,fsm_operation_ok
+                                    ret 
+
+;fsm_wipe_disk inizializza la fat table del dispositivo selezionato
+;A -> esito dell'operazione
+
+fsm_wipe_disk:                                  lda fsm_selected_disk_loaded_page_flags
                                                 ani %00110000
                                                 xri $ff 
-                                                jnz fsm_clear_fat_table_disk_selected
+                                                jnz fsm_wipe_disk_disk_selected
                                                 mvi a,fsm_disk_not_selected
                                                 ret 
-fsm_clear_fat_table_disk_selected:              push h 
+fsm_wipe_disk_disk_selected:                    push h 
                                                 push d 
                                                 push b 
                                                 call fsm_reselect_mms_segment
                                                 cpi fsm_operation_ok
-                                                jnz fsm_clear_fat_table_reset_end
+                                                jnz fsm_wipe_disk_reset_end
                                                 call fsm_clear_mms_segment
                                                 cpi fsm_operation_ok
-                                                jnz fsm_clear_fat_table_reset_end
+                                                jnz fsm_wipe_disk_reset_end
                                                 lxi h,0 
                                                 xchg                                    ; bc -> pagina fat 
                                                 lhld fsm_selected_disk_data_page_number ; de -> pagina corrente (valore da scrivere)
@@ -622,59 +777,59 @@ fsm_clear_fat_table_disk_selected:              push h
                                                 xchg                                                                                                                           
                                                 mvi a,$ff 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,$ff 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 inx d
                                                 inx d 
-fsm_clear_fat_table_loop:                       xthl 
+fsm_wipe_disk_loop:                             xthl 
                                                 mov a,l 
                                                 sub e 
                                                 mov a,h 
                                                 sbb d 
                                                 xthl 
-                                                jc fsm_clear_fat_table_loop_end
+                                                jc fsm_wipe_disk_loop_end
                                                 mov a,e 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_loop_buffer_verify 
+                                                jc fsm_wipe_disk_loop_buffer_verify 
                                                 inx h 
                                                 mov a,d 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_loop_buffer_verify
+                                                jc fsm_wipe_disk_loop_buffer_verify
                                                 inx h 
                                                 inx d 
-                                                jmp fsm_clear_fat_table_loop
-fsm_clear_fat_table_loop_buffer_verify:         cpi mms_segment_segmentation_fault_error_code
-                                                jnz fsm_clear_fat_table_reset_end
-fsm_clear_fat_table_load_page:                  mov a,c 
+                                                jmp fsm_wipe_disk_loop
+fsm_wipe_disk_loop_buffer_verify:               cpi mms_segment_segmentation_fault_error_code
+                                                jnz fsm_wipe_disk_reset_end
+fsm_wipe_disk_load_page:                        mov a,c 
                                                 inr c 
                                                 call fsm_write_fat_page
                                                 cpi fsm_operation_ok                   
-                                                jnz fsm_clear_fat_table_load_page_error
+                                                jnz fsm_wipe_disk_load_page_error
                                                 call fsm_clear_mms_segment
                                                 cpi fsm_operation_ok
-                                                jnz fsm_clear_fat_table_load_page_error
+                                                jnz fsm_wipe_disk_load_page_error
                                                 lxi h,0
-                                                jmp fsm_clear_fat_table_loop
-fsm_clear_fat_table_loop_end:                   dcx h 
+                                                jmp fsm_wipe_disk_loop
+fsm_wipe_disk_loop_end:                         dcx h 
                                                 mvi a,$ff 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 dcx h 
                                                 mvi a,$ff 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 mov a,c
                                                 call fsm_write_fat_page
                                                 cpi fsm_operation_ok                   
-                                                jnz fsm_clear_fat_table_load_page_error
+                                                jnz fsm_wipe_disk_load_page_error
                                                 lxi h,0 
                                                 call fsm_read_data_page
                                                 cpi fsm_operation_ok
-                                                jnz fsm_clear_fat_table_load_page_error
+                                                jnz fsm_wipe_disk_load_page_error
                                                 lxi h,fsm_disk_name_max_lenght
                                                 xchg 
                                                 lhld fsm_selected_disk_data_page_number
@@ -682,44 +837,44 @@ fsm_clear_fat_table_loop_end:                   dcx h
                                                 xchg 
                                                 mov a,e 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mov a,d 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,1 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,0 
                                                 call mms_write_selected_data_segment_byte
-                                                jc fsm_clear_fat_table_load_page_error
+                                                jc fsm_wipe_disk_load_page_error
                                                 shld fsm_selected_disk_first_free_page_address
                                                 lxi h,fsm_header_dimension
-fsm_clear_fat_table_header_space_format:        mvi a,0 
+fsm_wipe_disk_header_space_format:              mvi a,0 
                                                 call mms_write_selected_data_segment_byte
                                                 inx h 
-                                                jnc fsm_clear_fat_table_header_space_format
+                                                jnc fsm_wipe_disk_header_space_format
                                                 cpi mms_segment_segmentation_fault_error_code
-                                                jnz fsm_clear_fat_table_load_page_error
+                                                jnz fsm_wipe_disk_load_page_error
                                                 lxi h,0 
                                                 call fsm_write_data_page
                                                 cpi fsm_operation_ok                   
-                                                jnz fsm_clear_fat_table_load_page_error
-fsm_clear_fat_table_loop_end2:                  inx sp 
+                                                jnz fsm_wipe_disk_load_page_error
+fsm_wipe_disk_loop_end2:                        inx sp 
                                                 inx sp  
                                                 call fsm_load_disk_free_pages_informations
                                                 cpi fsm_operation_ok
-                                                jnz fsm_clear_fat_table_reset_end
+                                                jnz fsm_wipe_disk_reset_end
                                                 mvi a,fsm_operation_ok
-fsm_clear_fat_table_reset_end:                  pop b 
+fsm_wipe_disk_reset_end:                        pop b 
                                                 pop d 
                                                 pop h 
                                                 ret 
-fsm_clear_fat_table_load_page_error:            inx sp 
+fsm_wipe_disk_load_page_error:                  inx sp 
                                                 inx sp 
-                                                jmp fsm_clear_fat_table_reset_end
+                                                jmp fsm_wipe_disk_reset_end
 
 ;funzioni dedicare alla gestone del corpo dei files
 
@@ -831,7 +986,13 @@ fsm_selected_file_write_bytes:              push d
                                             jnz fsm_selected_file_write_bytes_next 
                                             mvi a,fsm_data_pointer_not_setted
                                             jmp fsm_selected_file_write_bytes_end2
-fsm_selected_file_write_bytes_next:         xchg               
+fsm_selected_file_write_bytes_next:         call fsm_get_selected_file_header_flags
+                                            jc fsm_selected_file_write_bytes_end2
+                                            ani fsm_header_readonly_bit
+                                            jz fsm_selected_file_write_bytes_next2
+                                            mvi a,fsm_read_only_file
+                                            jmp fsm_selected_file_write_bytes_end2
+fsm_selected_file_write_bytes_next2:        xchg               
                                             lhld fsm_selected_file_data_pointer_page_address 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
@@ -1043,13 +1204,20 @@ fsm_selected_file_set_data_pointer_end:         pop d
                                                 ret  
 
 ;fsm_selected_file_remove_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesti
+;il puntatore al copro del file viene resettato dopo l'esecuzione della funzione
 ;BCDE -> numero di bytes da aggiungere
 ;A <- esito dell'operazione
 
 fsm_selected_file_remove_data_bytes:                push h 
                                                     push b 
                                                     push d  
-                                                    call fsm_load_selected_file_header
+                                                    call fsm_get_selected_file_header_flags
+                                                    jc fsm_selected_file_remove_data_bytes_end
+                                                    ani fsm_header_readonly_bit
+                                                    jz fsm_selected_file_remove_data_bytes_rwfile
+                                                    mvi a,fsm_read_only_file
+                                                    jmp fsm_selected_file_remove_data_bytes_end
+fsm_selected_file_remove_data_bytes_rwfile:         call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_remove_data_bytes_end
                                                     push d 
@@ -1262,6 +1430,9 @@ fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_
                                                     mov a,e 
                                                     call mms_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
+                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    ani %11111011
+                                                    sta fsm_selected_disk_loaded_page_flags 
                                                     mvi a,fsm_operation_ok
                                                     jmp fsm_selected_file_remove_data_bytes_end
 fsm_selected_file_remove_data_bytes_end3:           inx sp 
@@ -1274,6 +1445,7 @@ fsm_selected_file_remove_data_bytes_end:            pop d
                                                     ret 
 
 ;fsm_selected_file_clear elimina tutto il contenuto del file selezionato precedentemente 
+;il puntatore al copro del file viene resettato dopo l'esecuzione della funzione
 ; A <- esito dell'operazione 
 
 fsm_selected_file_wipe:         push d 
@@ -1344,20 +1516,30 @@ fsm_selected_file_wipe_next2:   mov a,c
                                 mvi a,0
                                 call mms_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
-fsm_selected_file_wipe_end2:    mvi a,fsm_operation_ok
+fsm_selected_file_wipe_end2:    lda fsm_selected_disk_loaded_page_flags
+                                ani %11111011
+                                sta fsm_selected_disk_loaded_page_flags
+                                mvi a,fsm_operation_ok
 fsm_selected_file_wipe_end:     pop b 
                                 pop h 
                                 pop d 
                                 ret 
 
 ;fsm_selected_file_append_data_bytes aumenta la dimensione del file selezionato del numero di bytes richiesti
+;il puntatore al copro del file viene resettato dopo l'esecuzione della funzione
 ;BCDE -> numero di bytes da aggiungere
 ;A <- esito dell'operazione
 
 fsm_selected_file_append_data_bytes:                push h 
                                                     push b 
                                                     push d  
-                                                    call fsm_load_selected_file_header
+                                                    call fsm_get_selected_file_header_flags 
+                                                    jc fsm_selected_file_append_data_bytes_rwfile
+                                                    ani fsm_header_readonly_bit
+                                                    jz fsm_selected_file_append_data_bytes_rwfile
+                                                    mvi a,fsm_read_only_file
+                                                    jmp fsm_selected_file_append_data_bytes_end
+fsm_selected_file_append_data_bytes_rwfile:         call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     push d 
@@ -1576,6 +1758,9 @@ fsm_selected_file_append_data_bytes_next4:          call fsm_load_selected_file_
                                                     mov a,e 
                                                     call mms_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
+                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    ani %11111011
+                                                    sta fsm_selected_disk_loaded_page_flags
                                                     mvi a,fsm_operation_ok
                                                     jmp fsm_selected_file_append_data_bytes_end
 
@@ -1608,7 +1793,13 @@ fsm_reset_file_header_scan_pointer: push h
 fsm_delete_selected_file_header:        push h 
                                         push d 
                                         push b 
-                                        lhld fsm_selected_file_header_page_address
+                                        call fsm_get_selected_file_header_flags
+                                        jc fsm_delete_selected_file_header_end
+                                        ani fsm_header_readonly_bit
+                                        jz fsm_delete_selected_file_header_rwfile 
+                                        mvi a,fsm_read_only_file
+                                        jmp fsm_delete_selected_file_header_end
+fsm_delete_selected_file_header_rwfile: lhld fsm_selected_file_header_page_address
                                         xchg 
                                         lda fsm_selected_file_header_php_address
                                         mov c,a 
@@ -1659,7 +1850,11 @@ fsm_delete_selected_file_header_last:   xchg
                                         inx sp 
                                         inx sp 
                                         call mms_write_selected_data_segment_byte
-                                        jc fsm_delete_selected_file_header_end 
+                                        jc fsm_delete_selected_file_header_end
+                                        call fsm_reset_file_header_scan_pointer 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani %11111011
+                                        sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok
 fsm_delete_selected_file_header_end:    pop b 
                                         pop d 
@@ -1731,38 +1926,32 @@ fsm_increment_file_header_scan_pointer_end:     pop b
                                                 ret 
 
 ;fsm_get_selected_file_header_flags restituisce le caratteristiche del file 
-; A <- esito dell'operazione
-; B <- flags 
+; A <- flags 
+;PSW <- CY viene settato se la funzione restituisce un errore 
 
-fsm_get_selected_file_header_flags:     push h 
-                                        call fsm_load_selected_file_header
-                                        cpi fsm_operation_ok
-                                        jnz fsm_get_selected_file_header_flags_end
-                                        call mms_read_selected_data_segment_byte
-                                        jc fsm_get_selected_file_header_flags_end
-                                        mov b,a 
-fsm_get_selected_file_header_flags_end: pop h 
-                                        ret 
+fsm_get_selected_file_header_flags:         push h 
+                                            call fsm_load_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz fsm_get_selected_file_header_flags_next 
+                                            stc 
+                                            jmp fsm_get_selected_file_header_flags_end
+fsm_get_selected_file_header_flags_next:    call mms_read_selected_data_segment_byte
+                                            jc fsm_get_selected_file_header_flags_end
+                                            stc 
+                                            cmc 
+fsm_get_selected_file_header_flags_end:     pop h 
+                                            ret 
 
 ;fsm_set_selected_file_header_flags imposta le flags al file selezionato precedentemente
 ; A <- esito dell'operazione
-
 fsm_set_selected_file_header_flags:         push h 
+                                            ori fsm_header_valid_bit
+                                            ani $ff-fsm_header_deleted_bit
                                             push psw 
-                                            ani fsm_header_valid_bit
-                                            jnz fsm_set_selected_file_header_flags_next
-                                            mvi a,fsm_bad_argument
-                                            jmp fsm_set_selected_file_header_flags_end
-fsm_set_selected_file_header_flags_next:    xthl 
-                                            mov a,h 
-                                            xthl 
-                                            ani fsm_header_deleted_bit
-                                            jz fsm_set_selected_file_header_flags_next2
-                                            mvi a,fsm_bad_argument
-                                            jmp fsm_set_selected_file_header_flags_end
 fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
                                             jnz fsm_set_selected_file_header_flags_end
+                                            pop psw 
                                             call mms_write_selected_data_segment_byte
 fsm_set_selected_file_header_flags_end:     inx sp 
                                             inx sp 
@@ -1826,7 +2015,14 @@ fsm_get_selected_file_header_dimension_end: pop h
 fsm_set_selected_file_header_name_and_extension:        push h 
                                                         push d 
                                                         push b 
-                                                        call fsm_load_selected_file_header
+                                                        call fsm_search_file_header
+                                                        cpi fsm_header_not_found
+                                                        jz fsm_set_selected_file_header_name_and_extension_ndp
+                                                        cpi fsm_operation_ok
+                                                        jnz fsm_set_selected_file_header_name_and_extension_end
+                                                        mvi a,fsm_header_exist
+                                                        jmp fsm_set_selected_file_header_name_and_extension_end
+fsm_set_selected_file_header_name_and_extension_ndp:    call fsm_load_selected_file_header
                                                         cpi fsm_operation_ok
                                                         jnz fsm_set_selected_file_header_name_and_extension_end
                                                         inx h 
@@ -2084,8 +2280,17 @@ fsm_load_selected_file_header_end:      pop b
 fsm_create_file_header:                     push h 
                                             push d 
                                             push b 
+                                            ori fsm_header_valid_bit
+                                            ani $ff-fsm_header_deleted_bit
                                             push psw
-                                            lxi h,0 
+                                            call fsm_search_file_header
+                                            cpi fsm_header_not_found
+                                            jnz fsm_create_file_header_no_duplicate 
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            mvi a,fsm_header_exist
+                                            jmp fsm_create_file_header_end
+fsm_create_file_header_no_duplicate:        lxi h,0 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
                                             jnz fsm_create_file_header_end

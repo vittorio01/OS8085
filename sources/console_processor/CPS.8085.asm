@@ -7,10 +7,7 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
-                lxi b,file_name
-                lxi d,extension_name
-                call fsm_select_file_header
-                call fsm_load_selected_program
+                call fsm_disk_get_free_space
                 hlt
 
 file_name:  .text "MAIN_PROGRAM"
