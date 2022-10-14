@@ -157,6 +157,7 @@ fsm_selected_disk_fat_page_number       .equ $0072
 ;bit 4 -> il disco selezionato è formattato 
 ;bit 3 -> è stata selezionata un'intestazione
 ;bit 2 -> è stato impostato il puntatore in un file 
+;bit 1 -> indica se la pagina è stata modificata
 
 fsm_selected_disk_loaded_page               .equ $0073
 fsm_selected_disk_loaded_page_flags         .equ $0075
@@ -169,12 +170,11 @@ fsm_selected_file_header_php_address        .equ $007C
 fsm_selected_file_data_pointer_page_address .equ $007E 
 fsm_selected_file_data_pointer_offset       .equ $0080
 
-fsm_coded_page_dimension            .equ 4
-fsm_uncoded_page_dimension          .equ 512
+fsm_coded_page_dimension            .equ 8
+fsm_uncoded_page_dimension          .equ 1024
 
 fsm_format_marker_lenght            .equ 6 
 
-fsm_header_per_page_number          .equ 64 
 fsm_header_dimension                .equ 32 
 fsm_disk_name_max_lenght            .equ 20
 fsm_header_name_dimension           .equ 20
@@ -666,7 +666,7 @@ fsm_disk_get_name_next:             lxi h,0
                                     jnz fsm_disk_get_name_end
                                     lxi h,0 
                                     lxi d,fsm_disk_name_max_lenght
-fsm_disk_get_name_loop:             call mms_read_selected_data_segment_byte
+fsm_disk_get_name_loop:             call fsm_read_selected_data_segment_byte
                                     jc fsm_disk_get_name_end
                                     ora a  
                                     jz fsm_disk_get_name_loop_end
@@ -776,11 +776,11 @@ fsm_wipe_disk_disk_selected:                    push h
                                                 lxi h,0                                 ; sp -> [numero di pagine]                                      
                                                 xchg                                                                                                                           
                                                 mvi a,$ff 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,$ff 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 inx d
@@ -793,11 +793,11 @@ fsm_wipe_disk_loop:                             xthl
                                                 xthl 
                                                 jc fsm_wipe_disk_loop_end
                                                 mov a,e 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_loop_buffer_verify 
                                                 inx h 
                                                 mov a,d 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_loop_buffer_verify
                                                 inx h 
                                                 inx d 
@@ -816,11 +816,11 @@ fsm_wipe_disk_load_page:                        mov a,c
                                                 jmp fsm_wipe_disk_loop
 fsm_wipe_disk_loop_end:                         dcx h 
                                                 mvi a,$ff 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 dcx h 
                                                 mvi a,$ff 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 mov a,c
                                                 call fsm_write_fat_page
@@ -836,24 +836,24 @@ fsm_wipe_disk_loop_end:                         dcx h
                                                 dcx h 
                                                 xchg 
                                                 mov a,e 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mov a,d 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,1 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 inx h 
                                                 mvi a,0 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 jc fsm_wipe_disk_load_page_error
                                                 shld fsm_selected_disk_first_free_page_address
                                                 lxi h,fsm_header_dimension
 fsm_wipe_disk_header_space_format:              mvi a,0 
-                                                call mms_write_selected_data_segment_byte
+                                                call fsm_write_selected_data_segment_byte
                                                 inx h 
                                                 jnc fsm_wipe_disk_header_space_format
                                                 cpi mms_segment_segmentation_fault_error_code
@@ -886,30 +886,30 @@ fsm_load_selected_program:                      push h
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_load_selected_program_end
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 ani fsm_header_program_bit
                                                 jnz fsm_load_selected_program_verified
                                                 mvi a,fsm_selected_file_not_executable 
 fsm_load_selected_program_verified:             lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
                                                 dad d 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 mov e,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 mov d,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end 
                                                 mov c,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 mov b,a 
                                                 inx h
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 mov a,c 
                                                 ora b 
@@ -933,11 +933,11 @@ fsm_load_selected_program_dimension_ok:         mov l,c
                                                 cpi mms_operation_ok
                                                 jnz fsm_load_selected_program_end
                                                 xchg 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
                                                 mov e,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end 
                                                 mov d,a 
                                                 xchg 
@@ -1029,7 +1029,10 @@ fsm_Selected_file_write_bytes_loop2:        cpi mms_destination_segment_overflow
                                             xthl 
                                             lxi h,0 
                                             jmp fsm_Selected_file_write_bytes_loop
-fsm_Selected_file_write_bytes_loop_end:     mvi a,fsm_operation_ok
+fsm_Selected_file_write_bytes_loop_end:     call fsm_writeback_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_selected_file_write_bytes_end
+                                            mvi a,fsm_operation_ok
 fsm_selected_file_write_bytes_end:          inx sp 
                                             inx sp 
 fsm_selected_file_write_bytes_end2:         inx sp 
@@ -1114,19 +1117,19 @@ fsm_selected_file_set_data_pointer:             push h
                                                 jnz fsm_selected_file_set_data_pointer_end
 fsm_selected_file_set_data_pointer_next:        lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
                                                 dad b 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov e,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov d,a 
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov c,a 
                                                 inx h  
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov b,a 
                                                 inx h 
@@ -1175,11 +1178,11 @@ fsm_selected_file_set_data_pointer_next:        lxi b,fsm_header_name_dimension+
                                                 inx sp 
                                                 inx sp 
                                                 pop h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov e,a
                                                 inx h 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
                                                 mov d,a 
                                                 xchg 
@@ -1227,19 +1230,19 @@ fsm_selected_file_remove_data_bytes_rwfile:         call fsm_load_selected_file_
                                                                 
                                                     push b 
                                                     push d                                           ;SP -> [numero di bytes (4)]
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end3
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end3
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end3
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end3
                                                     mov b,a 
                                                     xthl 
@@ -1297,19 +1300,19 @@ fsm_selected_file_remove_data_bytes_remainder1:     pop h
                                                     jnz fsm_selected_file_remove_data_bytes_end
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
                                                     dad b 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov b,a 
                                                     lxi h,0 
@@ -1354,11 +1357,11 @@ fsm_selected_file_remove_data_bytes_remainder2:     pop h
                                                     mov a,h 
                                                     aci 0 
                                                     mov h,a 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
                                                     mov b,a 
                                                     mov l,c  
@@ -1380,19 +1383,19 @@ fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_
                                                     jnz fsm_selected_file_remove_data_bytes_end
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
                                                     dad b
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     mov b,a 
                                                     xthl 
@@ -1416,24 +1419,24 @@ fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_
                                                     dcx sp 
                                                     dcx sp 
                                                     mov a,b 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     dcx h 
                                                     mov a,c 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     dcx h 
                                                     mov a,d 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     dcx h 
                                                     mov a,e 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     lda fsm_selected_disk_loaded_page_flags
                                                     ani %11111011
                                                     sta fsm_selected_disk_loaded_page_flags 
-                                                    mvi a,fsm_operation_ok
+                                                    call fsm_writeback_page
                                                     jmp fsm_selected_file_remove_data_bytes_end
 fsm_selected_file_remove_data_bytes_end3:           inx sp 
                                                     inx sp 
@@ -1456,11 +1459,11 @@ fsm_selected_file_wipe:         push d
                                 jnz fsm_selected_file_wipe_end
                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
                                 dad d 
-                                call mms_read_selected_data_segment_byte
+                                call fsm_read_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end
                                 mov e,a 
                                 inx h 
-                                call mms_read_selected_data_segment_byte
+                                call fsm_read_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end
                                 mov d,a 
                                 xchg  
@@ -1494,32 +1497,32 @@ fsm_selected_file_wipe_next2:   mov a,c
                                 lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
                                 dad d 
                                 mvi a,$ff
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end
                                 dcx h 
                                 mvi a,$ff 
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end
                                 dcx h 
                                 mvi a,0
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
                                 dcx h 
                                 mvi a,0
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
                                 dcx h 
                                 mvi a,0
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
                                 dcx h 
                                 mvi a,0
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
 fsm_selected_file_wipe_end2:    lda fsm_selected_disk_loaded_page_flags
                                 ani %11111011
                                 sta fsm_selected_disk_loaded_page_flags
-                                mvi a,fsm_operation_ok
+                                call fsm_writeback_page
 fsm_selected_file_wipe_end:     pop b 
                                 pop h 
                                 pop d 
@@ -1549,19 +1552,19 @@ fsm_selected_file_append_data_bytes_rwfile:         call fsm_load_selected_file_
                                                                 
                                                     push b 
                                                     push d                                           ;SP -> [numero di bytes (4)]
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end3
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end3
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end3
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end3
                                                     mov b,a 
                                                     xthl 
@@ -1613,19 +1616,19 @@ fsm_selected_file_append_data_bytes_remainder1:     pop h
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
                                                     dad b 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end4
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end4
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end4
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end4
                                                     mov b,a 
                                                     lxi h,0 
@@ -1667,11 +1670,11 @@ fsm_selected_file_append_data_bytes_next2:          xchg
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+5
                                                     dad b
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov b,a 
                                                     mov l,c 
@@ -1691,11 +1694,11 @@ fsm_selected_file_append_data_bytes_next2:          xchg
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+5
                                                     dad b  
                                                     mov a,e 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     inx h 
                                                     mov a,d 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     jmp fsm_selected_file_append_data_bytes_next4
 fsm_selected_file_append_data_bytes_next3:          mov l,c  
@@ -1708,19 +1711,19 @@ fsm_selected_file_append_data_bytes_next4:          call fsm_load_selected_file_
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
                                                     dad b
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov e,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov d,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov c,a 
                                                     inx h 
-                                                    call mms_read_selected_data_segment_byte
+                                                    call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     mov b,a 
                                                     xthl 
@@ -1744,24 +1747,24 @@ fsm_selected_file_append_data_bytes_next4:          call fsm_load_selected_file_
                                                     dcx sp 
                                                     dcx sp 
                                                     mov a,b 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     dcx h 
                                                     mov a,c 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     dcx h 
                                                     mov a,d 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     dcx h 
                                                     mov a,e 
-                                                    call mms_write_selected_data_segment_byte
+                                                    call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     lda fsm_selected_disk_loaded_page_flags
                                                     ani %11111011
                                                     sta fsm_selected_disk_loaded_page_flags
-                                                    mvi a,fsm_operation_ok
+                                                    call fsm_writeback_page
                                                     jmp fsm_selected_file_append_data_bytes_end
 
 fsm_selected_file_append_data_bytes_end3:           inx sp 
@@ -1818,7 +1821,7 @@ fsm_delete_selected_file_header_rwfile: lhld fsm_selected_file_header_page_addre
                                         call fsm_load_selected_file_header
                                         cpi fsm_operation_ok
                                         jnz fsm_delete_selected_file_header_end
-                                        call mms_read_selected_data_segment_byte
+                                        call fsm_read_selected_data_segment_byte
                                         jc fsm_delete_selected_file_header_end
                                         push psw 
                                         mvi a,fsm_header_deleted_bit
@@ -1827,9 +1830,9 @@ fsm_delete_selected_file_header_rwfile: lhld fsm_selected_file_header_page_addre
                                         xthl 
                                         inx sp 
                                         inx sp  
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_delete_selected_file_header_end
-                                        mvi a,fsm_operation_ok
+                                        call fsm_writeback_page
                                         jmp fsm_delete_selected_file_header_end
 fsm_delete_selected_file_header_last:   xchg 
                                         shld fsm_selected_file_header_page_address 
@@ -1839,7 +1842,7 @@ fsm_delete_selected_file_header_last:   xchg
                                         call fsm_load_selected_file_header
                                         cpi fsm_operation_ok
                                         jnz fsm_delete_selected_file_header_end
-                                        call mms_read_selected_data_segment_byte
+                                        call fsm_read_selected_data_segment_byte
                                         jc fsm_delete_selected_file_header_end
                                         push psw 
                                         xthl 
@@ -1849,7 +1852,7 @@ fsm_delete_selected_file_header_last:   xchg
                                         xthl 
                                         inx sp 
                                         inx sp 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_delete_selected_file_header_end
                                         call fsm_reset_file_header_scan_pointer 
                                         lda fsm_selected_disk_loaded_page_flags
@@ -1900,11 +1903,11 @@ fsm_increment_file_header_scan_pointer_loop:    lxi b,fsm_header_dimension
                                                 lxi h,0 
                                                 xthl 
                                                 jmp fsm_increment_file_header_scan_pointer_loop
-fsm_increment_file_header_scan_pointer_loop2:   call mms_read_selected_data_segment_byte
+fsm_increment_file_header_scan_pointer_loop2:   call fsm_read_selected_data_segment_byte
                                                 jc fsm_increment_file_header_scan_pointer_end
                                                 ani fsm_header_valid_bit
                                                 jz fsm_increment_file_header_scan_pointer_eol 
-                                                call mms_read_selected_data_segment_byte
+                                                call fsm_read_selected_data_segment_byte
                                                 jc fsm_increment_file_header_scan_pointer_end 
                                                 ani fsm_header_deleted_bit
                                                 jnz fsm_increment_file_header_scan_pointer_loop
@@ -1935,7 +1938,7 @@ fsm_get_selected_file_header_flags:         push h
                                             jnz fsm_get_selected_file_header_flags_next 
                                             stc 
                                             jmp fsm_get_selected_file_header_flags_end
-fsm_get_selected_file_header_flags_next:    call mms_read_selected_data_segment_byte
+fsm_get_selected_file_header_flags_next:    call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_flags_end
                                             stc 
                                             cmc 
@@ -1952,7 +1955,9 @@ fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
                                             jnz fsm_set_selected_file_header_flags_end
                                             pop psw 
-                                            call mms_write_selected_data_segment_byte
+                                            call fsm_write_selected_data_segment_byte
+                                            jc fsm_set_selected_file_header_flags_end
+                                            call fsm_writeback_page
 fsm_set_selected_file_header_flags_end:     inx sp 
                                             inx sp 
                                             pop h 
@@ -1967,11 +1972,11 @@ fsm_get_selected_file_header_first_page_address:        push d
                                                         jnz fsm_get_selected_file_header_first_page_address_end 
                                                         lxi d,fsm_header_dimension-2 
                                                         dad d 
-                                                        call mms_read_selected_data_segment_byte
+                                                        call fsm_read_selected_data_segment_byte
                                                         jc fsm_get_selected_file_header_first_page_address_end
                                                         mov e,a 
                                                         inx h 
-                                                        call mms_read_selected_data_segment_byte
+                                                        call fsm_read_selected_data_segment_byte
                                                         jc fsm_get_selected_file_header_first_page_address_end
                                                         mov d,a 
                                                         xchg 
@@ -1989,19 +1994,19 @@ fsm_get_selected_file_header_dimension:     push h
                                             jnz fsm_get_selected_file_header_dimension_end
                                             lxi d,fsm_header_dimension-6 
                                             dad d
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_dimension_end
                                             mov e,a 
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_dimension_end
                                             mov d,a 
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_dimension_end
                                             mov c,a 
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_dimension_end
                                             mov b,a 
 fsm_get_selected_file_header_dimension_end: pop h 
@@ -2078,9 +2083,9 @@ fsm_set_selected_file_header_name_and_extension_next2:  call fsm_load_selected_f
                                                         dad d 
                                                         mvi a,fsm_header_extension_dimension
                                                         mov e,c 
-                                                        mov d,b 
+                                                        mov d,b  
                                                         call string_segment_ncopy
-                                                        mvi a,fsm_operation_ok
+                                                        call fsm_writeback_page
 fsm_set_selected_file_header_name_and_extension_end:    pop b 
                                                         pop d 
                                                         pop h 
@@ -2100,7 +2105,7 @@ fsm_get_selected_file_header_name:                      push h
                                                         lxi d,fsm_header_name_dimension
                                                         dad d 
                                                         mvi b,fsm_header_name_dimension
-fsm_get_selected_file_header_name_dimension_loop:       call mms_read_selected_data_segment_byte
+fsm_get_selected_file_header_name_dimension_loop:       call fsm_read_selected_data_segment_byte
                                                         jc fsm_get_selected_file_header_name_end
                                                         ora a 
                                                         jnz fsm_get_selected_file_header_name_dimension_loop_end
@@ -2178,7 +2183,7 @@ fsm_get_selected_file_header_extension:                     push h
                                                             lxi d,fsm_header_extension_dimension+fsm_header_name_dimension
                                                             dad d 
                                                             mvi b,fsm_header_extension_dimension
-fsm_get_selected_file_header_extension_dimension_loop:      call mms_read_selected_data_segment_byte
+fsm_get_selected_file_header_extension_dimension_loop:      call fsm_read_selected_data_segment_byte
                                                             jc fsm_get_selected_file_header_extension_end
                                                             ora a 
                                                             jnz fsm_get_selected_file_header_extension_dimension_loop_end
@@ -2300,11 +2305,11 @@ fsm_create_file_header_no_duplicate:        lxi h,0
                                             lxi d,0                             ;HL -> puntatore al buffer
                                             lxi b,fsm_uncoded_page_dimension    ;SP -> [psw][b][d][h]
                                             lxi h,fsm_header_dimension
-fsm_create_file_header_search_loop:         call mms_read_selected_data_segment_byte
+fsm_create_file_header_search_loop:         call fsm_read_selected_data_segment_byte
                                             jc fsm_create_file_header_end 
                                             ani fsm_header_valid_bit
                                             jz fsm_create_file_header_end_of_list 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_create_file_header_end 
                                             ani fsm_header_deleted_bit
                                             jnz fsm_create_file_header_deleted_replace 
@@ -2362,11 +2367,11 @@ fsm_create_file_header_end_of_list:         call fsm_create_file_header_write_by
                                             sbb b 
                                             jnc fsm_create_file_header_next
                                             mvi a,0
-                                            call mms_write_selected_data_segment_byte
+                                            call fsm_write_selected_data_segment_byte
                                             jc fsm_create_file_header_end
-fsm_create_file_header_next:                ;call fsm_writeback_page
-                                            ;cpi fsm_operation_ok
-                                            ;jnz fsm_create_file_header_end
+fsm_create_file_header_next:                call fsm_writeback_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
 fsm_create_file_header_next2:               mvi a,fsm_operation_ok
 fsm_create_file_header_end:                 inx sp 
                                             inx sp  
@@ -2419,27 +2424,27 @@ fsm_create_file_header_write_bytes:     push d
                                         lxi d,fsm_header_extension_dimension 
                                         dad d 
                                         mvi a,0 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         mvi a,0 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         mvi a,0 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         mvi a,0 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         mvi a,$ff 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         mvi a,$ff 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h
                                         lxi b,$ffff-fsm_header_extension_dimension-fsm_header_name_dimension-7+1
@@ -2455,7 +2460,7 @@ fsm_create_file_header_write_bytes:     push d
                                         dcx sp 
                                         dcx sp 
                                         dcx sp 
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         lxi b,fsm_header_extension_dimension+fsm_header_name_dimension+7
                                         dad b 
@@ -2509,11 +2514,11 @@ fsm_search_file_header:                     push h
                                             jnz fsm_search_file_header_end      ;DE -> pagina corrente
                                             lxi d,0                             ;HL -> puntatore al buffer
                                             lxi h,fsm_header_dimension          ;SP -> [b][d][h]
-fsm_search_file_header_search_loop:         call mms_read_selected_data_segment_byte
+fsm_search_file_header_search_loop:         call fsm_read_selected_data_segment_byte
                                             jc fsm_search_file_header_end 
                                             ani fsm_header_valid_bit
                                             jz fsm_search_file_header_end_of_list 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_search_file_header_end 
                                             ani fsm_header_deleted_bit
                                             jnz fsm_search_file_header_search_loop2
@@ -2789,19 +2794,19 @@ fsm_load_disk_free_pages_informations:      push h
                                             cpi fsm_operation_ok
                                             jnz fsm_load_disk_free_pages_informations_end
                                             lxi h,fsm_disk_name_max_lenght
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_load_disk_free_pages_informations_end
                                             sta fsm_selected_disk_free_page_number
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_load_disk_free_pages_informations_end 
                                             sta fsm_selected_disk_free_page_number+1 
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_load_disk_free_pages_informations_end
                                             sta fsm_selected_disk_first_free_page_address
                                             inx h 
-                                            call mms_read_selected_data_segment_byte
+                                            call fsm_read_selected_data_segment_byte
                                             jc fsm_load_disk_free_pages_informations_end 
                                             sta fsm_selected_disk_first_free_page_address+1 
                                             mvi a,fsm_operation_ok
@@ -2845,11 +2850,11 @@ fsm_get_page_link_offset:           call fsm_reselect_mms_segment
                                     ral 
                                     mov d,a 
                                     dad d 
-                                    call mms_read_selected_data_segment_byte
+                                    call fsm_read_selected_data_segment_byte
                                     jc fsm_get_page_link_end
                                     mov e,a  
                                     inx h 
-                                    call mms_read_selected_data_segment_byte
+                                    call fsm_read_selected_data_segment_byte
                                     jc fsm_get_page_link_end
                                     mov d,a
                                     xchg 
@@ -2896,11 +2901,11 @@ fsm_set_page_link_offset:           call fsm_reselect_mms_segment
                                     pop d 
                                     push d 
                                     mov a,e  
-                                    call mms_write_selected_data_segment_byte
+                                    call fsm_write_selected_data_segment_byte
                                     jc fsm_set_page_link_end
                                     inx h 
                                     mov a,d  
-                                    call mms_write_selected_data_segment_byte
+                                    call fsm_write_selected_data_segment_byte
                                     jc fsm_set_page_link_end
                                     mvi a,fsm_operation_ok
 fsm_set_page_link_end:              pop d 
@@ -2928,6 +2933,17 @@ fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 
 
+;fsm_write_selected_data_segment_byte e fsm_read_selected_data_segment_byte vengono usate per modificare i dati nel buffer 
+;quando viene scritto un byte nel buffer viene segnalato implicitamente al sistema di writeback che la pagina corrente è stata modificata
+fsm_write_selected_data_segment_byte:   push psw 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ori %00000010
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        pop psw 
+                                        jmp mms_write_selected_data_segment_byte
+
+fsm_read_selected_data_segment_byte     .equ mms_read_selected_data_segment_byte
+
 ;fsm_clear_mms_segment riempie il buffer di memoria con degli zeri
 
 
@@ -2937,7 +2953,7 @@ fsm_clear_mms_segment:      push h
                             jnz fsm_clear_mms_segment_end
                             lxi h,0 
 fsm_clear_mms_segment_loop: mvi a,0 
-                            call mms_write_selected_data_segment_byte
+                            call fsm_write_selected_data_segment_byte
                             inx h  
                             jnc fsm_clear_mms_segment_loop
                             cpi mms_segment_segmentation_fault_error_code
@@ -2962,6 +2978,9 @@ fsm_move_fat_page:          push d
                             lda fsm_selected_disk_loaded_page_flags
                             ani %10000000
                             jz fsm_move_fat_page_load 
+                            lda fsm_selected_disk_loaded_page_flags 
+                            ani %00000010
+                            jz fsm_move_fat_page_load
                             lda fsm_selected_disk_loaded_page_flags
                             ani %01000000
                             jz fsm_move_fat_page_verify
@@ -2976,7 +2995,10 @@ fsm_move_fat_page_verify:   lda fsm_selected_disk_loaded_page
                             call fsm_write_fat_page
                             cpi fsm_operation_ok
                             jnz fsm_move_fat_page_end
-fsm_move_fat_page_load:     mov a,d 
+fsm_move_fat_page_load:     lda fsm_selected_disk_loaded_page_flags 
+                            ani %11111101
+                            sta fsm_selected_disk_loaded_page_flags 
+                            mov a,d 
                             sta fsm_selected_disk_loaded_page
                             call fsm_read_fat_page
                             cpi fsm_operation_ok
@@ -2996,6 +3018,9 @@ fsm_move_data_page:             push d
                                 lda fsm_selected_disk_loaded_page_flags
                                 ani %10000000
                                 jz fsm_move_data_page_load 
+                                lda fsm_selected_disk_loaded_page_flags 
+                                ani %00000010
+                                jz fsm_move_data_page_load
                                 lda fsm_selected_disk_loaded_page_flags
                                 ani %01000000
                                 jnz fsm_move_data_page_verify
@@ -3014,7 +3039,10 @@ fsm_move_data_page_verify:      lhld fsm_selected_disk_loaded_page
 fsm_move_data_page_writeback:   call fsm_write_data_page
                                 cpi fsm_operation_ok
                                 jnz fsm_move_data_page_end
-fsm_move_data_page_load:        mov l,e 
+fsm_move_data_page_load:        lda fsm_selected_disk_loaded_page_flags 
+                                ani %11111101
+                                sta fsm_selected_disk_loaded_page_flags 
+                                mov l,e 
                                 mov h,d  
                                 shld fsm_selected_disk_loaded_page
                                 call fsm_read_data_page
@@ -3031,21 +3059,21 @@ fsm_move_data_page_load:        mov l,e
                                 lhld fsm_selected_disk_free_page_number
                                 xchg 
                                 mov a,e 
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_move_data_page_end
                                 inx h 
                                 mov a,d
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_move_data_page_end
                                 xchg 
                                 lhld fsm_selected_disk_first_free_page_address
                                 xchg 
                                 mov a,e 
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_move_data_page_end
                                 inx h 
                                 mov a,d
-                                call mms_write_selected_data_segment_byte
+                                call fsm_write_selected_data_segment_byte
                                 jc fsm_move_data_page_end
 fsm_move_data_page_next:        mvi a,fsm_operation_ok
 fsm_move_data_page_end:         pop h 
@@ -3635,18 +3663,18 @@ string_segment_ncmp_loop:       dcr b
                                 jnz string_segment_ncmp_loop3
                                 ldax d
                                 mov c,a 
-                                call mms_read_selected_data_segment_byte
+                                call fsm_read_selected_data_segment_byte
                                 jc string_segment_ncmp_loop_end2
                                 cmp c 
                                 jz string_segment_ncmp_loop_end1
                                 jmp string_segment_ncmp_loop_end2
-string_segment_ncmp_loop3:      call mms_read_selected_data_segment_byte
+string_segment_ncmp_loop3:      call fsm_read_selected_data_segment_byte
                                 jc string_segment_ncmp_loop_end2
                                 ora a 
                                 jz string_segment_ncmp_loop2
                                 ldax d 
                                 mov c,a 
-                                call mms_read_selected_data_segment_byte
+                                call fsm_read_selected_data_segment_byte
                                 jc string_segment_ncmp_loop_end2
                                 cmp c
                                 jnz string_segment_ncmp_loop_end2
@@ -3678,13 +3706,13 @@ string_segment_ncopy:       push b
 string_segment_ncopy_loop:  ldax d 
                             ora a 
                             jz string_segment_ncopy_end
-                            call mms_write_selected_data_segment_byte
+                            call fsm_write_selected_data_segment_byte
                             jc string_segment_ncopy_end1 
                             inx h 
                             inx d 
                             dcr b 
                             jnz string_segment_ncopy_loop
-string_segment_ncopy_end:   call mms_write_selected_data_segment_byte
+string_segment_ncopy_end:   call fsm_write_selected_data_segment_byte
 string_segment_ncopy_end1:  pop h 
                             pop d 
                             pop b 
@@ -3704,7 +3732,7 @@ string_segment_source_ncopy:            push b
                                         jz string_segment_source_ncopy_end1
                                         xchg 
                                         mov b,a 
-string_segment_source_ncopy_loop:       call mms_read_selected_data_segment_byte
+string_segment_source_ncopy_loop:       call fsm_read_selected_data_segment_byte
                                         jc string_segment_source_ncopy_end1 
                                         ora a 
                                         jz string_segment_source_ncopy_end
