@@ -235,3 +235,5 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
                                     ret 
 
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
+
+BIOS_layer_end:

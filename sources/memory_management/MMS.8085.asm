@@ -119,7 +119,10 @@
 ;Per l'assegnazione dei segmenti viene inserita una tabella in bitstream di lunghezza complessiva di 32 bytes (256 bit) per tenere traccia dei numeri di segmenti assegnati.
 ;In particolare nel bitstream un bit segnato a 1 indica un numero assegnato (il numero viene identificato dalla posizione del bit nel bitstream)
 
-
+.include "os_constraints.8085.asm"
+.include "bios_system_calls.8085.asm"
+.include "libraries_system_calls.8085.asm"
+.include "execution_codes.8085.asm"
 
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0050
@@ -134,23 +137,6 @@ mms_low_memory_valid_segment_mask:          .equ %10000000
 mms_low_memory_type_segment_mask            .equ %01000000
 mms_low_memory_temporary_segment_mask       .equ %00100000
 mms_low_memory_bitstream_start              .equ low_memory_end - 32
-
-;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni
-mms_not_enough_ram_error_code               .equ $11
-mms_segment_data_not_found_error_code       .equ $12
-mms_segment_segmentation_fault_error_code   .equ $13
-mms_segment_number_overflow_error_code      .equ $14
-mms_segment_bad_argument                    .equ $15
-
-mms_source_segment_not_selected             .equ $16 
-mms_destination_segment_not_selected        .equ $17
-mms_destination_segment_not_found           .equ $18 
-mms_source_segment_overflow                 .equ $19 
-mms_destination_segment_overflow            .equ $1A 
-mms_program_not_loaded                      .equ $1B
-mms_mass_memory_not_selected                .equ $1C
-
-mms_operation_ok                            .equ $ff
 
 mms_functions:  .org MMS 
                 jmp mms_low_memory_initialize
@@ -1451,3 +1437,6 @@ mms_data_bitstream_reset_requested_bit_shift_end:   ora m
                                                     pop h 
                                                     ret 
 
+mms_layer_end:     
+.memory "fill", mms_layer_end, mms_dimension-mms_layer_end+MMS,$00
+.print "All functions built successfully"

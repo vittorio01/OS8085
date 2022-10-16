@@ -16,6 +16,10 @@
 ;   scrittura di una traccia e formattazione del disco
 ;-  funzioni per la copia di blocchi di memoria, che vengono utilizzati nel caso di trasferimenti di grandi blocchi di dati da e verso la memoria. 
 
+.include "os_constraints.8085.asm"
+.include "libraries_system_calls.8085.asm"
+.include "execution_codes.8085.asm"
+
 ;parametri hardware standard
 bios_ram_dimension          .equ 32768
 
@@ -34,20 +38,6 @@ bios_mass_memory_rom_bps_coded_number       .equ 2
 bios_mass_memory_rom_bps_uncoded_number     .equ 256
 bios_mass_memory_rom_write_enable           .equ $ff    
 bios_mass_memory_rom_format_fill_byte       .equ $ff 
-
-;codici di esecuzione che possono essere generati dalle funzioni
-bios_operation_ok                       .equ $ff 
-
-bios_mass_memory_write_only             .equ $01
-bios_mass_memory_device_not_found       .equ $02
-bios_mass_memory_device_not_selected    .equ $03
-bios_mass_memory_bad_argument           .equ $04
-bios_mass_memory_transfer_error         .equ $05
-bios_mass_memory_seek_error             .equ $06
-bios_memory_transfer_error              .equ $07 
-
-bios_console_ready                      .equ $08
-bios_console_not_ready                  .equ $09
 
 ;memoria dedicata al salvataggio delle informazioni
 bios_mass_memory_selected_sector    .equ reserved_memory_start+$0040
@@ -76,7 +66,7 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
                 jmp bios_memory_transfer
-
+                JMP bios_memory_transfer_reverse
 
 bios_serial_port_init:  xra a 	
                         out bios_serial_command_port		
@@ -469,3 +459,7 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
                                     ret 
 
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
+
+BIOS_layer_end:     
+.memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
+.print "All functions built successfully"

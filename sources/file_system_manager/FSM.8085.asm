@@ -132,7 +132,11 @@
 ;-  numero di blocchi liberi (2 bytes)
 ;-  puntatore al primo blocco libero (2 bytes)
 
-
+.include "os_constraints.8085.asm"
+.include "mms_system_calls.8085.asm"
+.include "libraries_system_calls.8085.asm"
+.include "bios_system_calls.8085.asm"
+.include "execution_codes.8085.asm"
 
 fsm_selected_disk                       .equ $0060
 fsm_selected_disk_head_number           .equ $0061
@@ -185,29 +189,6 @@ fsm_header_system_bit               .equ %00100000
 fsm_header_program_bit              .equ %00010000
 fsm_header_hidden_bit               .equ %00001000
 fsm_header_readonly_bit             .equ %00000100
-
-fsm_mass_memory_sector_not_found    .equ $20
-fsm_bad_argument                    .equ $21
-fsm_disk_not_selected               .equ $22
-fsm_formatting_fat_generation_error .equ $23
-fsm_unformatted_disk                .equ $24
-fsm_device_not_found                .equ $25
-fsm_not_enough_spage_left           .equ $26
-fsm_list_is_empty                   .equ $27
-fsm_header_not_found                .equ $28
-fsm_header_not_selected             .equ $2a
-fsm_end_of_disk                     .equ $29
-fsm_header_exist                    .equ $2A 
-fsm_end_of_list                     .equ $2B 
-fsm_data_pointer_not_setted         .equ $2C 
-fsm_end_of_file                     .equ $2D
-fsm_destination_segment_overflow    .equ $2E
-fsm_file_pointer_overflow           .equ $2F
-fsm_source_segment_overflow         .equ $30
-fsm_selected_file_not_executable    .equ $31 
-fsm_program_too_big                 .equ $32 
-fsm_read_only_file                  .equ $33 
-fsm_operation_ok                    .equ $ff 
 
 
 fsm_functions:  .org FSM 
@@ -400,7 +381,7 @@ fsm_format_disk:                        push b
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next:                   call bios_mass_memory_format_device               
+fsm_format_disk_next:                   call bios_mass_memory_format_drive              
                                         cpi bios_operation_ok 
                                         jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
@@ -2290,7 +2271,7 @@ fsm_create_file_header:                     push h
                                             push psw
                                             call fsm_search_file_header
                                             cpi fsm_header_not_found
-                                            jnz fsm_create_file_header_no_duplicate 
+                                            jz fsm_create_file_header_no_duplicate 
                                             cpi fsm_operation_ok
                                             jnz fsm_create_file_header_end
                                             mvi a,fsm_header_exist
@@ -3746,3 +3727,7 @@ string_segment_source_ncopy_end1:       pop h
                                         pop d 
                                         pop b 
                                         ret 
+
+fsm_layer_end:      
+.memory "fill", fsm_layer_end, fsm_dimension-fsm_layer_end+FSM,$00
+.print "All functions built successfully"
