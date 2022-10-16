@@ -28,23 +28,23 @@ bios_serial_command_port                    .equ $21
 bios_serial_port_settins_flags              .equ $3B 
 
 
-bios_mass_memory_rom_address_start          .equ $A000
+bios_mass_memory_rom_address_start          .equ $8000
 bios_mass_memory_rom_address_end            .equ $ffff
 bios_mass_memory_rom_id                     .equ $41
 bios_mass_memory_rom_heads_number           .equ 1
 bios_mass_memory_rom_tracks_number          .equ 16 
-bios_mass_memory_rom_spt_number             .equ 6 
+bios_mass_memory_rom_spt_number             .equ 8
 bios_mass_memory_rom_bps_coded_number       .equ 2 
 bios_mass_memory_rom_bps_uncoded_number     .equ 256
 bios_mass_memory_rom_write_enable           .equ $ff    
 bios_mass_memory_rom_format_fill_byte       .equ $ff 
 
 ;memoria dedicata al salvataggio delle informazioni
-bios_mass_memory_selected_sector    .equ reserved_memory_start+$0040
-bios_mass_memory_selected_track     .equ reserved_memory_start+$0041
-bios_mass_memory_selected_head      .equ reserved_memory_start+$0043
-bios_mass_memory_selected_device    .equ reserved_memory_start+$0044
-bios_mass_memory_select_mask        .equ reserved_memory_start+$0045
+bios_mass_memory_selected_sector    .equ reserved_memory_start+$0000
+bios_mass_memory_selected_track     .equ reserved_memory_start+$0001
+bios_mass_memory_selected_head      .equ reserved_memory_start+$0003
+bios_mass_memory_selected_device    .equ reserved_memory_start+$0004
+bios_mass_memory_select_mask        .equ reserved_memory_start+$0005
 
 bios_functions: .org BIOS 
                 jmp bios_cold_boot 
@@ -385,9 +385,9 @@ bios_mass_memory_read_dselected:    push b
 
 ;bios_mass_memory_format_drive
 ; A <- esito dell'operazione
-bios_mass_memory_format_drive:          lda bios_mass_memory_selected_device
-                                        ora a 
-                                        jz bios_mass_memory_format_device
+bios_mass_memory_format_drive:          lda bios_mass_memory_selected_device      
+                                        ora a  
+                                        jnz bios_mass_memory_format_device
                                         mvi a,bios_mass_memory_device_not_selected
                                         ret
 bios_mass_memory_format_device:         push h 
@@ -462,4 +462,5 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
 
 BIOS_layer_end:     
 .memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
+.print "BIOS load address ->",BIOS
 .print "All functions built successfully"

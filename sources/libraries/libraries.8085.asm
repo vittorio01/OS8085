@@ -25,5 +25,5 @@ LIBRARIES_calls:    .org LIBRARIES
 
 libraries_layer_end:    
 .memory "fill", libraries_layer_end, libraries_dimension-libraries_layer_end+LIBRARIES,$00
-
+.print "LIBRARIES load address ->",LIBRARIES
 .print "All libraries compiled succeffully"

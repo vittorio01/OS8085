@@ -138,20 +138,20 @@
 .include "bios_system_calls.8085.asm"
 .include "execution_codes.8085.asm"
 
-fsm_selected_disk                       .equ $0060
-fsm_selected_disk_head_number           .equ $0061
-fsm_selected_disk_tph_number            .equ $0062 
-fsm_selected_disk_spt_number            .equ $0064 
-fsm_selected_disk_bps_number            .equ $0065
-fsm_selected_disk_sectors_number        .equ $0066
-fsm_selected_disk_spp_number            .equ $006A
-fsm_selected_disk_data_first_sector     .equ $006B
+fsm_selected_disk                       .equ reserved_memory_start + $0020
+fsm_selected_disk_head_number           .equ reserved_memory_start + $0021
+fsm_selected_disk_tph_number            .equ reserved_memory_start + $0022 
+fsm_selected_disk_spt_number            .equ reserved_memory_start + $0024 
+fsm_selected_disk_bps_number            .equ reserved_memory_start + $0025
+fsm_selected_disk_sectors_number        .equ reserved_memory_start + $0026
+fsm_selected_disk_spp_number            .equ reserved_memory_start + $002A
+fsm_selected_disk_data_first_sector     .equ reserved_memory_start + $002B
 
-fsm_page_buffer_segment_id              .equ $006D
-fsm_page_buffer_segment_address         .equ $006E
+fsm_page_buffer_segment_id              .equ reserved_memory_start + $002D
+fsm_page_buffer_segment_address         .equ reserved_memory_start + $002E
 
-fsm_selected_disk_data_page_number      .equ $0070
-fsm_selected_disk_fat_page_number       .equ $0072
+fsm_selected_disk_data_page_number      .equ reserved_memory_start + $0030
+fsm_selected_disk_fat_page_number       .equ reserved_memory_start + $0032
 
 
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
@@ -163,19 +163,19 @@ fsm_selected_disk_fat_page_number       .equ $0072
 ;bit 2 -> è stato impostato il puntatore in un file 
 ;bit 1 -> indica se la pagina è stata modificata
 
-fsm_selected_disk_loaded_page               .equ $0073
-fsm_selected_disk_loaded_page_flags         .equ $0075
-fsm_selected_disk_free_page_number          .equ $0076
-fsm_selected_disk_first_free_page_address   .equ $0078
+fsm_selected_disk_loaded_page               .equ reserved_memory_start + $0033
+fsm_selected_disk_loaded_page_flags         .equ reserved_memory_start + $0035
+fsm_selected_disk_free_page_number          .equ reserved_memory_start + $0036
+fsm_selected_disk_first_free_page_address   .equ reserved_memory_start + $0038
 
-fsm_selected_file_header_page_address       .equ $007A
-fsm_selected_file_header_php_address        .equ $007C
+fsm_selected_file_header_page_address       .equ reserved_memory_start + $003A
+fsm_selected_file_header_php_address        .equ reserved_memory_start + $003C
 
-fsm_selected_file_data_pointer_page_address .equ $007E 
-fsm_selected_file_data_pointer_offset       .equ $0080
+fsm_selected_file_data_pointer_page_address .equ reserved_memory_start + $003E 
+fsm_selected_file_data_pointer_offset       .equ reserved_memory_start + $0040
 
-fsm_coded_page_dimension            .equ 8
-fsm_uncoded_page_dimension          .equ 1024
+fsm_coded_page_dimension            .equ 4
+fsm_uncoded_page_dimension          .equ 512
 
 fsm_format_marker_lenght            .equ 6 
 
@@ -381,7 +381,8 @@ fsm_format_disk:                        push b
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next:                   call bios_mass_memory_format_drive              
+fsm_format_disk_next:                   call bios_mass_memory_format_drive   
+                                                 
                                         cpi bios_operation_ok 
                                         jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
@@ -2327,19 +2328,18 @@ fsm_create_file_header_end_of_page_list:    mov l,e
                                             mov h,d 
                                             push d 
                                             lxi d,1
-                                            call fsm_append_pages
+                                            call fsm_append_pages 
                                             pop d 
                                             cpi fsm_operation_ok
                                             jnz fsm_create_file_header_end
-                                            mov e,l 
-                                            mov d,h 
+                                            call fsm_move_data_page
+                                            cpi fsm_operation_ok
+                                            jnz fsm_create_file_header_end
+                                            xchg 
                                             lxi h,0 
                                             call fsm_clear_mms_segment
                                             call fsm_create_file_header_write_bytes
                                             xchg 
-                                            call fsm_write_data_page
-                                            cpi fsm_operation_ok
-                                            jnz fsm_create_file_header_end
                                             jmp fsm_create_file_header_next2
 fsm_create_file_header_end_of_list:         call fsm_create_file_header_write_bytes
                                             mov a,l 
@@ -3650,6 +3650,7 @@ string_segment_ncmp_loop:       dcr b
                                 jz string_segment_ncmp_loop_end1
                                 jmp string_segment_ncmp_loop_end2
 string_segment_ncmp_loop3:      call fsm_read_selected_data_segment_byte
+                                
                                 jc string_segment_ncmp_loop_end2
                                 ora a 
                                 jz string_segment_ncmp_loop2
@@ -3662,7 +3663,8 @@ string_segment_ncmp_loop3:      call fsm_read_selected_data_segment_byte
                                 inx h 
                                 inx d 
                                 jmp string_segment_ncmp_loop
-string_segment_ncmp_loop2:      ora a 
+string_segment_ncmp_loop2:      ldax d 
+                                ora a 
                                 jnz string_segment_ncmp_loop_end2
 string_segment_ncmp_loop_end1:  mvi a,$ff
                                 jmp string_segment_ncompare_end
@@ -3730,4 +3732,5 @@ string_segment_source_ncopy_end1:       pop h
 
 fsm_layer_end:      
 .memory "fill", fsm_layer_end, fsm_dimension-fsm_layer_end+FSM,$00
+.print "FSM load address ->",FSM 
 .print "All functions built successfully"

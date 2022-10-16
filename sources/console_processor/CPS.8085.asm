@@ -14,9 +14,9 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
-                lxi h,8196
+                lxi h,0 
                 call fsm_format_disk 
-                mvi h,255
+                mvi h,128
 loop:           lxi b,file_name 
                 lxi d,extension_name 
                 mvi a,%01101100
@@ -45,5 +45,5 @@ test_program_dim .equ test_program_end-test_program
 cps_layer_end:
 .memory "fill", cps_layer_end, cps_dimension-cps_layer_end+CPS,$00
 
-
+.print "CPS load address ->",CPS 
 .print "All functions built successfully"

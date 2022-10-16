@@ -125,11 +125,11 @@
 .include "execution_codes.8085.asm"
 
 ;spazio della memoria riservata dedicato alla mms
-mms_program_high_pointer                    .equ reserved_memory_start+$0050
-mms_data_low_pointer                        .equ reserved_memory_start+$0052
-mms_data_selected_segment_id                .equ reserved_memory_start+$0054
-mms_data_selected_segment_address           .equ reserved_memory_start+$0055
-mms_data_selected_segment_dimension         .equ reserved_memory_start+$0057
+mms_program_high_pointer                    .equ reserved_memory_start+$0010
+mms_data_low_pointer                        .equ reserved_memory_start+$0012
+mms_data_selected_segment_id                .equ reserved_memory_start+$0014
+mms_data_selected_segment_address           .equ reserved_memory_start+$0015
+mms_data_selected_segment_dimension         .equ reserved_memory_start+$0017
 
 
 ;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram
@@ -1439,4 +1439,5 @@ mms_data_bitstream_reset_requested_bit_shift_end:   ora m
 
 mms_layer_end:     
 .memory "fill", mms_layer_end, mms_dimension-mms_layer_end+MMS,$00
+.print "MMS load address ->",MMS
 .print "All functions built successfully"

@@ -9,5 +9,5 @@ Nel comando deve anche essere specificato il BIOS personalizzato che si vuole co
 
 makefile ASSEMBLER="path/to/assembler/retroassembler.dll" BIOS="path/to/cbios/BIOS.8085.asm" 
 
-Il comando compila tutti i files sorgenti e restituisce un output main.bin nella cartella bin del progetto, dove è contenuto tutto il sistema operativo compilato e pronto per essere installato nella ROM del computer o nel disco di avvio.
-Per maggiori informazioni sulla struttura del SO è disponibile una guida in PDF nella cartella info (non ancora disponibile)
+Il comando compila tutti i files sorgenti e restituisce in output nella cartella bin tutti i layer del sistema e un file system.bin, che contiene tutto il sistema operativo compilato e pronto per essere installato nella ROM del computer o nel disco di avvio.
+Per maggiori informazioni sulla struttura del SO è presente una guida in PDF nella cartella info (non ancora disponibile)
