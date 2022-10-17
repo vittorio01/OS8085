@@ -222,7 +222,11 @@ fsm_functions:  .org FSM
                 jmp fsm_selected_file_wipe                          ;elimina tutto il contenuto del file 
                 jmp fsm_selected_file_set_data_pointer              ;imposta il puntatore nel corpo del file 
                 jmp fsm_load_selected_program                       ;carica il programma nella memoria e lo predispone per essere avviato
-
+                ;funzioni per la gestione della sezione riservata al sistema 
+                jmp fsm_selected_disk_get_system                    ;
+                ;jmp fsm_selected_disk_put_system 
+                ;jmp fsm_selected_disk_get_boot_sector 
+                ;jmp fsm_selected_disk_put_boot_sector 
 
 
 fsm_format_marker   .text "SFS1.0"
@@ -857,6 +861,27 @@ fsm_wipe_disk_reset_end:                        pop b
 fsm_wipe_disk_load_page_error:                  inx sp 
                                                 inx sp 
                                                 jmp fsm_wipe_disk_reset_end
+
+;funzioni dedicate allo spazio riservato
+
+;fsm_selected_disk_get_system legge il sistema operativo del disco e lo salva in un file 
+;BC -> nome del file di salvataggio
+;DE -> estenzione del file di salvataggio 
+
+;A <- esito dell'operazione 
+
+fsm_selected_disk_get_system:           push h  
+                                        push d 
+                                        push b 
+                                        mvi a,fsm_header_valid_bit+fsm_header_system_bit
+                                        call fsm_create_file_header
+                                        cpi fsm_operation_ok 
+                                        jnz fsm_selected_disk_get_system_end
+                                        
+fsm_selected_disk_get_system_end:       pop b 
+                                        pop d 
+                                        pop h 
+                                        ret 
 
 ;funzioni dedicare alla gestone del corpo dei files
 
