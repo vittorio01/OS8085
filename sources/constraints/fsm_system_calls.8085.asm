@@ -30,3 +30,10 @@ fsm_selected_file_read_bytes                        .equ fsm_selected_file_write
 fsm_selected_file_wipe                              .equ fsm_selected_file_read_bytes+3
 fsm_selected_file_set_data_pointer                  .equ fsm_selected_file_wipe+3
 fsm_load_selected_program                           .equ fsm_selected_file_set_data_pointer+3
+
+fsm_selected_disk_get_system                        .equ fsm_load_selected_program +3
+fsm_selected_disk_set_system                        .equ fsm_selected_disk_get_system+3
+;fsm_selected_disk_get_boot_sector                  .equ fsm_selected_disk_put_system+3
+;fsm_selected_disk_set_boot_sector                  .equ fsm_selected_disk_get_boot_sector+3
+;fsm_selected_disk_set_bootable                     .equ fsm_selected_disk_put_boot_sector+3
+;fsm_selected_disk_set_not_bootable                 .equ fsm_selected_disk_set_bootable+3

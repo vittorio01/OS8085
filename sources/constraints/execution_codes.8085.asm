@@ -54,4 +54,8 @@ fsm_source_segment_overflow         .equ $30
 fsm_selected_file_not_executable    .equ $31 
 fsm_program_too_big                 .equ $32 
 fsm_read_only_file                  .equ $33 
+fsm_selected_disk_not_bootable      .equ $34
+fsm_disk_operating_system_not_found .equ $36
+fsm_not_a_system_file               .equ $37 
+fsm_system_space_too_small          .equ $38
 fsm_operation_ok                    .equ $ff 

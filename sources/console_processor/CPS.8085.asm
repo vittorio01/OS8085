@@ -14,34 +14,46 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_init
                 mvi a,$41
                 call fsm_select_disk 
-                lxi h,0 
-                call fsm_format_disk 
-                mvi h,128
-loop:           lxi b,file_name 
-                lxi d,extension_name 
-                mvi a,%01101100
+                lxi h,2048
+                call fsm_format_disk
+                mvi a,%10100000
+                lxi b,file_name
+                lxi d,extension_name
                 call fsm_create_file_header
-                mov a,h 
-                sta file_name
-                sta extension_name
-                dcr h 
-                jnz loop
+                call fsm_select_file_header
+                lxi b,0 
+                lxi d,2048 
+                call fsm_selected_file_append_data_bytes
+                 
+                lxi b,0 
+                lxi d,0 
+                call fsm_selected_file_set_data_pointer
+                lxi h,2048 
+                call mms_create_low_memory_data_segment
+                lxi h,0 
+loop:           mov a,l 
+                call mms_write_selected_data_segment_byte
+                inx h 
+                jnc loop
+                mvi a,2 
+                lxi b,2048 
+                lxi h,0 
+                call fsm_selected_file_write_bytes
+                
+                lxi b,file_name 
+                lxi d,extension_name
+                call fsm_selected_disk_set_system
                 
                 hlt
 
-file_name:  .text " MAIN_PROGRAM"
+file_name:  .text "SYSTEM"
             .b 0
 
-extension_name: .text " BEF"
+extension_name: .text "BIN"
                 .b 0
 
-test_program:       mvi a,$AA 
-                    lxi h,$AAAA 
-                    lxi d,$BBBB 
-                    lxi b,$CCCC 
-                    hlt 
-test_program_end:       
-test_program_dim .equ test_program_end-test_program 
+
+
 cps_layer_end:
 .memory "fill", cps_layer_end, cps_dimension-cps_layer_end+CPS,$00
 

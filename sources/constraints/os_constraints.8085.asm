@@ -2,8 +2,8 @@
 ;è possibile modificare alcune informazioni per adattare il sistema ad un computer specifico
 
 ;queste informazioni riguardano la gestione dello spazio nelle varie componenti del sistema (da non modificare se non in fase di sviluppo del sistema)
-CPS_dimension           .equ    1024
-FSM_dimension           .equ    4096+2048
+CPS_dimension           .equ    512
+FSM_dimension           .equ    4096+2048+1024
 MMS_dimension           .equ    2048
 BIOS_dimension          .equ    2048 
 LIBRARIES_dimension     .equ    1024  
