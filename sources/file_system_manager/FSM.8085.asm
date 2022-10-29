@@ -155,13 +155,15 @@ fsm_selected_disk_fat_page_number       .equ reserved_memory_start + $0032
 
 
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
-;bit 7 -> pagina caricata in memoria
-;bit 6 -> tipo di pagina (FAT 0 o data 1)
-;bit 5 -> disco selezionato precedentemente 
-;bit 4 -> il disco selezionato è formattato 
-;bit 3 -> è stata selezionata un'intestazione
-;bit 2 -> è stato impostato il puntatore in un file 
-;bit 1 -> indica se la pagina è stata modificata
+
+fsm_disk_loaded_flags_selected_disk_mask        .equ %10000000
+fsm_disk_loaded_flags_formatted_disk_mask       .equ %01000000
+fsm_disk_loaded_flags_bootable_disk             .equ %00100000
+fsm_disk_loaded_flags_loaded_page_mask          .equ %00010000
+fsm_disk_loaded_flags_loaded_page_type_mask     .equ %00001000
+fsm_disk_loaded_flags_header_modified_page_mask .equ %00000100
+fsm_disk_loaded_flags_header_selected_mask      .equ %00000010
+fsm_disk_loaded_flags_header_data_pointer_mask  .equ %00000001
 
 fsm_selected_disk_loaded_page               .equ reserved_memory_start + $0033
 fsm_selected_disk_loaded_page_flags         .equ reserved_memory_start + $0035
@@ -224,9 +226,11 @@ fsm_functions:  .org FSM
                 jmp fsm_load_selected_program                       ;carica il programma nella memoria e lo predispone per essere avviato
                 ;funzioni per la gestione della sezione riservata al sistema 
                 jmp fsm_selected_disk_get_system                    ;
-                ;jmp fsm_selected_disk_put_system 
+                jmp fsm_selected_disk_set_system 
                 ;jmp fsm_selected_disk_get_boot_sector 
-                ;jmp fsm_selected_disk_put_boot_sector 
+                ;jmp fsm_selected_disk_set_boot_sector 
+                ;jmp fsm_selected_disk_set_bootable 
+                ;jmp fsm_selected_disk_set_not_bootable
 
 
 fsm_format_marker   .text "SFS1.0"
@@ -287,7 +291,7 @@ fsm_select_disk_next:           sta fsm_selected_disk
                                 jmp fsm_select_disk_end
 fsm_select_next2:               call bios_mass_memory_get_bps
                                 sta fsm_selected_disk_bps_number
-                                mvi a,%00100000
+                                mvi a,fsm_disk_loaded_flags_selected_disk_mask
                                 sta fsm_selected_disk_loaded_page_flags
                                 call bios_mass_memory_get_spt
                                 mov b,a 
@@ -339,9 +343,17 @@ fsm_select_next2:               call bios_mass_memory_get_bps
                                 mvi a,fsm_unformatted_disk 
                                 jmp fsm_select_disk_end
 fsm_select_disk_formatted_disk: lda fsm_selected_disk_loaded_page_flags
-                                ori %00010000
+                                ori fsm_disk_loaded_flags_formatted_disk_mask
                                 sta fsm_selected_disk_loaded_page_flags
-                                lxi h,fsm_format_marker_lenght+7 
+                                lxi h,0 
+                                call mms_read_selected_data_segment_byte
+                                jc fsm_select_disk_end 
+                                cpi $c9 
+                                jnz fsm_select_disk_not_bootable
+                                lda fsm_selected_disk_loaded_page_flags 
+                                ori fsm_disk_loaded_flags_bootable_disk
+                                sta fsm_selected_disk_loaded_page_flags 
+fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7 
                                 call mms_read_selected_data_segment_byte
                                 jc fsm_select_disk_end 
                                 sta fsm_selected_disk_spp_number
@@ -381,12 +393,11 @@ fsm_format_disk:                        push b
                                         push d 
                                         push h 
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %00100000
+                                        ani fsm_disk_loaded_flags_selected_disk_mask
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
 fsm_format_disk_next:                   call bios_mass_memory_format_drive   
-                                                 
                                         cpi bios_operation_ok 
                                         jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
@@ -397,7 +408,7 @@ fsm_format_disk_next:                   call bios_mass_memory_format_drive
                                         jmp fsm_disk_external_generated_error
 fsm_format_disk_next2:                  call bios_mass_memory_get_bps
                                         sta fsm_selected_disk_bps_number
-                                        mvi a,%00100000
+                                        mvi a,fsm_disk_loaded_flags_selected_disk_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         call bios_mass_memory_get_spt
                                         mov b,a 
@@ -428,8 +439,11 @@ fsm_format_disk_next2:                  call bios_mass_memory_get_bps
                                         call unsigned_multiply_byte
                                         mov e,c 
                                         mov d,b 
-                                        pop d 
-                                        push d 
+                                        pop b
+                                        push b
+                                        mov a,b
+                                        ora c
+                                        jz fsm_format_disk_jump1
                                         call unsigned_divide_word
                                         mov a,e 
                                         ora d 
@@ -587,7 +601,7 @@ fsm_format_disk_jump2:                  pop d
                                         call mms_mass_memory_write_sector
                                         cpi mms_operation_ok
                                         jnz fsm_disk_external_generated_error
-                                        mvi a,%00110000
+                                        mvi a,fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         call fsm_wipe_disk 
                                         cpi fsm_operation_ok
@@ -608,7 +622,7 @@ fsm_disk_external_generated_error:      pop h
 
 fsm_disk_set_name:                  push h
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ani %00110000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                     xri $ff 
                                     jnz fsm_disk_set_name_next 
                                     mvi a,fsm_disk_not_selected
@@ -638,7 +652,7 @@ fsm_disk_get_name:                  push h
                                     push d
                                     push b 
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ani %00110000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                     xri $ff 
                                     jnz fsm_disk_get_name_next 
                                     mvi a,fsm_disk_not_selected
@@ -723,7 +737,7 @@ fsm_disk_get_name_end:              pop b
 ;BCDE <- dimensione dello spazio disponibile 
 
 fsm_disk_get_free_space:            lda fsm_selected_disk_loaded_page_flags
-                                    ani %00110000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                     xri $ff 
                                     jnz fsm_disk_get_free_space_next 
                                     mvi a,fsm_disk_not_selected
@@ -741,7 +755,7 @@ fsm_disk_get_free_space_next:       push h
 ;A -> esito dell'operazione
 
 fsm_wipe_disk:                                  lda fsm_selected_disk_loaded_page_flags
-                                                ani %00110000
+                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                                 xri $ff 
                                                 jnz fsm_wipe_disk_disk_selected
                                                 mvi a,fsm_disk_not_selected
@@ -867,21 +881,291 @@ fsm_wipe_disk_load_page_error:                  inx sp
 ;fsm_selected_disk_get_system legge il sistema operativo del disco e lo salva in un file 
 ;BC -> nome del file di salvataggio
 ;DE -> estenzione del file di salvataggio 
-
 ;A <- esito dell'operazione 
 
-fsm_selected_disk_get_system:           push h  
-                                        push d 
-                                        push b 
-                                        mvi a,fsm_header_valid_bit+fsm_header_system_bit
-                                        call fsm_create_file_header
-                                        cpi fsm_operation_ok 
-                                        jnz fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system:                   push h  
+                                                push d 
+                                                push b 
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
+                                                cpi fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
+                                                jz fsm_selected_disk_get_system_next 
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ani fsm_disk_loaded_flags_selected_disk_mask
+                                                jnz fsm_selected_disk_get_system_not_formatted 
+                                                mvi a,fsm_disk_not_selected
+                                                jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_not_formatted:     lda fsm_selected_disk_loaded_page_flags 
+                                                ani fsm_disk_loaded_flags_formatted_disk_mask
+                                                jnz fsm_selected_disk_get_system_not_bootable
+                                                mvi a,fsm_unformatted_disk 
+                                                jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_not_bootable:      mvi a,fsm_selected_disk_not_bootable
+                                                jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_next:              mvi a,fsm_header_valid_bit+fsm_header_system_bit
+                                                call fsm_create_file_header
+                                                cpi fsm_operation_ok 
+                                                jnz fsm_selected_disk_get_system_end
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_end
+                                                lhld fsm_selected_disk_data_first_sector
+                                                dcx h 
+                                                mov a,l 
+                                                ora h 
+                                                jnz fsm_selected_disk_get_system_dim_estimation
+                                                mvi a,fsm_disk_operating_system_not_found
+                                                jmp fsm_selected_disk_get_system_header_delete
+fsm_selected_disk_get_system_dim_estimation:    mov c,l 
+                                                mov b,h 
+                                                lda fsm_selected_disk_bps_number
+                                                stc 
+                                                cmc 
+                                                mvi e,0 
+                                                rar
+                                                mov d,a 
+                                                mov a,e 
+                                                rar 
+                                                mov e,a 
+                                                call unsigned_multiply_word
+                                                call fsm_selected_file_append_data_bytes
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_header_delete
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_header_delete
+                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                                dad d 
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_selected_disk_get_system_header_delete
+                                                mov e,a 
+                                                inx h 
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_selected_disk_get_system_header_delete
+                                                mov d,a 
+                                                lhld fsm_selected_disk_data_first_sector
+                                                dcx h
+                                                mov c,l                     ;BC -> numero di settori mancanti
+                                                mov b,h                     ;DE -> numero di settore corrente 
+                                                push d                      ;HL -> posizione nel buffer 
+                                                lxi h,0                     ;SP -> [pagina del file di destinazione]
+                                                lxi d,1
+                                                xthl 
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error
+                                                xthl 
+fsm_selected_disk_get_system_loop:              push b 
+                                                push d 
+                                                lxi b,0 
+                                                call fsm_seek_disk_sector
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error2
+                                                mov a,c 
+                                                call bios_mass_memory_select_head
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error2
+                                                xchg 
+                                                call bios_mass_memory_select_track
+                                                xchg 
+                                                cpi bios_operation_ok 
+                                                jnz fsm_selected_disk_get_system_loop_error2
+                                                mov a,b 
+                                                call bios_mass_memory_select_sector
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error2
+                                                pop d 
+                                                pop b 
+                                                call mms_mass_memory_read_sector
+                                                cpi mms_operation_ok
+                                                jz fsm_selected_disk_get_system_loop_next 
+                                                cpi mms_destination_segment_overflow 
+                                                jnz fsm_selected_disk_get_system_loop_error
+                                                xthl 
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_loop_error
+                                                xthl 
+                                                lxi h,0 
+                                                jmp fsm_selected_disk_get_system_loop
+fsm_selected_disk_get_system_loop_next:         call fsm_page_set_modified_flag 
+                                                dcx b 
+                                                inx d 
+                                                mov a,c 
+                                                ora b 
+                                                jnz fsm_selected_disk_get_system_loop
+                                                inx sp 
+                                                inx sp 
+                                                call fsm_writeback_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_get_system_end
+                                                mvi a,fsm_operation_ok
+                                                jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_loop_error2:       pop d 
+                                                pop b 
+fsm_selected_disk_get_system_loop_error:        inx sp 
+                                                inx sp 
+fsm_selected_disk_get_system_header_delete:     push psw 
+                                                call fsm_delete_selected_file_header
+                                                call fsm_writeback_page
+                                                pop psw 
+fsm_selected_disk_get_system_end:               pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
+
+;fsm_selected_disk_set_system legge il sistema operativo del disco e lo salva in un file 
+;BC -> nome del file di salvataggio
+;DE -> estenzione del file di salvataggio 
+;A <- esito dell'operazione 
+
+fsm_selected_disk_set_system:                   push h  
+                                                push d 
+                                                push b 
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
+                                                cpi fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
+                                                jz fsm_selected_disk_set_system_next 
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ani fsm_disk_loaded_flags_selected_disk_mask
+                                                jnz fsm_selected_disk_set_system_not_formatted 
+                                                mvi a,fsm_disk_not_selected
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_not_formatted:     lda fsm_selected_disk_loaded_page_flags 
+                                                ani fsm_disk_loaded_flags_formatted_disk_mask
+                                                jnz fsm_selected_disk_set_system_not_bootable
+                                                mvi a,fsm_unformatted_disk 
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_not_bootable:      mvi a,fsm_selected_disk_not_bootable
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_next:              call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_end
+                                                call fsm_get_selected_file_header_flags
+                                                jc fsm_selected_disk_set_system_end
+                                                ani fsm_header_system_bit 
+                                                jnz fsm_selected_disk_set_system_file_ok
+                                                mvi a,fsm_not_a_system_file 
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_file_ok:           lhld fsm_selected_disk_data_first_sector
+                                                dcx h 
+                                                mov a,l 
+                                                ora h 
+                                                jnz fsm_selected_disk_set_system_dim_estimation
+                                                mvi a,fsm_disk_operating_system_not_found
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_dim_estimation:    mov c,l 
+                                                mov b,h 
+                                                lda fsm_selected_disk_bps_number
+                                                stc 
+                                                cmc 
+                                                mvi e,0 
+                                                rar
+                                                mov d,a 
+                                                mov a,e 
+                                                rar 
+                                                mov e,a 
+                                                call unsigned_multiply_word
+                                                xchg 
+                                                call fsm_get_selected_file_header_dimension
+                                                mov a,c 
+                                                ora b 
+                                                jz fsm_selected_disk_set_system_dim_estimation2
+fsm_selected_disk_set_system_dim_error:         mvi a,fsm_system_space_too_small 
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_dim_estimation2:   mov a,l 
+                                                sub e 
+                                                mov a,h 
+                                                sbb d 
                                         
-fsm_selected_disk_get_system_end:       pop b 
-                                        pop d 
-                                        pop h 
-                                        ret 
+                                                jc fsm_selected_disk_set_system_dim_error
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_end
+                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                                dad d 
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_selected_disk_set_system_end
+                                                mov e,a 
+                                                inx h 
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_selected_disk_set_system_end
+                                                mov d,a 
+                                                lhld fsm_selected_disk_data_first_sector
+                                                dcx h
+                                                mov c,l                     ;BC -> numero di settori mancanti
+                                                mov b,h                     ;DE -> numero di settore corrente 
+                                                push d                      ;HL -> posizione nel buffer 
+                                                lxi h,0                     ;SP -> [pagina del file di destinazione]
+                                                lxi d,1
+                                                xthl 
+                                                
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error
+                                                
+                                                xthl 
+fsm_selected_disk_set_system_loop:              push b 
+                                                push d 
+                                                lxi b,0 
+                                                call fsm_seek_disk_sector
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                mov a,c 
+                                                call bios_mass_memory_select_head
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                xchg 
+                                                call bios_mass_memory_select_track
+                                                xchg 
+                                                cpi bios_operation_ok 
+                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                mov a,b 
+                                                call bios_mass_memory_select_sector
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                pop d 
+                                                pop b 
+                                                call mms_mass_memory_write_sector
+                                                cpi mms_operation_ok
+                                                jz fsm_selected_disk_set_system_loop_next 
+                                                cpi mms_source_segment_overflow 
+                                                jnz fsm_selected_disk_set_system_loop_error
+                                                xthl 
+                                                call fsm_get_page_link
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error
+                                                call fsm_move_data_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_loop_error
+                                                xthl 
+                                                lxi h,0 
+                                                jmp fsm_selected_disk_set_system_loop
+fsm_selected_disk_set_system_loop_next:         call fsm_page_unset_modified_flag 
+                                                dcx b 
+                                                inx d 
+                                                mov a,c 
+                                                ora b 
+                                                jnz fsm_selected_disk_set_system_loop
+                                                inx sp 
+                                                inx sp 
+                                                call fsm_writeback_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_set_system_end
+                                                mvi a,fsm_operation_ok
+                                                jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_loop_error2:       pop d 
+                                                pop b 
+fsm_selected_disk_set_system_loop_error:        inx sp 
+                                                inx sp  
+fsm_selected_disk_set_system_end:               pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
+
 
 ;funzioni dedicare alla gestone del corpo dei files
 
@@ -989,7 +1273,7 @@ fsm_load_selected_program_end:                  pop b
 fsm_selected_file_write_bytes:              push d   
                                             push psw 
                                             lda fsm_selected_disk_loaded_page_flags
-                                            ani %00000100
+                                            ani fsm_disk_loaded_flags_header_data_pointer_mask
                                             jnz fsm_selected_file_write_bytes_next 
                                             mvi a,fsm_data_pointer_not_setted
                                             jmp fsm_selected_file_write_bytes_end2
@@ -1017,7 +1301,10 @@ fsm_Selected_file_write_bytes_loop:         inx sp
                                             cpi mms_operation_ok
                                             jnz fsm_selected_file_write_bytes_end
                                             lda fsm_page_buffer_segment_id
+                                            call fsm_page_set_modified_flag
+                                            
                                             call mms_segment_data_transfer
+                                            
                                             cpi mms_operation_ok
                                             jz fsm_selected_file_write_bytes_loop_end
                                             cpi mms_source_segment_overflow
@@ -1030,13 +1317,15 @@ fsm_Selected_file_write_bytes_loop2:        cpi mms_destination_segment_overflow
                                             call fsm_get_page_link
                                             cpi fsm_operation_ok
                                             jnz fsm_selected_file_write_bytes_end
+                                        
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
                                             jnz fsm_selected_file_write_bytes_end
                                             xthl 
                                             lxi h,0 
                                             jmp fsm_Selected_file_write_bytes_loop
-fsm_Selected_file_write_bytes_loop_end:     call fsm_writeback_page
+fsm_Selected_file_write_bytes_loop_end:     
+                                            call fsm_writeback_page
                                             cpi fsm_operation_ok
                                             jnz fsm_selected_file_write_bytes_end
                                             mvi a,fsm_operation_ok
@@ -1060,7 +1349,7 @@ fsm_selected_file_write_bytes_end2:         inx sp
 fsm_selected_file_read_bytes:               push d 
                                             push psw  
                                             lda fsm_selected_disk_loaded_page_flags
-                                            ani %00000100
+                                            ani fsm_disk_loaded_flags_header_data_pointer_mask
                                             jnz fsm_selected_file_read_bytes_next  
                                             mvi a,fsm_data_pointer_not_setted
                                             jmp fsm_selected_file_read_bytes_end2   
@@ -1082,6 +1371,7 @@ fsm_Selected_file_read_bytes_loop:          inx sp
                                             xthl 
                                             dcx sp 
                                             dcx sp                  
+                                            call fsm_page_set_modified_flag
                                             call mms_segment_data_transfer
                                             cpi mms_operation_ok
                                             jz fsm_Selected_file_read_bytes_loop_end
@@ -1203,7 +1493,7 @@ fsm_selected_file_set_data_pointer_loop:        mov a,c
                                                 jmp fsm_selected_file_set_data_pointer_loop
 fsm_selected_file_set_data_pointer_loop_end:    shld fsm_selected_file_data_pointer_page_address
                                                 lda fsm_selected_disk_loaded_page_flags
-                                                ori %00000100
+                                                ori fsm_disk_loaded_flags_header_data_pointer_mask
                                                 sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
                                                 jmp fsm_selected_file_set_data_pointer_end
@@ -1441,7 +1731,7 @@ fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_
                                                     call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
                                                     lda fsm_selected_disk_loaded_page_flags
-                                                    ani %11111011
+                                                    ani $ff-fsm_disk_loaded_flags_header_data_pointer_mask
                                                     sta fsm_selected_disk_loaded_page_flags 
                                                     call fsm_writeback_page
                                                     jmp fsm_selected_file_remove_data_bytes_end
@@ -1527,7 +1817,7 @@ fsm_selected_file_wipe_next2:   mov a,c
                                 call fsm_write_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end 
 fsm_selected_file_wipe_end2:    lda fsm_selected_disk_loaded_page_flags
-                                ani %11111011
+                                ani $ff-fsm_disk_loaded_flags_header_data_pointer_mask-fsm_disk_loaded_flags_header_selected_mask
                                 sta fsm_selected_disk_loaded_page_flags
                                 call fsm_writeback_page
 fsm_selected_file_wipe_end:     pop b 
@@ -1692,6 +1982,7 @@ fsm_selected_file_append_data_bytes_next2:          xchg
                                                     jnz fsm_selected_file_append_data_bytes_next3 
                                                     xchg 
                                                     call fsm_get_first_free_page_list
+                                                    
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     xchg 
@@ -1769,7 +2060,7 @@ fsm_selected_file_append_data_bytes_next4:          call fsm_load_selected_file_
                                                     call fsm_write_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
                                                     lda fsm_selected_disk_loaded_page_flags
-                                                    ani %11111011
+                                                    ani $ff-fsm_disk_loaded_flags_header_data_pointer_mask
                                                     sta fsm_selected_disk_loaded_page_flags
                                                     call fsm_writeback_page
                                                     jmp fsm_selected_file_append_data_bytes_end
@@ -1863,7 +2154,7 @@ fsm_delete_selected_file_header_last:   xchg
                                         jc fsm_delete_selected_file_header_end
                                         call fsm_reset_file_header_scan_pointer 
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %11111011
+                                        ani $ff-fsm_disk_loaded_flags_header_selected_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok
 fsm_delete_selected_file_header_end:    pop b 
@@ -1942,7 +2233,7 @@ fsm_increment_file_header_scan_pointer_end:     pop b
 fsm_get_selected_file_header_flags:         push h 
                                             call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
-                                            jnz fsm_get_selected_file_header_flags_next 
+                                            jz fsm_get_selected_file_header_flags_next 
                                             stc 
                                             jmp fsm_get_selected_file_header_flags_end
 fsm_get_selected_file_header_flags_next:    call fsm_read_selected_data_segment_byte
@@ -2263,7 +2554,7 @@ fsm_get_selected_file_header_extension_end:                 pop b
 fsm_load_selected_file_header:          push d 
                                         push b 
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %00001000
+                                        ani fsm_disk_loaded_flags_header_selected_mask
                                         jnz fsm_load_selected_file_header_next
                                         mvi a,fsm_header_not_selected 
                                         jmp fsm_load_selected_file_header_end
@@ -2466,6 +2757,7 @@ fsm_create_file_header_write_bytes:     push d
                                         dcx sp 
                                         dcx sp 
                                         dcx sp 
+                                        
                                         call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         lxi b,fsm_header_extension_dimension+fsm_header_name_dimension+7
@@ -2492,7 +2784,7 @@ fsm_select_file_header:                     push h
                                             mov h,b 
                                             shld fsm_selected_file_header_page_address
                                             lda fsm_selected_disk_loaded_page_flags
-                                            ori %00001000
+                                            ori fsm_disk_loaded_flags_header_selected_mask
                                             sta fsm_selected_disk_loaded_page_flags
                                             mvi a,fsm_operation_ok
 fsm_select_file_header_end:                 pop b  
@@ -2939,17 +3231,28 @@ fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 
 
-;fsm_write_selected_data_segment_byte e fsm_read_selected_data_segment_byte vengono usate per modificare i dati nel buffer 
+;fsm_write_selected_data_segment_byte, fsm_read_selected_data_segment_byte e fsm_mass_memory_read_sector vengono usate per modificare i dati nel buffer 
 ;quando viene scritto un byte nel buffer viene segnalato implicitamente al sistema di writeback che la pagina corrente è stata modificata
-fsm_write_selected_data_segment_byte:   push psw 
-                                        lda fsm_selected_disk_loaded_page_flags
-                                        ori %00000010
-                                        sta fsm_selected_disk_loaded_page_flags
-                                        pop psw 
+fsm_write_selected_data_segment_byte:   call fsm_page_set_modified_flag
                                         jmp mms_write_selected_data_segment_byte
 
 fsm_read_selected_data_segment_byte     .equ mms_read_selected_data_segment_byte
 
+;fsm_page_set_modified_flag e fsm_page_unset_modified_flag vengono utilizzate per forzare il sistema di writeback in casi speciali
+
+fsm_page_set_modified_flag:             push psw 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ori fsm_disk_loaded_flags_header_modified_page_mask
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        pop psw 
+                                        ret 
+
+fsm_page_unset_modified_flag:           push psw 
+                                        lda fsm_selected_disk_loaded_page_flags
+                                        ani $ff-fsm_disk_loaded_flags_header_modified_page_mask
+                                        sta fsm_selected_disk_loaded_page_flags
+                                        pop psw 
+                                        ret 
 ;fsm_clear_mms_segment riempie il buffer di memoria con degli zeri
 
 
@@ -2982,13 +3285,13 @@ fsm_move_fat_page:          push d
                             push h 
                             mov d,a 
                             lda fsm_selected_disk_loaded_page_flags
-                            ani %10000000
+                            ani fsm_disk_loaded_flags_loaded_page_mask
                             jz fsm_move_fat_page_load 
                             lda fsm_selected_disk_loaded_page_flags 
-                            ani %00000010
+                            ani fsm_disk_loaded_flags_header_modified_page_mask
                             jz fsm_move_fat_page_load
                             lda fsm_selected_disk_loaded_page_flags
-                            ani %01000000
+                            ani fsm_disk_loaded_flags_loaded_page_type_mask
                             jz fsm_move_fat_page_verify
                             lhld fsm_selected_disk_loaded_page
                             call fsm_write_data_page
@@ -3002,7 +3305,7 @@ fsm_move_fat_page_verify:   lda fsm_selected_disk_loaded_page
                             cpi fsm_operation_ok
                             jnz fsm_move_fat_page_end
 fsm_move_fat_page_load:     lda fsm_selected_disk_loaded_page_flags 
-                            ani %11111101
+                            ani $ff-fsm_disk_loaded_flags_header_modified_page_mask
                             sta fsm_selected_disk_loaded_page_flags 
                             mov a,d 
                             sta fsm_selected_disk_loaded_page
@@ -3022,13 +3325,13 @@ fsm_move_data_page:             push d
                                 push h 
                                 xchg 
                                 lda fsm_selected_disk_loaded_page_flags
-                                ani %10000000
+                                ani fsm_disk_loaded_flags_loaded_page_mask
                                 jz fsm_move_data_page_load 
                                 lda fsm_selected_disk_loaded_page_flags 
-                                ani %00000010
+                                ani fsm_disk_loaded_flags_header_modified_page_mask
                                 jz fsm_move_data_page_load
                                 lda fsm_selected_disk_loaded_page_flags
-                                ani %01000000
+                                ani fsm_disk_loaded_flags_loaded_page_type_mask
                                 jnz fsm_move_data_page_verify
                                 lda fsm_selected_disk_loaded_page
                                 call fsm_write_fat_page
@@ -3046,7 +3349,7 @@ fsm_move_data_page_writeback:   call fsm_write_data_page
                                 cpi fsm_operation_ok
                                 jnz fsm_move_data_page_end
 fsm_move_data_page_load:        lda fsm_selected_disk_loaded_page_flags 
-                                ani %11111101
+                                ani $ff-fsm_disk_loaded_flags_header_modified_page_mask
                                 sta fsm_selected_disk_loaded_page_flags 
                                 mov l,e 
                                 mov h,d  
@@ -3071,6 +3374,7 @@ fsm_move_data_page_load:        lda fsm_selected_disk_loaded_page_flags
                                 mov a,d
                                 call fsm_write_selected_data_segment_byte
                                 jc fsm_move_data_page_end
+                                inx h 
                                 xchg 
                                 lhld fsm_selected_disk_first_free_page_address
                                 xchg 
@@ -3087,10 +3391,10 @@ fsm_move_data_page_end:         pop h
                                 ret 
 
 ;fsm_writeback_page salva in memoria la pagina contenuta nel buffer (salva le modifiche all'ultima pagina caricata)
-
+;A -> esito dell'operazione
 fsm_writeback_page:     push h 
                         lda fsm_selected_disk_loaded_page_flags
-                        ani %10000000
+                        ani fsm_disk_loaded_flags_loaded_page_mask 
                         jz fsm_writeback_page_end
                         lxi h,0 
                         call fsm_move_data_page
@@ -3114,10 +3418,10 @@ fsm_read_fat_page:                  push b
                                     mov b,a 
                                     lda fsm_selected_disk_loaded_page_flags
                                     xri $ff 
-                                    ani %00110000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                     jz fsm_read_fat_page_next
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ani %00100000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask
                                     jnz fsm_read_fat_page_not_formatted
                                     mvi a,fsm_disk_not_selected
                                     jmp fsm_read_fat_page_end
@@ -3153,12 +3457,12 @@ fsm_read_fat_page_not_overflow:     mov a,b
                                     jz fsm_read_fat_page_operation_ok
                                     push psw 
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ani %01111111
+                                    ani $ff-fsm_disk_loaded_flags_loaded_page_mask
                                     sta fsm_selected_disk_loaded_page_flags
                                     pop psw 
                                     jmp fsm_read_fat_page_end
 fsm_read_fat_page_operation_ok:     lda fsm_selected_disk_loaded_page_flags
-                                    ani %00111111
+                                    ani $ff-fsm_disk_loaded_flags_loaded_page_mask-fsm_disk_loaded_flags_loaded_page_type_mask
                                     sta fsm_selected_disk_loaded_page_flags
                                     call fsm_reselect_mms_segment
                                     cpi fsm_operation_ok
@@ -3206,7 +3510,7 @@ fsm_read_fat_page_operation_loop2:  xthl
                                     xthl
                                     jnz fsm_read_fat_page_operation_loop
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ori %10000000
+                                    ori fsm_disk_loaded_flags_loaded_page_mask
                                     sta fsm_selected_disk_loaded_page_flags
                                     mvi a,fsm_operation_ok
 fsm_read_fat_page_end_loop:         inx sp 
@@ -3227,10 +3531,10 @@ fsm_write_fat_page:                 push b
                                     mov b,a 
                                     lda fsm_selected_disk_loaded_page_flags
                                     xri $ff 
-                                    ani %00110000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                     jz fsm_write_fat_page_next
                                     lda fsm_selected_disk_loaded_page_flags
-                                    ani %00100000
+                                    ani fsm_disk_loaded_flags_selected_disk_mask
                                     jnz fsm_write_fat_page_not_formatted
                                     mvi a,fsm_disk_not_selected
                                     jmp fsm_write_fat_page_end
@@ -3331,10 +3635,10 @@ fsm_read_data_page:                     push b
                                         push h 
                                         lda fsm_selected_disk_loaded_page_flags
                                         xri $ff 
-                                        ani %00110000
+                                        ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                         jz fsm_read_data_page_next
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %00100000
+                                        ani fsm_disk_loaded_flags_selected_disk_mask
                                         jnz fsm_read_data_page_not_formatted
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_read_data_page_end
@@ -3394,13 +3698,13 @@ fsm_read_data_page_not_overflow:        xchg
                                         jz fsm_read_data_page_operation_ok
                                         push psw 
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %01111111
+                                        ani $ff-fsm_disk_loaded_flags_loaded_page_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         pop psw 
                                         jmp fsm_read_data_page_end
 fsm_read_data_page_operation_ok:        lda fsm_selected_disk_loaded_page_flags
-                                        ani %01111111
-                                        ori %01000000
+                                        ani $ff-fsm_disk_loaded_flags_loaded_page_mask
+                                        ori fsm_disk_loaded_flags_loaded_page_type_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         call fsm_reselect_mms_segment
                                         cpi fsm_operation_ok
@@ -3448,7 +3752,7 @@ fsm_read_data_page_operation_loop2:     xthl
                                         xthl
                                         jnz fsm_read_data_page_operation_loop
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ori %11000000
+                                        ori fsm_disk_loaded_flags_loaded_page_type_mask+fsm_disk_loaded_flags_loaded_page_mask
                                         sta fsm_selected_disk_loaded_page_flags
                                         mvi a,fsm_operation_ok
 fsm_read_data_page_end_loop:            inx sp 
@@ -3467,10 +3771,10 @@ fsm_write_data_page:                    push b
                                         push h 
                                         lda fsm_selected_disk_loaded_page_flags
                                         xri $ff 
-                                        ani %00110000
+                                        ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
                                         jz fsm_write_data_page_next
                                         lda fsm_selected_disk_loaded_page_flags
-                                        ani %00100000
+                                        ani fsm_disk_loaded_flags_selected_disk_mask
                                         jnz fsm_write_data_page_not_formatted
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_write_data_page_end
