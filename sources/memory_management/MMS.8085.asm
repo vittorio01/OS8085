@@ -1347,7 +1347,7 @@ mms_mass_memory_write_sector_loop:  mov a,e
                                     mov a,h
                                     sbb d
                                     jnc mms_mass_memory_write_sector_next3 
-                                    mvi a,mms_destination_segment_overflow
+                                    mvi a,mms_source_segment_overflow
                                     pop h
                                     jmp mms_mass_memory_write_sector_end 
 mms_mass_memory_write_sector_next3: lhld mms_data_selected_segment_address
