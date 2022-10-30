@@ -33,7 +33,7 @@ fsm_load_selected_program                           .equ fsm_selected_file_set_d
 
 fsm_selected_disk_get_system                        .equ fsm_load_selected_program +3
 fsm_selected_disk_set_system                        .equ fsm_selected_disk_get_system+3
-;fsm_selected_disk_get_boot_sector                  .equ fsm_selected_disk_put_system+3
-;fsm_selected_disk_set_boot_sector                  .equ fsm_selected_disk_get_boot_sector+3
-;fsm_selected_disk_set_bootable                     .equ fsm_selected_disk_put_boot_sector+3
-;fsm_selected_disk_set_not_bootable                 .equ fsm_selected_disk_set_bootable+3
+fsm_selected_disk_get_boot_section                  .equ fsm_selected_disk_set_system+3
+fsm_selected_disk_set_boot_section                  .equ fsm_selected_disk_get_boot_section+3
+fsm_selected_disk_set_bootable                      .equ fsm_selected_disk_set_boot_section+3
+fsm_selected_disk_unset_bootable                    .equ fsm_selected_disk_set_bootable+3

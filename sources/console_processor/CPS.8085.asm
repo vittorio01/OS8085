@@ -16,33 +16,7 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_select_disk 
                 lxi h,2048
                 call fsm_format_disk
-                mvi a,%10100000
-                lxi b,file_name
-                lxi d,extension_name
-                call fsm_create_file_header
-                call fsm_select_file_header
-                lxi b,0 
-                lxi d,2048 
-                call fsm_selected_file_append_data_bytes
-                 
-                lxi b,0 
-                lxi d,0 
-                call fsm_selected_file_set_data_pointer
-                lxi h,2048 
-                call mms_create_low_memory_data_segment
-                lxi h,0 
-loop:           mov a,l 
-                call mms_write_selected_data_segment_byte
-                inx h 
-                jnc loop
-                mvi a,2 
-                lxi b,2048 
-                lxi h,0 
-                call fsm_selected_file_write_bytes
-                
-                lxi b,file_name 
-                lxi d,extension_name
-                call fsm_selected_disk_set_system
+                call fsm_selected_disk_set_bootable
                 
                 hlt
 
