@@ -901,7 +901,7 @@ mms_write_selected_data_segment_byte_next:                  lda mms_data_selecte
 mms_write_selected_data_segment_byte_end:                   pop h
                                                             ret  
 
-;mms_read_selected_system_segment_dimension restituisce la dimensione del segmento di sistema selezionato
+;mms_read_selected_system_segment_dimension restituisce la dimensione del segmento selezionato
 ;A  <- risultato dell'operazione
 ;HL <- dimensione del segmento (se esiste)
 mms_read_selected_data_segment_dimension:       lhld mms_data_selected_segment_dimension
@@ -909,10 +909,8 @@ mms_read_selected_data_segment_dimension:       lhld mms_data_selected_segment_d
                                                 ora h 
                                                 jnz mms_read_selected_data_segment_dimension_next
                                                 mvi a,mms_segment_data_not_found_error_code
-                                               
                                                 ret 
 mms_read_selected_data_segment_dimension_next:  mvi a,mms_operation_ok
-                                               
                                                 ret 
 
 ;mms_set_selected_data_segment_flags imposta le flags del segmento selezionato
