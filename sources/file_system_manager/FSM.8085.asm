@@ -880,159 +880,43 @@ fsm_wipe_disk_load_page_error:                  inx sp
 
 ;funzioni dedicate allo spazio riservato
 
-fsm_selected_disk_get_boot_section:
-fsm_selected_disk_set_boot_section:
-
-;fsm_selected_disk_set_bootable rende il disco selezionato avviabile 
-
-fsm_selected_disk_set_bootable:             push h 
-                                            push d 
-                                            push b 
-                                            call fsm_writeback_page
-                                            cpi fsm_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end 
-                                            lxi b,0 
-                                            lxi d,0 
-                                            call fsm_seek_disk_sector
-                                            cpi fsm_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            mov a,c 
-                                            call bios_mass_memory_select_head
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            xchg 
-                                            call bios_mass_memory_select_track
-                                            cpi bios_operation_ok 
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            mov a,b 
-                                            call bios_mass_memory_select_sector
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            lxi h,0 
-                                            call fsm_reselect_mms_segment
-                                            call mms_mass_memory_read_sector
-                                            cpi mms_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            lxi h,0 
-                                            lxi d,fsm_boot_sector_start_position+fsm_boot_sector_compile_address_offset
-                                            mvi a,$c3
-                                            call mms_write_selected_data_segment_byte
-                                            jc fsm_selected_disk_set_bootable_end
-                                            inx h 
-                                            mov a,e 
-                                            call mms_write_selected_data_segment_byte
-                                            jc fsm_selected_disk_set_bootable_end
-                                            inx h 
-                                            mov a,d 
-                                            call mms_write_selected_data_segment_byte
-                                            jc fsm_selected_disk_set_bootable_end
-                                            lxi h,0 
-                                            call mms_mass_memory_write_sector
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_set_bootable_end
-                                            lda fsm_selected_disk_loaded_page_flags
-                                            ori fsm_disk_loaded_flags_bootable_disk
-                                            sta fsm_selected_disk_loaded_page_flags
-                                            mvi a,fsm_operation_ok
-fsm_selected_disk_set_bootable_end:         pop b 
-                                            pop d 
-                                            pop h 
-                                            ret 
-
-;fsm_selected_disk_unset_bootable rende il disco selezionato non avviabile 
-
-fsm_selected_disk_unset_bootable:           push h 
-                                            push d 
-                                            push b 
-                                            call fsm_writeback_page
-                                            cpi fsm_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            lxi b,0 
-                                            lxi d,0 
-                                            call fsm_seek_disk_sector
-                                            cpi fsm_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            mov a,c 
-                                            call bios_mass_memory_select_head
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            xchg 
-                                            call bios_mass_memory_select_track
-                                            cpi bios_operation_ok 
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            mov a,b 
-                                            call bios_mass_memory_select_sector
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            lxi h,0 
-                                            call fsm_reselect_mms_segment
-                                            call mms_mass_memory_read_sector
-                                            cpi mms_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            lxi h,0 
-                                            mvi a,$c9 
-                                            call mms_write_selected_data_segment_byte
-                                            jc fsm_selected_disk_unset_bootable_end
-                                            lxi h,0 
-                                            call mms_mass_memory_write_sector
-                                            cpi bios_operation_ok
-                                            jnz fsm_selected_disk_unset_bootable_end
-                                            lda fsm_selected_disk_loaded_page_flags
-                                            ani $ff-fsm_disk_loaded_flags_bootable_disk
-                                            sta fsm_selected_disk_loaded_page_flags
-                                            mvi a,fsm_operation_ok
-fsm_selected_disk_unset_bootable_end:       pop b 
-                                            pop d 
-                                            pop h 
-                                            ret 
-
-;fsm_selected_disk_get_system legge il sistema operativo del disco e lo salva in un file 
-
-;BC -> nome del file di salvataggio
-;DE -> estenzione del file di salvataggio 
-;A <- esito dell'operazione 
-
-fsm_selected_disk_get_system:                       push h  
-                                                    push d 
-                                                    push b 
+;fsm_selected_disk_set_boot_section trasferisce il contenuto da un segmento di memoria al settore di avvio del disco 
+;A -> segmento sorgente 
+;HL -> offset nel segmento sorgente
+fsm_selected_disk_set_boot_section:                 push b
+                                                    push d
+                                                    push h
+                                                    push psw 
                                                     lda fsm_selected_disk_loaded_page_flags
-                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
-                                                    cpi fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
-                                                    jz fsm_selected_disk_get_system_next 
-                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    
+                                                    xri $ff 
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                    jz fsm_selected_disk_set_boot_section_next
                                                     ani fsm_disk_loaded_flags_selected_disk_mask
-                                                    jnz fsm_selected_disk_get_system_not_formatted 
+                                                    jz fsm_selected_disk_set_boot_section_not_formatted
                                                     mvi a,fsm_disk_not_selected
-                                                    jmp fsm_selected_disk_get_system_end
-fsm_selected_disk_get_system_not_formatted:         lda fsm_selected_disk_loaded_page_flags 
-                                                    ani fsm_disk_loaded_flags_formatted_disk_mask
-                                                    jnz fsm_selected_disk_get_system_not_bootable
-                                                    mvi a,fsm_unformatted_disk 
-                                                    jmp fsm_selected_disk_get_system_end
-fsm_selected_disk_get_system_not_bootable:          mvi a,fsm_disk_not_bootable
-                                                    jmp fsm_selected_disk_get_system_end
-fsm_selected_disk_get_system_next:                  xthl 
-                                                    mov a,l 
-                                                    xthl 
-                                                    call fsm_select_disk
+                                                    jmp fsm_selected_disk_set_boot_section_end
+fsm_selected_disk_set_boot_section_not_formatted:   mvi a,fsm_unformatted_disk 
+                                                    jmp fsm_selected_disk_set_boot_section_end
+fsm_selected_disk_set_boot_section_next:            call fsm_writeback_page
                                                     cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_end
-                                                    mvi a,fsm_header_valid_bit+fsm_header_system_bit
-                                                    call fsm_create_file_header
-                                                    cpi fsm_operation_ok 
-                                                    jnz fsm_selected_disk_get_system_end
-                                                    call fsm_select_file_header
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_end
-                                                    lhld fsm_selected_disk_data_first_sector
-                                                    dcx h 
-                                                    mov a,l 
-                                                    ora h 
-                                                    jnz fsm_selected_disk_get_system_dim_estimation
-                                                    mvi a,fsm_disk_operating_system_not_found
-                                                    jmp fsm_selected_disk_get_system_header_delete
-fsm_selected_disk_get_system_dim_estimation:        mov c,l 
-                                                    mov b,h 
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    lxi b,0 
+                                                    lxi d,0 
+                                                    call fsm_seek_disk_sector
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    mov a,b 
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    lxi b,fsm_boot_sector_start_position
                                                     lda fsm_selected_disk_bps_number
                                                     stc 
                                                     cmc 
@@ -1041,247 +925,724 @@ fsm_selected_disk_get_system_dim_estimation:        mov c,l
                                                     mov d,a 
                                                     mov a,e 
                                                     rar 
-                                                    mov e,a 
-                                                    call unsigned_multiply_word
-                                                    call fsm_selected_file_append_data_bytes
+                                                    mov e,a
+                                                    lxi b,fsm_boot_sector_start_position
+                                                    mov a,e 
+                                                    sub c 
+                                                    mov c,a 
+                                                    mov a,d 
+                                                    sbb b 
+                                                    mov b,a 
+                                                    lxi h,fsm_uncoded_page_dimension
+                                                    mov a,l 
+                                                    sub e 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    sbb d 
+                                                    mov h,a 
+                                                    mov e,l 
+                                                    mov d,h  
+                                                    call fsm_reselect_mms_segment
                                                     cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_header_delete
-                                                    call fsm_load_selected_file_header
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_header_delete
-                                                    lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
-                                                    dad d 
-                                                    call fsm_read_selected_data_segment_byte
-                                                    jc fsm_selected_disk_get_system_header_delete
-                                                    mov e,a 
-                                                    inx h 
-                                                    call fsm_read_selected_data_segment_byte
-                                                    jc fsm_selected_disk_get_system_header_delete
-                                                    mov d,a 
-                                                    pop h 
-                                                    dcx h
-                                                    mov c,l                     ;BC -> numero di settori mancanti
-                                                    mov b,h                     ;DE -> numero di settore corrente 
-                                                    push d                      ;HL -> posizione nel buffer 
-                                                    lxi h,0                     ;SP -> [pagina del file di destinazione]
-                                                    lxi d,1
-                                                    xthl 
-                                                    call fsm_move_data_page
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error
-                                                    xthl 
-fsm_selected_disk_get_system_loop:                  push b 
-                                                    push d 
-                                                    lxi b,0 
-                                                    call fsm_seek_disk_sector
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error2
-                                                    mov a,c 
-                                                    call bios_mass_memory_select_head
-                                                    cpi bios_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error2
-                                                    xchg 
-                                                    call bios_mass_memory_select_track
-                                                    xchg 
-                                                    cpi bios_operation_ok 
-                                                    jnz fsm_selected_disk_get_system_loop_error2
-                                                    mov a,b 
-                                                    call bios_mass_memory_select_sector
-                                                    cpi bios_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error2
-                                                    pop d 
-                                                    pop b 
+                                                    jnz fsm_selected_disk_set_boot_section_end
                                                     call mms_mass_memory_read_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    xthl 
+                                                    mov a,h 
+                                                    xthl 
+                                                    call mms_select_low_memory_data_segment
                                                     cpi mms_operation_ok
-                                                    jz fsm_selected_disk_get_system_loop_next 
-                                                    cpi mms_destination_segment_overflow 
-                                                    jnz fsm_selected_disk_get_system_loop_error
-                                                    xthl 
-                                                    call fsm_get_page_link
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error
-                                                    call fsm_move_data_page
-                                                    cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_loop_error
-                                                    xthl 
-                                                    lxi h,0 
-                                                    jmp fsm_selected_disk_get_system_loop
-fsm_selected_disk_get_system_loop_next:             call fsm_page_set_modified_flag 
-                                                    dcx b 
-                                                    inx d 
-                                                    mov a,c 
-                                                    ora b 
-                                                    jnz fsm_selected_disk_get_system_loop
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    mov l,e 
+                                                    mov h,d 
+                                                    mvi a,fsm_boot_sector_start_position
+                                                    add l 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    aci 0 
+                                                    mov h,a 
+                                                    lda fsm_page_buffer_segment_id 
+                                                    push d
                                                     inx sp 
                                                     inx sp 
-                                                    call fsm_writeback_page
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov e,l 
+                                                    mov d,h 
+                                                    xthl 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    call mms_segment_data_transfer
+                                                    pop h
+                                                    cpi mms_operation_ok
+                                                    jz fsm_selected_disk_set_boot_section_transfer_ok
+                                                    cpi mms_destination_segment_overflow
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    mvi a,fsm_not_enough_spage_left
+                                                    jmp fsm_selected_disk_set_boot_section_end
+fsm_selected_disk_set_boot_section_transfer_ok:     call fsm_reselect_mms_segment
                                                     cpi fsm_operation_ok
-                                                    jnz fsm_selected_disk_get_system_end
+                                                    jnz fsm_selected_disk_set_boot_section_end
+                                                    call mms_mass_memory_write_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_boot_section_end
                                                     mvi a,fsm_operation_ok
-                                                    jmp fsm_selected_disk_get_system_end
-fsm_selected_disk_get_system_loop_error2:           pop d 
-                                                    pop b 
-fsm_selected_disk_get_system_loop_error:            inx sp 
-                                                    inx sp  
-fsm_selected_disk_get_system_header_delete:         push psw 
-                                                    call fsm_delete_selected_file_header
-                                                    call fsm_writeback_page
-                                                    pop psw
-                                                    jmp fsm_selected_disk_get_system_end  
-fsm_selected_disk_get_system_end:                   pop b 
-                                                    pop d 
-                                                    pop h 
+fsm_selected_disk_set_boot_section_end:             inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    pop d
+                                                    pop b
                                                     ret 
 
-;fsm_selected_disk_set_system legge il sistema operativo del disco e lo salva in un file 
-;A -> disco di sistema da modificare
-;BC -> nome del file di salvataggio
-;DE -> estenzione del file di salvataggio 
-;A <- esito dell'operazione 
+;fsm_selected_disk_get_boot_section trasferisce il contenuto del settore di avvio nel segmento di memoria
+;A -> segmento destinazione 
+;HL -> offset nel segmento destinazione
+fsm_selected_disk_get_boot_section:                 push b
+                                                    push d
+                                                    push h
+                                                    push psw 
+                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    xri $ff 
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                    jz fsm_selected_disk_get_boot_section_next
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask
+                                                    jz fsm_selected_disk_get_boot_section_not_formatted
+                                                    mvi a,fsm_disk_not_selected
+                                                    jmp fsm_selected_disk_get_boot_section_end
+fsm_selected_disk_get_boot_section_not_formatted:   mvi a,fsm_unformatted_disk 
+                                                    jmp fsm_selected_disk_get_boot_section_end
+fsm_selected_disk_get_boot_section_next:            call fsm_writeback_page
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    lxi b,0 
+                                                    lxi d,0 
+                                                    call fsm_seek_disk_sector
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    lxi b,fsm_boot_sector_start_position
+                                                    lda fsm_selected_disk_bps_number
+                                                    stc 
+                                                    cmc 
+                                                    mvi e,0 
+                                                    rar
+                                                    mov d,a 
+                                                    mov a,e 
+                                                    rar 
+                                                    mov e,a
+                                                    lxi b,fsm_boot_sector_start_position
+                                                    mov a,e 
+                                                    sub c 
+                                                    mov c,a 
+                                                    mov a,d 
+                                                    sbb b 
+                                                    mov b,a 
+                                                    lxi h,0
+                                                    call fsm_reselect_mms_segment
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    call mms_mass_memory_read_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end
+                                                    lxi h,fsm_boot_sector_start_position
+                                                    xthl 
+                                                    mov a,h 
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov e,l 
+                                                    mov d,h 
+                                                    xthl 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    xchg 
+                                                    call mms_segment_data_transfer
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_get_boot_section_end      
+fsm_selected_disk_get_boot_section_transfer_ok:     mvi a,fsm_operation_ok
+fsm_selected_disk_get_boot_section_end:             inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    pop d
+                                                    pop b
+                                                    ret 
+            
 
-fsm_selected_disk_set_system:                   push h  
+;fsm_selected_disk_set_bootable rende il disco selezionato avviabile 
+
+fsm_selected_disk_set_bootable:                 push h 
                                                 push d 
                                                 push b 
                                                 lda fsm_selected_disk_loaded_page_flags
-                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
-                                                cpi fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask+fsm_disk_loaded_flags_bootable_disk
-                                                jz fsm_selected_disk_set_system_next 
-                                                lda fsm_selected_disk_loaded_page_flags
+                                                xri $ff 
+                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                jz fsm_selected_disk_set_bootable_next
                                                 ani fsm_disk_loaded_flags_selected_disk_mask
-                                                jnz fsm_selected_disk_set_system_not_formatted 
+                                                jz fsm_selected_disk_set_bootable_not_formatted
                                                 mvi a,fsm_disk_not_selected
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_not_formatted:     lda fsm_selected_disk_loaded_page_flags 
-                                                ani fsm_disk_loaded_flags_formatted_disk_mask
-                                                jnz fsm_selected_disk_set_system_not_bootable
-                                                mvi a,fsm_unformatted_disk 
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_not_bootable:      mvi a,fsm_selected_disk_not_bootable
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_next:              call fsm_select_file_header
+                                                jmp fsm_selected_disk_set_bootable_end
+fsm_selected_disk_set_bootable_not_formatted:   mvi a,fsm_unformatted_disk
+                                                jmp fsm_selected_disk_set_bootable_end
+fsm_selected_disk_set_bootable_next:            call fsm_writeback_page
                                                 cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_end
-                                                call fsm_get_selected_file_header_flags
-                                                jc fsm_selected_disk_set_system_end
-                                                ani fsm_header_system_bit 
-                                                jnz fsm_selected_disk_set_system_file_ok
-                                                mvi a,fsm_not_a_system_file 
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_file_ok:           lhld fsm_selected_disk_data_first_sector
-                                                dcx h 
-                                                mov a,l 
-                                                ora h 
-                                                jnz fsm_selected_disk_set_system_dim_estimation
-                                                mvi a,fsm_disk_operating_system_not_found
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_dim_estimation:    mov c,l 
-                                                mov b,h 
-                                                lda fsm_selected_disk_bps_number
-                                                stc 
-                                                cmc 
-                                                mvi e,0 
-                                                rar
-                                                mov d,a 
-                                                mov a,e 
-                                                rar 
-                                                mov e,a 
-                                                call unsigned_multiply_word
-                                                xchg 
-                                                call fsm_get_selected_file_header_dimension
-                                                mov a,c 
-                                                ora b 
-                                                jz fsm_selected_disk_set_system_dim_estimation2
-fsm_selected_disk_set_system_dim_error:         mvi a,fsm_system_space_too_small 
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_dim_estimation2:   mov a,l 
-                                                sub e 
-                                                mov a,h 
-                                                sbb d 
-                                        
-                                                jc fsm_selected_disk_set_system_dim_error
-                                                call fsm_load_selected_file_header
-                                                cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_end
-                                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
-                                                dad d 
-                                                call fsm_read_selected_data_segment_byte
-                                                jc fsm_selected_disk_set_system_end
-                                                mov e,a 
-                                                inx h 
-                                                call fsm_read_selected_data_segment_byte
-                                                jc fsm_selected_disk_set_system_end
-                                                mov d,a 
-                                                lhld fsm_selected_disk_data_first_sector
-                                                dcx h
-                                                mov c,l                     ;BC -> numero di settori mancanti
-                                                mov b,h                     ;DE -> numero di settore corrente 
-                                                push d                      ;HL -> posizione nel buffer 
-                                                lxi h,0                     ;SP -> [pagina del file di destinazione]
-                                                lxi d,1
-                                                xthl 
-                                                
-                                                call fsm_move_data_page
-                                                cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error
-                                                
-                                                xthl 
-fsm_selected_disk_set_system_loop:              push b 
-                                                push d 
+                                                jnz fsm_selected_disk_set_bootable_end 
                                                 lxi b,0 
+                                                lxi d,0 
                                                 call fsm_seek_disk_sector
                                                 cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                jnz fsm_selected_disk_set_bootable_end
                                                 mov a,c 
                                                 call bios_mass_memory_select_head
                                                 cpi bios_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                jnz fsm_selected_disk_set_bootable_end
                                                 xchg 
                                                 call bios_mass_memory_select_track
-                                                xchg 
                                                 cpi bios_operation_ok 
-                                                jnz fsm_selected_disk_set_system_loop_error2
+                                                jnz fsm_selected_disk_set_bootable_end
                                                 mov a,b 
                                                 call bios_mass_memory_select_sector
                                                 cpi bios_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error2
-                                                pop d 
-                                                pop b 
-                                                call mms_mass_memory_write_sector
-                                                cpi mms_operation_ok
-                                                jz fsm_selected_disk_set_system_loop_next 
-                                                cpi mms_source_segment_overflow 
-                                                jnz fsm_selected_disk_set_system_loop_error
-                                                xthl 
-                                                call fsm_get_page_link
-                                                cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error
-                                                call fsm_move_data_page
-                                                cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_loop_error
-                                                xthl 
+                                                jnz fsm_selected_disk_set_bootable_end
                                                 lxi h,0 
-                                                jmp fsm_selected_disk_set_system_loop
-fsm_selected_disk_set_system_loop_next:         call fsm_page_unset_modified_flag 
-                                                dcx b 
-                                                inx d 
-                                                mov a,c 
-                                                ora b 
-                                                jnz fsm_selected_disk_set_system_loop
-                                                inx sp 
-                                                inx sp 
-                                                call fsm_writeback_page
-                                                cpi fsm_operation_ok
-                                                jnz fsm_selected_disk_set_system_end
+                                                call fsm_reselect_mms_segment
+                                                call mms_mass_memory_read_sector
+                                                cpi mms_operation_ok
+                                                jnz fsm_selected_disk_set_bootable_end
+                                                lxi h,0 
+                                                lxi d,fsm_boot_sector_start_position+fsm_boot_sector_compile_address_offset
+                                                mvi a,$c3
+                                                call mms_write_selected_data_segment_byte
+                                                jc fsm_selected_disk_set_bootable_end
+                                                inx h 
+                                                mov a,e 
+                                                call mms_write_selected_data_segment_byte
+                                                jc fsm_selected_disk_set_bootable_end
+                                                inx h 
+                                                mov a,d 
+                                                call mms_write_selected_data_segment_byte
+                                                jc fsm_selected_disk_set_bootable_end
+                                                lxi h,0 
+                                                call mms_mass_memory_write_sector
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_set_bootable_end
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ori fsm_disk_loaded_flags_bootable_disk
+                                                sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
-                                                jmp fsm_selected_disk_set_system_end
-fsm_selected_disk_set_system_loop_error2:       pop d 
-                                                pop b 
-fsm_selected_disk_set_system_loop_error:        inx sp 
-                                                inx sp  
-fsm_selected_disk_set_system_end:               pop b 
+fsm_selected_disk_set_bootable_end:             pop b 
                                                 pop d 
                                                 pop h 
                                                 ret 
+
+;fsm_selected_disk_unset_bootable rende il disco selezionato non avviabile 
+
+fsm_selected_disk_unset_bootable:               push h 
+                                                push d 
+                                                push b 
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                xri $ff
+                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask 
+                                                jz fsm_selected_disk_unset_bootable_next
+                                                ani fsm_disk_loaded_flags_selected_disk_mask
+                                                jz fsm_selected_disk_unset_bootable_not_formatted
+                                                mvi a,fsm_disk_not_selected
+                                                jmp fsm_selected_disk_unset_bootable_end
+fsm_selected_disk_unset_bootable_not_formatted: mvi a,fsm_unformatted_disk
+                                                jmp fsm_selected_disk_unset_bootable_end
+fsm_selected_disk_unset_bootable_next:          call fsm_writeback_page
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                lxi b,0 
+                                                lxi d,0 
+                                                call fsm_seek_disk_sector
+                                                cpi fsm_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                mov a,c 
+                                                call bios_mass_memory_select_head
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                xchg 
+                                                call bios_mass_memory_select_track
+                                                cpi bios_operation_ok 
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                mov a,b 
+                                                call bios_mass_memory_select_sector
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                lxi h,0 
+                                                call fsm_reselect_mms_segment
+                                                call mms_mass_memory_read_sector
+                                                cpi mms_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                lxi h,0 
+                                                mvi a,$c9 
+                                                call mms_write_selected_data_segment_byte
+                                                jc fsm_selected_disk_unset_bootable_end
+                                                lxi h,0 
+                                                call mms_mass_memory_write_sector
+                                                cpi bios_operation_ok
+                                                jnz fsm_selected_disk_unset_bootable_end
+                                                lda fsm_selected_disk_loaded_page_flags
+                                                ani $ff-fsm_disk_loaded_flags_bootable_disk
+                                                sta fsm_selected_disk_loaded_page_flags
+                                                mvi a,fsm_operation_ok
+fsm_selected_disk_unset_bootable_end:           pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
+
+;fsm_selected_disk_get_system legge i dati dalla zona riservata al sistema operativo del disco e li salva nel segmento di destinazione
+;A -> id del segmento di destinazione
+;BC -> numero di dati da prelevare
+;DE -> offset nella zona riservata
+;HL -> offset nel segmento di destinazione 
+
+;A <- esito dell'operazione
+
+fsm_selected_disk_get_system:                       push d
+                                                    push b
+                                                    push h
+                                                    push psw 
+                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    xri $ff
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask 
+                                                    jz fsm_selected_disk_get_system_next
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask
+                                                    jz fsm_selected_disk_get_system_not_formatted
+                                                    mvi a,fsm_disk_not_selected
+                                                    jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_not_formatted:         mvi a,fsm_unformatted_disk
+                                                    jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_next:                  call fsm_writeback_page
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_system_end
+                                                    call fsm_reselect_mms_segment
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end
+                                                    xchg 
+                                                    dad b 
+                                                    xchg 
+                                                    mov c,e 
+                                                    mov b,d
+                                                    lda fsm_selected_disk_bps_number
+                                                    stc 
+                                                    cmc 
+                                                    mvi e,0 
+                                                    rar
+                                                    mov d,a 
+                                                    mov a,e 
+                                                    rar 
+                                                    mov e,a
+                                                    call unsigned_divide_word 
+                                                    mov a,e 
+                                                    ora d 
+                                                    jz fsm_selected_disk_get_system_no_remainder
+                                                    inx b 
+fsm_selected_disk_get_system_no_remainder:          lhld fsm_selected_disk_data_first_sector
+                                                    dcx h 
+                                                    mov a,l 
+                                                    sub c 
+                                                    mov a,h 
+                                                    sbb b 
+                                                    jnc fsm_selected_disk_get_system_dimension_ok
+                                                    mvi a,fsm_system_section_overflow 
+                                                    jmp fsm_selected_disk_get_system_end
+fsm_selected_disk_get_system_dimension_ok:          xchg 
+                                                    lxi b,0 
+                                                    lxi d,1 
+                                                    call fsm_seek_disk_sector
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_system_end
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_end
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_end
+                                                    xchg 
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_end
+                                                    lda fsm_selected_disk_bps_number
+                                                    stc 
+                                                    cmc 
+                                                    mvi l,0 
+                                                    rar
+                                                    mov h,a 
+                                                    mov a,l 
+                                                    rar 
+                                                    mov l,a
+                                                    lxi b,fsm_uncoded_page_dimension
+                                                    mov a,c 
+                                                    sub l 
+                                                    mov l,a 
+                                                    mov a,b 
+                                                    sbb h 
+                                                    mov h,a 
+                                                    push h 
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end3
+                                                    pop h 
+                                                    push h 
+                                                    dad d 
+                                                    push h
+                                                    lxi h,6
+                                                    dad sp 
+                                                    sphl  
+                                                    xthl 
+                                                    mov e,l 
+                                                    mov d,h  
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    xthl                      ;BC -> numero di bytes da copiare 
+                                                    lxi h,$ffff-8+1          ;DE -> offset buffer di partenza 
+                                                    dad sp 
+                                                    sphl                      ;HL -> offset nel segmento di destinazione 
+                                                    xchg                      ;SP -> [settore corrente][offset iniziale][id segmento]
+                                                    pop d  
+                                                    push psw                    
+                                                    xthl 
+                                                    lxi h,1 
+                                                    xthl
+fsm_selected_disk_get_system_loop:                  inx sp 
+                                                    inx sp 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov a,h 
+                                                    xthl 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    call mms_segment_data_transfer
+                                                    cpi mms_operation_ok
+                                                    jz fsm_selected_disk_get_system_loop_ok
+                                                
+                                                    cpi mms_source_segment_overflow
+                                                    jnz fsm_selected_disk_get_system_loop_end
+                                                    xthl 
+                                                    inx h 
+                                                    push d 
+                                                    push b 
+                                                    mov e,l 
+                                                    mov d,h 
+                                                    lxi b,0
+                                                    call fsm_seek_disk_sector
+                                                    
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end2
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end2
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end2
+                                                    xchg 
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end2
+                                                    pop b 
+                                                    pop d 
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop d 
+                                                    push d
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    xchg 
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_get_system_loop_end 
+                                                    xchg 
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop d
+                                                    push d 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    jmp fsm_selected_disk_get_system_loop
+fsm_selected_disk_get_system_loop_ok:               mvi a,fsm_operation_ok
+                                                    jmp fsm_selected_disk_get_system_loop_end
+fsm_selected_disk_get_system_loop_end2:             pop b 
+                                                    pop d       
+fsm_selected_disk_get_system_loop_end:              inx sp 
+                                                    inx sp  
+fsm_selected_disk_get_system_loop_end3:             inx sp 
+                                                    inx sp                           
+fsm_selected_disk_get_system_end:                   inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    pop b
+                                                    pop d 
+                                                    ret 
+
+;fsm_selected_disk_set_system legge i dati dalla zona riservata al sistema operativo del disco e li salva nel segmento di destinazione
+;A -> id del segmento di destinazione
+;BC -> numero di dati da prelevare
+;DE -> offset nel segmento sorgente
+;HL -> offset nella zona di sistema
+
+;A <- esito dell'operazione
+
+fsm_selected_disk_set_system:                       push d
+                                                    push b
+                                                    push h
+                                                    push psw 
+                                                    lda fsm_selected_disk_loaded_page_flags
+                                                    xri $ff
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask 
+                                                    jz fsm_selected_disk_set_system_next
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask
+                                                    jz fsm_selected_disk_set_system_not_formatted
+                                                    mvi a,fsm_disk_not_selected
+                                                    jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_not_formatted:         mvi a,fsm_unformatted_disk
+                                                    jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_next:                  call fsm_writeback_page
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_end
+                                                    call fsm_reselect_mms_segment
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    
+                                                    dad b 
+                                                    xchg 
+                                                    mov c,e 
+                                                    mov b,d
+                                                    lda fsm_selected_disk_bps_number
+                                                    stc 
+                                                    cmc 
+                                                    mvi e,0 
+                                                    rar
+                                                    mov d,a 
+                                                    mov a,e 
+                                                    rar 
+                                                    mov e,a
+                                                    call unsigned_divide_word 
+                                                    mov a,e 
+                                                    ora d 
+                                                    jz fsm_selected_disk_set_system_no_remainder
+                                                    inx b 
+fsm_selected_disk_set_system_no_remainder:          lhld fsm_selected_disk_data_first_sector
+                                                    dcx h 
+                                                    mov a,l 
+                                                    sub c 
+                                                    mov a,h 
+                                                    sbb b 
+                                                    jnc fsm_selected_disk_set_system_dimension_ok
+                                                    mvi a,fsm_system_section_overflow 
+                                                    jmp fsm_selected_disk_set_system_end
+fsm_selected_disk_set_system_dimension_ok:          xchg 
+                                                    lxi b,0 
+                                                    lxi d,1 
+                                                    call fsm_seek_disk_sector
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_end
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_end
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_end
+                                                    xchg 
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_end
+                                                    lda fsm_selected_disk_bps_number
+                                                    stc 
+                                                    cmc 
+                                                    mvi l,0 
+                                                    rar
+                                                    mov h,a 
+                                                    mov a,l 
+                                                    rar 
+                                                    mov l,a
+                                                    lxi b,fsm_uncoded_page_dimension
+                                                    mov a,c 
+                                                    sub l 
+                                                    mov l,a 
+                                                    mov a,b 
+                                                    sbb h 
+                                                    mov h,a 
+                                                    push h 
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end3
+                                                    pop h 
+                                                    push h 
+                                                    dad d 
+                                                    push h
+                                                    lxi h,6
+                                                    dad sp 
+                                                    sphl  
+                                                    xthl 
+                                                    mov e,l 
+                                                    mov d,h  
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    xthl                      ;BC -> numero di bytes da copiare 
+                                                    lxi h,$ffff-8+1           ;DE -> offset nel segmento di partenza
+                                                    dad sp 
+                                                    sphl                      ;HL -> offset nel buffer di destinazione 
+                                                    xchg                      ;SP -> [settore corrente][offset iniziale][id segmento]
+                                                    pop d  
+                                                    push psw                    
+                                                    xthl 
+                                                    lxi h,1 
+                                                    xthl
+                                                    xchg 
+                                                    
+fsm_selected_disk_set_system_loop:                  inx sp 
+                                                    inx sp 
+                                                    inx sp 
+                                                    inx sp 
+                                                    xthl 
+                                                    mov a,h 
+                                                    xthl 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    call mms_select_low_memory_data_segment
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    lda fsm_page_buffer_segment_id
+                                                    call mms_segment_data_transfer
+                                                    cpi mms_operation_ok
+                                                    jz fsm_selected_disk_set_system_loop_ok                             
+                                                    cpi mms_destination_segment_overflow
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    call fsm_reselect_mms_segment
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop h 
+                                                    push h
+                                                    dcx sp 
+                                                    dcx sp
+                                                    call mms_mass_memory_write_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    xthl 
+                                                    inx h 
+                                                    push d 
+                                                    push b 
+                                                    mov e,l 
+                                                    mov d,h 
+                                                    lxi b,0
+                                                    call fsm_seek_disk_sector
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    xchg 
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    pop b 
+                                                    pop d 
+                                                    xthl 
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop h 
+                                                    push h
+                                                    dcx sp 
+                                                    dcx sp
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    push h 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    jmp fsm_selected_disk_set_system_loop
+fsm_selected_disk_set_system_loop_ok:               xthl 
+                                                    mov e,l 
+                                                    mov d,h 
+                                                    lxi b,0
+                                                    call fsm_seek_disk_sector
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    mov a,c
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    xchg 
+                                                    call bios_mass_memory_select_track
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    xchg 
+                                                    mov a,b
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end2
+                                                    inx sp 
+                                                    inx sp 
+                                                    pop h 
+                                                    push h 
+                                                    dcx sp 
+                                                    dcx sp 
+                                                    call mms_mass_memory_write_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_selected_disk_set_system_loop_end
+                                                    mvi a,fsm_operation_ok
+                                                    jmp fsm_selected_disk_set_system_loop_end
+fsm_selected_disk_set_system_loop_end2:             pop b 
+                                                    pop d       
+fsm_selected_disk_set_system_loop_end:              inx sp 
+                                                    inx sp  
+fsm_selected_disk_set_system_loop_end3:             inx sp 
+                                                    inx sp                           
+fsm_selected_disk_set_system_end:                   inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    pop b
+                                                    pop d 
+                                                    ret 
 
 
 ;funzioni dedicare alla gestone del corpo dei files
