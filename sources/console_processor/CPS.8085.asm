@@ -16,21 +16,13 @@ system_boot:    lxi sp,stack_memory_start
                 call fsm_select_disk 
                 lxi h,2048
                 call fsm_format_disk
+                lxi h,$2000 
                 call fsm_selected_disk_set_bootable
-                lxi h,2048
-                call mms_create_low_memory_data_segment
-                lxi h,0 
-loop:           mov a,l 
-                inx h 
-                call mms_write_selected_data_segment_byte
-                jnc loop
-                
-                lxi h,0 
-                mvi a,2 
-                lxi b,2048 
-                lxi d,0 
-                lxi h,0 
-                call fsm_selected_disk_set_system
+                call fsm_selected_disk_is_bootable
+                call fsm_selected_disk_get_boot_section_dimension
+                xchg 
+                call fsm_selected_disk_get_system_section_dimension
+
                 hlt
 
 file_name:  .text "SYSTEM"

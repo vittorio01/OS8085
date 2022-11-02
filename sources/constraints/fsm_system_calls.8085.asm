@@ -1,5 +1,5 @@
-;questo file contiene i riferimenti di tutte le system calls della fsm 
-;ogni codice sorgente che utilizza la fsm deve importare questo file 
+;questo file contiene i riferimenti per il linking di tutte le system calls della fsm 
+;ogni codice sorgente che utilizza la FSM deve importare questo file 
 
 fsm_init                                            .equ FSM
 fsm_close                                           .equ fsm_init +3
@@ -37,3 +37,6 @@ fsm_selected_disk_get_boot_section                  .equ fsm_selected_disk_set_s
 fsm_selected_disk_set_boot_section                  .equ fsm_selected_disk_get_boot_section+3
 fsm_selected_disk_set_bootable                      .equ fsm_selected_disk_set_boot_section+3
 fsm_selected_disk_unset_bootable                    .equ fsm_selected_disk_set_bootable+3
+fsm_selected_disk_get_boot_section_dimension        .equ fsm_selected_disk_unset_bootable+3
+fsm_selected_disk_get_system_section_dimension      .equ fsm_selected_disk_get_boot_section_dimension+3
+fsm_selected_disk_is_bootable                       .equ fsm_selected_disk_get_system_section_dimension+3

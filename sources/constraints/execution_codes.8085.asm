@@ -60,4 +60,7 @@ fsm_not_a_system_file               .equ $37
 fsm_system_space_too_small          .equ $38
 fsm_disk_not_bootable               .equ $39
 fsm_system_section_overflow         .equ $3A
+fsm_boot_section_not_found          .equ $3B 
+fsm_system_section_not_found        .equ $3C 
+fsm_disk_bootable                   .equ $3D
 fsm_operation_ok                    .equ $ff 
