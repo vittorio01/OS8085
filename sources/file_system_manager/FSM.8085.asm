@@ -227,13 +227,15 @@ fsm_functions:  .org FSM
                 jmp fsm_selected_file_set_data_pointer              ;imposta il puntatore nel corpo del file 
                 jmp fsm_load_selected_program                       ;carica il programma nella memoria e lo predispone per essere avviato
                 ;funzioni per la gestione della sezione riservata al sistema 
-                jmp fsm_selected_disk_get_system                    ;
-                jmp fsm_selected_disk_set_system 
-                jmp fsm_selected_disk_get_boot_section 
-                jmp fsm_selected_disk_set_boot_section 
-                jmp fsm_selected_disk_set_bootable 
-                jmp fsm_selected_disk_unset_bootable
-
+                jmp fsm_selected_disk_get_system                    ;legge i dati dalla sezione riservata al sistema 
+                jmp fsm_selected_disk_set_system                    ;scrive i dati dalla sezione riservata al sistema
+                jmp fsm_selected_disk_get_boot_section              ;legge i dati dalla boot section 
+                jmp fsm_selected_disk_set_boot_section              ;scrive i dati nella boot section 
+                jmp fsm_selected_disk_set_bootable                  ;imposta il disco come avviabile 
+                jmp fsm_selected_disk_unset_bootable                ;imposta il disco come non avviabile 
+                jmp fsm_selected_disk_get_boot_section_dimension    ;restituisce la dimensione della zona dedicata alla boot section 
+                jmp fsm_selected_disk_get_system_section_dimension  ;restituisce la dimensione della zona dedicata al sistema 
+                jmp fsm_selected_disk_is_bootable                   ;indica sel il disco selezionato è avviabile o non
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
@@ -880,8 +882,106 @@ fsm_wipe_disk_load_page_error:                  inx sp
 
 ;funzioni dedicate allo spazio riservato
 
+;fsm_selected_disk_get_boot_section_dimension restituice la dimensione della boot section 
+;A <- esito dell'operazione
+;HL <- dimensione in bytes
+fsm_selected_disk_get_boot_section_dimension:                   lda fsm_selected_disk_loaded_page_flags
+                                                                xri $ff 
+                                                                ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                                jz fsm_selected_disk_get_boot_section_dimension_next
+                                                                ani fsm_disk_loaded_flags_selected_disk_mask
+                                                                jz fsm_selected_disk_get_boot_section_dimension_not_formatted
+                                                                mvi a,fsm_disk_not_selected
+                                                                lxi h,0 
+                                                                ret
+fsm_selected_disk_get_boot_section_dimension_not_formatted:     mvi a,fsm_unformatted_disk 
+                                                                lxi h,0 
+                                                                ret  
+fsm_selected_disk_get_boot_section_dimension_next:              lda fsm_selected_disk_bps_number
+                                                                stc 
+                                                                cmc 
+                                                                mvi l,0 
+                                                                rar
+                                                                mov h,a 
+                                                                mov a,l 
+                                                                rar 
+                                                                sbi fsm_boot_sector_start_position
+                                                                mov l,a 
+                                                                mov a,h 
+                                                                sbi 0 
+                                                                mov h,a 
+                                                                jc fsm_selected_disk_get_boot_section_dimension_error
+                                                                ora l 
+                                                                jnz fsm_selected_disk_get_boot_section_dimension_ok
+fsm_selected_disk_get_boot_section_dimension_error:             mvi a,fsm_boot_section_not_found 
+                                                                ret                                               
+fsm_selected_disk_get_boot_section_dimension_ok:                mvi a,fsm_operation_ok
+                                                                ret 
+
+;fsm_selected_disk_get_system_section_dimension restituisce la dimensione dello spazio dedicato al sistema 
+;A <- esito dell'operazione 
+;HL <- dimensione in bytes
+fsm_selected_disk_get_system_section_dimension:                     lda fsm_selected_disk_loaded_page_flags
+                                                                    xri $ff 
+                                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                                    jz fsm_selected_disk_get_system_section_dimension_next
+                                                                    ani fsm_disk_loaded_flags_selected_disk_mask
+                                                                    jz fsm_selected_disk_get_system_section_dimension_not_formatted
+                                                                    mvi a,fsm_disk_not_selected
+                                                                    lxi h,0 
+                                                                    ret
+fsm_selected_disk_get_system_section_dimension_not_formatted:       mvi a,fsm_unformatted_disk 
+                                                                    lxi h,0 
+                                                                    ret  
+fsm_selected_disk_get_system_section_dimension_next:                push d 
+                                                                    push b 
+                                                                    lda fsm_selected_disk_bps_number
+                                                                    stc 
+                                                                    cmc 
+                                                                    mvi c,0 
+                                                                    rar
+                                                                    mov b,a 
+                                                                    mov a,c
+                                                                    rar 
+                                                                    mov c,a 
+                                                                    lhld fsm_selected_disk_data_first_sector
+                                                                    dcx h 
+                                                                    mov a,l 
+                                                                    ora h  
+                                                                    jnz fsm_selected_disk_get_system_section_dimension_ok
+                                                                    mvi a,fsm_system_section_not_found 
+                                                                    jmp fsm_selected_disk_get_system_section_dimension_end
+fsm_selected_disk_get_system_section_dimension_ok:                  xchg 
+                                                                    call unsigned_multiply_word
+                                                                    xchg 
+                                                                    mvi a,fsm_operation_ok
+fsm_selected_disk_get_system_section_dimension_end:                 pop b 
+                                                                    pop d 
+                                                                    ret 
+
+;fsm_selected_disk_is_bootable indica se il disco è avviabile o non 
+;A <- stato del disco (in caso di errore restituisce l'error code)
+
+fsm_selected_disk_is_bootable:                      lda fsm_selected_disk_loaded_page_flags
+                                                    xri $ff 
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                                    jz fsm_selected_disk_is_bootable_next
+                                                    ani fsm_disk_loaded_flags_selected_disk_mask
+                                                    jz fsm_selected_disk_is_bootable_not_formatted
+                                                    mvi a,fsm_disk_not_selected
+                                                    ret
+fsm_selected_disk_is_bootable_not_formatted:        mvi a,fsm_unformatted_disk 
+                                                    ret  
+fsm_selected_disk_is_bootable_next:                 lda fsm_selected_disk_loaded_page_flags
+                                                    ani fsm_disk_loaded_flags_bootable_disk
+                                                    jnz fsm_selected_disk_bootable
+                                                    mvi a,fsm_disk_not_bootable
+                                                    ret 
+fsm_selected_disk_bootable:                         mvi a,fsm_disk_bootable
+                                                    ret  
+
 ;fsm_selected_disk_set_boot_section trasferisce il contenuto da un segmento di memoria al settore di avvio del disco 
-;A -> segmento sorgente 
+;A -> segmento sorgente
 ;HL -> offset nel segmento sorgente
 fsm_selected_disk_set_boot_section:                 push b
                                                     push d
@@ -1083,10 +1183,11 @@ fsm_selected_disk_get_boot_section_end:             inx sp
             
 
 ;fsm_selected_disk_set_bootable rende il disco selezionato avviabile 
-
-fsm_selected_disk_set_bootable:                 push h 
+;HL -> load address del settore di avvio (vedi note)
+;A <- esito dell'operazione
+fsm_selected_disk_set_bootable:                 push b
                                                 push d 
-                                                push b 
+                                                push h
                                                 lda fsm_selected_disk_loaded_page_flags
                                                 xri $ff 
                                                 ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
@@ -1122,8 +1223,12 @@ fsm_selected_disk_set_bootable_next:            call fsm_writeback_page
                                                 call mms_mass_memory_read_sector
                                                 cpi mms_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
+                                                pop h 
+                                                push h 
+                                                lxi d,fsm_boot_sector_start_position
+                                                dad d 
+                                                xchg 
                                                 lxi h,0 
-                                                lxi d,fsm_boot_sector_start_position+fsm_boot_sector_compile_address_offset
                                                 mvi a,$c3
                                                 call mms_write_selected_data_segment_byte
                                                 jc fsm_selected_disk_set_bootable_end
@@ -1143,9 +1248,9 @@ fsm_selected_disk_set_bootable_next:            call fsm_writeback_page
                                                 ori fsm_disk_loaded_flags_bootable_disk
                                                 sta fsm_selected_disk_loaded_page_flags
                                                 mvi a,fsm_operation_ok
-fsm_selected_disk_set_bootable_end:             pop b 
+fsm_selected_disk_set_bootable_end:             pop h
                                                 pop d 
-                                                pop h 
+                                                pop b
                                                 ret 
 
 ;fsm_selected_disk_unset_bootable rende il disco selezionato non avviabile 
