@@ -4646,6 +4646,7 @@ string_segment_source_ncopy_end1:       pop h
                                         ret 
 
 fsm_layer_end:      
+.print "Space left in FSM layer ->",fsm_dimension-fsm_layer_end+FSM
 .memory "fill", fsm_layer_end, fsm_dimension-fsm_layer_end+FSM,$00
 .print "FSM load address ->",FSM 
 .print "All functions built successfully"

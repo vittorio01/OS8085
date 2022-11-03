@@ -2,7 +2,7 @@
 
 ;La gestione della RAM
 ;-----------------------------------------------------------
-;- Riservato al sistema - low ram - CPS - FDS - mms - BIOS -
+;- Riservato al sistema - low ram - MSI - FDS - mms - BIOS -
 ;-----------------------------------------------------------
 ;                                 ^                        ^
 ;                                 |        high ram        |
@@ -66,7 +66,7 @@
 
 ;Uno schema completo della RAM è quindi:
 ;----------------------------------------------------------------------------------
-;- Riservato al sistema - Program low ram - Data low ram - CPS - FDS - mms - BIOS -
+;- Riservato al sistema - Program low ram - Data low ram - MSI - FDS - mms - BIOS -
 ;----------------------------------------------------------------------------------
 ;^                      ^                                ^                        ^   
 ;|                      |                                |                        |
@@ -1436,6 +1436,7 @@ mms_data_bitstream_reset_requested_bit_shift_end:   ora m
                                                     ret 
 
 mms_layer_end:     
+.print "Space left in MMS layer ->",mms_dimension-mms_layer_end+MMS 
 .memory "fill", mms_layer_end, mms_dimension-mms_layer_end+MMS,$00
 .print "MMS load address ->",MMS
 .print "All functions built successfully"

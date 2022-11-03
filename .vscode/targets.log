@@ -114,7 +114,7 @@ XPC_SERVICE_NAME = application.com.microsoft.VSCode.2823365.2823371
 # automatic
 +F = $(notdir $+)
 # makefile (from `makefile', line 1)
-CPS = sources/console_processor/CPS.8085.asm
+MSI = sources/console_processor/MSI.8085.asm
 # makefile (from `makefile', line 6)
 ASSEMBLER = retroassembler/retroassembler.dll
 # makefile (from `makefile', line 8)
@@ -172,7 +172,7 @@ all:
 # Load=0/32=0%, Rehash=0, Collisions=0/0=0%
 
 # Not a target:
-sources/console_processor/CPS.8085.asm:
+sources/console_processor/MSI.8085.asm:
 #  Implicit rule search has not been done.
 #  Modification time never checked.
 #  File has not been updated.
@@ -222,13 +222,13 @@ sources/main.8085.asm:
 #  Modification time never checked.
 #  File has not been updated.
 
-target: sources/console_processor/CPS.8085.asm sources/file_system_manager/FSM.8085.asm sources/memory_management/MMS.8085.asm sources/bios/BIOS_MINIMAL.8085.asm sources/main.8085.asm
+target: sources/console_processor/MSI.8085.asm sources/file_system_manager/FSM.8085.asm sources/memory_management/MMS.8085.asm sources/bios/BIOS_MINIMAL.8085.asm sources/main.8085.asm
 #  Implicit rule search has not been done.
 #  Modification time never checked.
 #  File has not been updated.
 #  commands to execute (from `makefile', line 12):
 	@echo selected bios: $(BIOS)
-	@echo selected CPS:	$(CPS)
+	@echo selected MSI:	$(MSI)
 	@echo selected FSM: $(FSM)
 	@echo selected MMS: $(MMS)
 	@echo compiling main system files...

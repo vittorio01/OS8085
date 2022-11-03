@@ -7,20 +7,9 @@
 ;   scrittura di una traccia e formattazione del disco
 ;-  funzioni per la copia di blocchi di memoria, che vengono utilizzati nel caso di trasferimenti di grandi blocchi di dati da e verso la memoria. 
 
-;parametri hardware standard
-bios_ram_dimension      .equ 32768
-
-
-
-;codici di esecuzione che possono essere generati dalle funzioni
-bios_operation_ok                   .equ $ff 
-bios_mass_memory_write_only         .equ $01
-bios_mass_memory_device_not_found   .equ $02
-bios_mass_memory_bad_argument       .equ $03
-bios_mass_memory_transfer_error     .equ $04
-bios_mass_memory_seek_error         .equ $05
-bios_console_not_ready              .equ $04
-bios_memory_transfer_error          .equ $05 
+.include "os_constraints.8085.asm"
+.include "libraries_system_calls.8085.asm"
+.include "execution_codes.8085.asm"
 
 bios_functions: .org BIOS 
                 jmp bios_cold_boot 
@@ -48,16 +37,7 @@ bios_functions: .org BIOS
 ;- inzializzazione dei dispositivi per interfacciare la console
 ;- inzializzazione dei dispositivi per la gestione delle memoria di massa
 
-bios_cold_boot:         lxi h,0                     ;esempio di inizializzazione della RAM (facolatativo)
-                        lxi d,bios_ram_dimension 
-bios_memory_test_loop:  mvi m,0 
-                        inx h 
-                        mov a,e 
-                        sub l 
-                        mov a,d 
-                        sbb h 
-                        jnz bios_memory_test_loop
-                        ;da implementare
+bios_cold_boot:         ;da implementare
                         ret 
 
 ;bios_warm_boot esegue delle operazioni simili a bios_warm_boot escludendo il test e l'inizializzazione della ram. Prevede quindi:
@@ -237,3 +217,7 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
 
 BIOS_layer_end:
+.print "Space left in MMS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
+.memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
+.print "BIOS load address ->",BIOS
+.print "All functions built successfully"

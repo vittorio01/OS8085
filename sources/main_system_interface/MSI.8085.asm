@@ -5,7 +5,7 @@
 .include "libraries_system_calls.8085.asm"
 .include "execution_codes.8085.asm"
 
-cps_functions:      .org CPS
+MSI_functions:      .org MSI
                     jmp system_boot
 
 system_boot:    lxi sp,stack_memory_start
@@ -33,8 +33,9 @@ extension_name: .text "BIN"
 
 
 
-cps_layer_end:
-.memory "fill", cps_layer_end, cps_dimension-cps_layer_end+CPS,$00
+MSI_layer_end:
+.print "Space left in MSI layer ->",MSI_dimension-MSI_layer_end+MSI 
+.memory "fill", MSI_layer_end, MSI_dimension-MSI_layer_end+MSI,$00
 
-.print "CPS load address ->",CPS 
+.print "MSI load address ->",MSI 
 .print "All functions built successfully"

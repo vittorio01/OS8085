@@ -461,6 +461,7 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
 
 BIOS_layer_end:     
+.print "Space left in MMS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
 .memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
 .print "BIOS load address ->",BIOS
 .print "All functions built successfully"

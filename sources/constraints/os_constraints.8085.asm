@@ -2,12 +2,12 @@
 ;è possibile modificare alcune informazioni per adattare il sistema ad un computer specifico
 
 ;queste informazioni riguardano la gestione dello spazio nelle varie componenti del sistema (da non modificare se non in fase di sviluppo del sistema)
-CPS_dimension           .equ    2048
+MSI_dimension           .equ    2048
 FSM_dimension           .equ    8192
 MMS_dimension           .equ    2048
 BIOS_dimension          .equ    2048 
 LIBRARIES_dimension     .equ    2048
-SYSTEM_dimension        .equ    CPS_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
+SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
 ;queste informazioni riguardano la divisione degli spazi all'interno della ram
 end_ram_address             .equ $8000                                        ;indica la dimensione totale della ram installata nel sistema (può essere adattata secondo la macchina fisica)  
@@ -24,8 +24,8 @@ stack_memory_start          .equ reserved_memory_start
 low_memory_start         .equ $0050
 low_memory_end           .equ reserved_memory_start-max_system_stack_dimension
 
-CPS         .equ high_memory_start
-FSM         .equ CPS+CPS_dimension
+MSI         .equ high_memory_start
+FSM         .equ MSI+MSI_dimension
 MMS         .equ FSM+FSM_dimension
 BIOS        .equ MMS+MMS_dimension
 LIBRARIES   .equ BIOS+BIOS_dimension
