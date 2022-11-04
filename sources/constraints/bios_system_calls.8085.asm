@@ -3,11 +3,12 @@
 
 bios_cold_boot                          .equ    BIOS 
 bios_warm_boot                          .equ    bios_cold_boot+3 
-bios_console_output_write_character     .equ    bios_warm_boot+3
-bios_console_output_ready               .equ    bios_console_output_write_character+3 
-bios_console_input_read_character       .equ    bios_console_output_ready +3
-bios_console_input_ready                .equ    bios_console_input_read_character+3
-bios_mass_memory_select_drive           .equ    bios_console_input_ready+3
+bios_select_IO_device                   .equ    bios_warm_boot+3
+bios_get_IO_device_informations         .equ    bios_select_IO_device+3
+bios_get_selected_device_state          .equ    bios_get_IO_device_informations+3
+bios_read_selected_device_byte          .equ    bios_get_selected_device_state+3
+bios_write_selected_device_byte         .equ    bios_read_selected_device_byte+3
+bios_mass_memory_select_drive           .equ    bios_write_selected_device_byte+3
 bios_mass_memory_select_sector          .equ    bios_mass_memory_select_drive+3
 bios_mass_memory_select_track           .equ    bios_mass_memory_select_sector+3
 bios_mass_memory_select_head            .equ    bios_mass_memory_select_track+3
