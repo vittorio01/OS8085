@@ -124,7 +124,6 @@ system_boot:    lxi sp,stack_memory_start
                 call bios_cold_boot
                 call mms_low_memory_initialize
                 call fsm_init
-                
                 hlt 
 
 
