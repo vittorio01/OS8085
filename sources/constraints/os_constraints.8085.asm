@@ -13,7 +13,7 @@ SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_d
 end_ram_address             .equ $8000                                        ;indica la dimensione totale della ram installata nel sistema (può essere adattata secondo la macchina fisica)  
 high_memory_start           .equ end_ram_address-SYSTEM_dimension 
 
-reserved_memory_dimension   .equ $0050
+reserved_memory_dimension   .equ $0060
 reserved_memory_start       .equ high_memory_start-reserved_memory_dimension
 reserved_memory_end         .equ high_memory_start
 

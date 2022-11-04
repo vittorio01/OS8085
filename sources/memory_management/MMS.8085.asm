@@ -125,11 +125,11 @@
 .include "execution_codes.8085.asm"
 
 ;spazio della memoria riservata dedicato alla mms
-mms_program_high_pointer                    .equ reserved_memory_start+$0010
-mms_data_low_pointer                        .equ reserved_memory_start+$0012
-mms_data_selected_segment_id                .equ reserved_memory_start+$0014
-mms_data_selected_segment_address           .equ reserved_memory_start+$0015
-mms_data_selected_segment_dimension         .equ reserved_memory_start+$0017
+mms_program_high_pointer                    .equ reserved_memory_start+$0020
+mms_data_low_pointer                        .equ reserved_memory_start+$0022
+mms_data_selected_segment_id                .equ reserved_memory_start+$0024
+mms_data_selected_segment_address           .equ reserved_memory_start+$0025
+mms_data_selected_segment_dimension         .equ reserved_memory_start+$0027
 
 
 ;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram

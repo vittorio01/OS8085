@@ -11,6 +11,7 @@ bios_mass_memory_bad_argument           .equ $04
 bios_mass_memory_transfer_error         .equ $05
 bios_mass_memory_seek_error             .equ $06
 bios_memory_transfer_error              .equ $07 
+bios_IO_device_not_found                .equ $08 
 
 bios_console_ready                      .equ $08
 bios_console_not_ready                  .equ $09

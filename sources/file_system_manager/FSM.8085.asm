@@ -138,20 +138,20 @@
 .include "bios_system_calls.8085.asm"
 .include "execution_codes.8085.asm"
 
-fsm_selected_disk                       .equ reserved_memory_start + $0020
-fsm_selected_disk_head_number           .equ reserved_memory_start + $0021
-fsm_selected_disk_tph_number            .equ reserved_memory_start + $0022 
-fsm_selected_disk_spt_number            .equ reserved_memory_start + $0024 
-fsm_selected_disk_bps_number            .equ reserved_memory_start + $0025
-fsm_selected_disk_sectors_number        .equ reserved_memory_start + $0026
-fsm_selected_disk_spp_number            .equ reserved_memory_start + $002A
-fsm_selected_disk_data_first_sector     .equ reserved_memory_start + $002B
+fsm_selected_disk                       .equ reserved_memory_start + $0030
+fsm_selected_disk_head_number           .equ reserved_memory_start + $0031
+fsm_selected_disk_tph_number            .equ reserved_memory_start + $0032 
+fsm_selected_disk_spt_number            .equ reserved_memory_start + $0034 
+fsm_selected_disk_bps_number            .equ reserved_memory_start + $0035
+fsm_selected_disk_sectors_number        .equ reserved_memory_start + $0036
+fsm_selected_disk_spp_number            .equ reserved_memory_start + $003A
+fsm_selected_disk_data_first_sector     .equ reserved_memory_start + $003B
 
-fsm_page_buffer_segment_id              .equ reserved_memory_start + $002D
-fsm_page_buffer_segment_address         .equ reserved_memory_start + $002E
+fsm_page_buffer_segment_id              .equ reserved_memory_start + $003D
+fsm_page_buffer_segment_address         .equ reserved_memory_start + $003E
 
-fsm_selected_disk_data_page_number      .equ reserved_memory_start + $0030
-fsm_selected_disk_fat_page_number       .equ reserved_memory_start + $0032
+fsm_selected_disk_data_page_number      .equ reserved_memory_start + $0040
+fsm_selected_disk_fat_page_number       .equ reserved_memory_start + $0042
 
 
 ;fsm_selected_disk_loaded_page_flags contiene le informazioni sul disco selezionato 
@@ -165,16 +165,16 @@ fsm_disk_loaded_flags_header_modified_page_mask .equ %00000100
 fsm_disk_loaded_flags_header_selected_mask      .equ %00000010
 fsm_disk_loaded_flags_header_data_pointer_mask  .equ %00000001
 
-fsm_selected_disk_loaded_page               .equ reserved_memory_start + $0033
-fsm_selected_disk_loaded_page_flags         .equ reserved_memory_start + $0035
-fsm_selected_disk_free_page_number          .equ reserved_memory_start + $0036
-fsm_selected_disk_first_free_page_address   .equ reserved_memory_start + $0038
+fsm_selected_disk_loaded_page               .equ reserved_memory_start + $0043
+fsm_selected_disk_loaded_page_flags         .equ reserved_memory_start + $0045
+fsm_selected_disk_free_page_number          .equ reserved_memory_start + $0046
+fsm_selected_disk_first_free_page_address   .equ reserved_memory_start + $0048
 
-fsm_selected_file_header_page_address       .equ reserved_memory_start + $003A
-fsm_selected_file_header_php_address        .equ reserved_memory_start + $003C
+fsm_selected_file_header_page_address       .equ reserved_memory_start + $004A
+fsm_selected_file_header_php_address        .equ reserved_memory_start + $004C
 
-fsm_selected_file_data_pointer_page_address .equ reserved_memory_start + $003E 
-fsm_selected_file_data_pointer_offset       .equ reserved_memory_start + $0040
+fsm_selected_file_data_pointer_page_address .equ reserved_memory_start + $004E 
+fsm_selected_file_data_pointer_offset       .equ reserved_memory_start + $0050
 
 fsm_coded_page_dimension                .equ 4
 fsm_uncoded_page_dimension              .equ 512

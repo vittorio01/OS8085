@@ -122,8 +122,11 @@ MSI_functions:      .org MSI
 
 system_boot:    lxi sp,stack_memory_start
                 call bios_cold_boot
-                call mms_low_memory_initialize
-                call fsm_init
+                ;call mms_low_memory_initialize
+                ;call fsm_init
+                mvi a,$01
+                call bios_get_IO_device_informations
+                
                 hlt 
 
 
