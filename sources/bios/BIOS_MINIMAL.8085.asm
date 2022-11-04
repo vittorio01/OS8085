@@ -52,12 +52,12 @@ bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il disposit
 ;Ad esempio, nel caso della console di base:
 ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
 
-bios_selected_ID_device_get_state_address   .equ reserved_memory_start+$0000
-bios_selected_ID_device_write_byte_address  .equ reserved_memory_start+$0004
-bios_selected_ID_device_read_byte_address   .equ reserved_memory_start+$0007
+bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0000
+bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0004
+bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0007
 bios_selected_IO_device_flags               .equ reserved_memory_start+$000A
 
-bios_selected_IO_device_flags_Selected      .equ $10000000
+bios_selected_IO_device_flags_Selected      .equ %10000000
 
 bios_functions: .org BIOS 
                 jmp bios_cold_boot 
@@ -90,47 +90,50 @@ bios_functions: .org BIOS
 ;-  due bytes che contengono l'indirizzo della funzione bios_write_selected_device_byte
 
 ;per aggiungere un dispositivo basta inserire un campo tramite la macro .byte "flags del dipositivo"
-bios_device_ID_table:       .byte $00                                                                                       
+bios_device_IO_table:       .byte $00                                                                                       
                             .byte bios_IO_device_readable_mask+bios_IO_device_writerable_mask+bios_IO_device_type_console   
-                            .word bios_console_output_get_state
+                            .word bios_console_get_state
                             .word bios_console_input_read_character
                             .word bios_console_output_write_character
-bios_device_ID_table_end:                                                                                              
+bios_device_IO_table_end:                                                                                              
 ;una volta selezionato il dispsitivo il BIOS deve sapere l'indirizzo delle tre funzioni 
 
-;implementazione delle funzioni inserite nell'bios_device_ID_table (la console è già stata inserita nella tabella)
+;implementazione delle funzioni inserite nell'bios_device_IO_table (la console è già stata inserita nella tabella)
 ;Tutte le funzioni prima dell'istruzione RET devono anche settare la flag CY a 0 
 
-;bios_console_output_write_character, bios_console_input_read_character e bios_console_output_get_statesono vengono dedicate alla gestione della console.
+;bios_console_output_write_character, bios_console_input_read_character e bios_console_output_get_state sono vengono dedicate alla gestione della console.
 ;bios_console_output_write_character
 ; A -> carattere ASCII da scrivere
 bios_console_output_write_character:    ;da implementare
+                                        mvi a,$AA
                                         stc 
                                         cmc 
                                         ret 
 
 ; A <- carattere ASCII in ingresso
 bios_console_input_read_character:      ;da implementare
+                                        mvi a,$BB 
                                         stc 
                                         cmc 
                                         ret 
 
 ;bios_console_output_ready
 ; A <- stato della console
-bios_console_output_get_state:          ;da implementare
+bios_console_get_state:                 ;da implementare
+                                        mvi a,$CC 
                                         stc 
                                         cmc 
                                         ret  
 
 
-;funzioni relative alla gestione della bios_device_ID_table
+;funzioni relative alla gestione della bios_device_IO_table
 
 bios_search_IO_device:              mov b,a 
-                                    lxi d,bios_device_ID_table_end
-                                    lxi h,bios_device_ID_table
-bios_search_ID_device_loop:         mov a,m 
+                                    lxi d,bios_device_IO_table_end
+                                    lxi h,bios_device_IO_table
+bios_search_IO_device_loop:         mov a,m 
                                     cmp b 
-                                    jz bios_select_ID_device_search_found
+                                    jz bios_search_IO_device_search_found
                                     mvi a,8 
                                     add l 
                                     mov l,a 
@@ -141,9 +144,9 @@ bios_search_ID_device_loop:         mov a,m
                                     sub l 
                                     mov a,d 
                                     sbb h 
-                                    jc ios_select_ID_device_search_loop 
+                                    jc bios_search_IO_device_loop 
                                     ret 
-bios_search_ID_device_search_found: mvi a,7 
+bios_search_IO_device_search_found: mvi a,7 
                                     add l 
                                     mov l,a 
                                     mov a,h 
@@ -173,14 +176,14 @@ bios_search_ID_device_search_found: mvi a,7
                                     stc 
                                     ret 
 
-bios_ID_device_initialize:          lxi h,0 
+bios_IO_device_initialize:          lxi h,0 
                                     mvi a,$c3 
-                                    sta bios_selected_ID_device_get_state_address
-                                    sta bios_selected_ID_device_write_byte_address
-                                    sta bios_selected_ID_device_read_byte_address
-                                    shld bios_selected_ID_device_get_state_address+1 
-                                    shld bios_selected_ID_device_write_byte_address+1 
-                                    shld bios_selected_ID_device_read_byte_address+1 
+                                    sta bios_selected_IO_device_get_state_address
+                                    sta bios_selected_IO_device_write_byte_address
+                                    sta bios_selected_IO_device_read_byte_address
+                                    shld bios_selected_IO_device_get_state_address+1 
+                                    shld bios_selected_IO_device_write_byte_address+1 
+                                    shld bios_selected_IO_device_read_byte_address+1 
                                     xra a 
                                     sta bios_selected_IO_device_flags
                                     ret 
@@ -194,17 +197,18 @@ bios_select_IO_device:              push b
                                     push h 
                                     call bios_search_IO_device
                                     jnc bios_select_IO_device_error
-                                    shld bios_selected_ID_device_get_state_address+1
+                                    shld bios_selected_IO_device_get_state_address+1
                                     xchg 
-                                    shld bios_selected_ID_device_read_byte_address+1 
+                                    shld bios_selected_IO_device_read_byte_address+1 
                                     mov l,c 
                                     mov h,b 
-                                    shld bios_selected_ID_device_write_byte_address+1 
+                                    shld bios_selected_IO_device_write_byte_address+1 
                                     mvi a,bios_selected_IO_device_flags_selected
                                     sta bios_selected_IO_device_flags
+                                    
                                     mvi a,bios_operation_ok
                                     jmp bios_select_IO_device_error_end
-bios_select_IO_device_error:        mvi a,bios_device_not_found 
+bios_select_IO_device_error:        mvi a,bios_IO_device_not_found 
 bios_select_IO_device_error_end:    pop h 
                                     pop d 
                                     pop b 
@@ -237,7 +241,7 @@ bios_get_IO_device_informations_end:    pop h
 bios_read_selected_device_byte:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_read_selected_device_byte_end
-                                        jmp bios_selected_ID_device_read_byte_address
+                                        jmp bios_selected_IO_device_read_byte_address
 bios_read_selected_device_byte_end:     xra a 
                                         stc 
                                         ret 
@@ -249,7 +253,7 @@ bios_read_selected_device_byte_end:     xra a
 bios_write_selected_device_byte:        lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_write_selected_device_byte_end
-                                        jmp bios_selected_ID_device_write_byte_address
+                                        jmp bios_selected_IO_device_write_byte_address
 bios_write_selected_device_byte_end:    xra a 
                                         stc 
                                         ret
@@ -261,7 +265,7 @@ bios_write_selected_device_byte_end:    xra a
 bios_get_selected_device_state:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_get_selected_device_state_end
-                                        jmp bios_selected_ID_device_get_state_address
+                                        jmp bios_selected_IO_device_get_state_address
 bios_get_selected_device_state_end:     xra a 
                                         stc 
                                         ret
@@ -271,7 +275,7 @@ bios_get_selected_device_state_end:     xra a
 ;- inzializzazione dei dispositivi per interfacciare la console
 ;- inzializzazione dei dispositivi per la gestione delle memoria di massa
 
-bios_cold_boot:         call bios_ID_device_initialize
+bios_cold_boot:         call bios_IO_device_initialize
                         ;da implementare
                         ret 
 
@@ -279,7 +283,7 @@ bios_cold_boot:         call bios_ID_device_initialize
 ;- inzializzazione dei dispositivi per interfacciare la console
 ;- inzializzazione dei dispositivi per la gestione delle memoria di massa
 ;tuttavia, è possibile specificare operazioni diverse per la gestione dei dispositivi IO, in caso si desidera ad esempio lasciare invariato il setup dei dispositivi
-bios_warm_boot:         call bios_ID_device_initialize
+bios_warm_boot:         call bios_IO_device_initialize
                         ;da implementare
                         ret 
 
@@ -390,13 +394,13 @@ bios_mass_memory_format_drive:  ;da implementare
 
 bios_memory_transfer:       mov a,b     
                             ora c 
-                            jz bios_memo_copy_end
+                            jz bios_memory_transfer_end
                             ldax d 
                             mov m,a 
                             dcx b 
                             inx h 
                             inx d 
-                            jmp bios_mem_copy
+                            jmp bios_memory_transfer
 bios_memory_transfer_end:   mvi a,bios_operation_ok 
                             ret 
 
