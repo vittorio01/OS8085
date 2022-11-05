@@ -53,9 +53,9 @@ bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il disposit
 ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
 
 bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0000
-bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0004
-bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0007
-bios_selected_IO_device_flags               .equ reserved_memory_start+$000A
+bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0003
+bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0006
+bios_selected_IO_device_flags               .equ reserved_memory_start+$0009
 
 bios_selected_IO_device_flags_Selected      .equ %10000000
 
@@ -242,7 +242,7 @@ bios_read_selected_device_byte:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_read_selected_device_byte_end
                                         jmp bios_selected_IO_device_read_byte_address
-bios_read_selected_device_byte_end:     xra a 
+bios_read_selected_device_byte_end:     mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret 
 
@@ -254,7 +254,7 @@ bios_write_selected_device_byte:        lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_write_selected_device_byte_end
                                         jmp bios_selected_IO_device_write_byte_address
-bios_write_selected_device_byte_end:    xra a 
+bios_write_selected_device_byte_end:    mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret
 
@@ -266,7 +266,7 @@ bios_get_selected_device_state:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_get_selected_device_state_end
                                         jmp bios_selected_IO_device_get_state_address
-bios_get_selected_device_state_end:     xra a 
+bios_get_selected_device_state_end:     mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret
 
@@ -430,7 +430,7 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
 
 BIOS_layer_end:
-.print "Space left in MMS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
+.print "Space left in BIOS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
 .memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
 .print "BIOS load address ->",BIOS
 .print "All functions built successfully"

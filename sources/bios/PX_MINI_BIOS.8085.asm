@@ -53,15 +53,15 @@ bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il disposit
 ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
 
 bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0000
-bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0004
-bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0007
-bios_selected_IO_device_flags               .equ reserved_memory_start+$000A
+bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0003
+bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0006
+bios_selected_IO_device_flags               .equ reserved_memory_start+$0009
 
-bios_mass_memory_selected_sector            .equ reserved_memory_start+$000B
-bios_mass_memory_selected_track             .equ reserved_memory_start+$000C
-bios_mass_memory_selected_head              .equ reserved_memory_start+$000E
-bios_mass_memory_selected_device            .equ reserved_memory_start+$000F
-bios_mass_memory_select_mask                .equ reserved_memory_start+$0010
+bios_mass_memory_selected_sector            .equ reserved_memory_start+$000A
+bios_mass_memory_selected_track             .equ reserved_memory_start+$000B
+bios_mass_memory_selected_head              .equ reserved_memory_start+$000D
+bios_mass_memory_selected_device            .equ reserved_memory_start+$000E
+bios_mass_memory_select_mask                .equ reserved_memory_start+$000F
 
 
 bios_serial_data_port                       .equ $22 
@@ -280,7 +280,7 @@ bios_read_selected_device_byte:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_read_selected_device_byte_end
                                         jmp bios_selected_IO_device_read_byte_address
-bios_read_selected_device_byte_end:     xra a 
+bios_read_selected_device_byte_end:     mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret 
 
@@ -292,7 +292,7 @@ bios_write_selected_device_byte:        lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_write_selected_device_byte_end
                                         jmp bios_selected_IO_device_write_byte_address
-bios_write_selected_device_byte_end:    xra a 
+bios_write_selected_device_byte_end:    mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret
 
@@ -304,7 +304,7 @@ bios_get_selected_device_state:         lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_get_selected_device_state_end
                                         jmp bios_selected_IO_device_get_state_address
-bios_get_selected_device_state_end:     xra a 
+bios_get_selected_device_state_end:     mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret
 

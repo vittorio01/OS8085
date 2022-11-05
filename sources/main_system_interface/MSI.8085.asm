@@ -26,8 +26,10 @@
 ;Le system calls vengono chiamate tramite interrupt software (isruzioni rst). Vengono utilizzati gli interrupt come segue:
 ;-  rst0 viene usato per eseguire un soft reset 
 ;-  rst1 viene usata per richiamare la maggiorparte delle system calls 
-;-  rst3 viene utilizzata per prelevare dati dal dispositivo I/O selezionato 
-;-  rst4 viene utilizzata per inviare dati al dispositivo I/O selezionato 
+;-  rst2 viene utilizzato per prelevare dati dal dispositivo I/O selezionato 
+;-  rst3 viene utilizzato per inviare dati al dispositivo I/O selezionato 
+;-  rst4 viene utilizzato per leggere lo stato del dispositivo 
+
 
 ;tutte le system calls rst, una volta che vengono richiamate, devono:
 ;1- salvare il contenuto dei registri della CPU, lo stack pointer e il return address 
@@ -117,18 +119,269 @@
 .include "libraries_system_calls.8085.asm"
 .include "execution_codes.8085.asm"
 
-MSI_functions:      .org MSI
-                    jmp system_boot
+rst0_address                .equ    $0000
+rst1_address                .equ    $0008
+rst2_address                .equ    $0010 
+rst3_address                .equ    $0018
+rst4_address                .equ    $0020
 
-system_boot:    lxi sp,stack_memory_start
-                call bios_cold_boot
-                ;call mms_low_memory_initialize
-                ;call fsm_init
-                mvi a,$01
-                call bios_get_IO_device_informations
-                
-                hlt 
+msi_HL_backup_address       .equ reserved_memory_start+$0050
+msi_DE_backup_address       .equ reserved_memory_start+$0052
+msi_BC_backup_address       .equ reserved_memory_start+$0054
+msi_PSW_backup_address      .equ reserved_memory_start+$0056
+msi_PC_backup_address       .equ reserved_memory_start+$0058
+msi_SP_backup_address       .equ reserved_memory_start+$005A
 
+msi_loaded_program_flags    .equ reserved_memory_start+$005C
+
+MSI_functions:                  .org MSI
+                                jmp msi_cold_start 
+
+msi_shell_name          .text "sheel"
+                        .b 0 
+msi_shell_extenson      .text "sys"
+                        .b 0
+
+
+;per rendere più efficace la ricerca della system call desiderata viene utilizzata una tabella in cui ogni record da 2 bytes identifica l'indirizzo dell'handler dedcato (la posizione identifica l'handler)
+
+msi_system_calls_id_table:      .word msi_system_call_exit 
+                                ;.word msi_system_call_select_IO_device 
+                               
+msi_system_calls_id_table_end:  
+
+msi_cold_start:                 lxi sp,stack_memory_start
+                                call bios_cold_boot
+                                call mms_low_memory_initialize
+                                call fsm_init
+                                call msi_interrupt_reset      
+                                ;da definire 
+
+                                mvi a,$0
+                                lxi B,$BBCC 
+                                lxi d,$DDEE 
+                                lxi h,$1234
+                                rst 1
+                                hlt 
+
+msi_interrupt_reset:            mvi a,$c3 
+                                sta rst0_address
+                                sta rst1_address
+                                sta rst2_address
+                                sta rst3_address 
+                                sta rst4_address 
+                                lxi h,msi_warm_reset_handler
+                                shld rst0_address+1 
+                                lxi h,msi_main_system_calls_handler
+                                shld rst1_address+1 
+                                lxi h,msi_IO_write_system_call_handler
+                                shld rst2_address+1 
+                                lxi h,msi_IO_read_system_call_handler
+                                shld rst3_address+1 
+                                lxi h,msi_IO_get_state_system_call_handler
+                                shld rst4_address+1 
+                                ret 
+
+;msi_warm_reset_handler si occupa di eseguire il warm reset
+msi_warm_reset_handler:             call bios_warm_boot 
+                                    call mms_low_memory_initialize 
+                                    call fsm_init 
+                                    call msi_interrupt_reset 
+                                    ;da definire
+                                    hlt 
+
+;msi_main_system_calls_handler si occupa di gestire tutte le system calls principali  
+msi_main_system_calls_handler:          shld msi_HL_backup_address
+                                        pop h 
+                                        shld msi_PC_backup_address
+                                        lxi h,0 
+                                        dad sp 
+                                        shld msi_SP_backup_address
+                                        push psw 
+                                        pop h 
+                                        shld msi_PSW_backup_address
+                                        xchg 
+                                        shld msi_DE_backup_address
+                                        mov l,c 
+                                        mov h,b 
+                                        shld msi_BC_backup_address
+                                        lxi sp,stack_memory_start
+                                        add a 
+                                        mov e,a 
+                                        mvi a,0 
+                                        ral 
+                                        mov d,a 
+                                        lxi h,msi_system_calls_id_table
+                                        dad d 
+                                        lxi d,msi_system_calls_id_table_end 
+                                        mov a,l
+                                        sub e
+                                        mov a,h
+                                        sbb d
+                                        jnc msi_main_system_calls_handler_error 
+                                        mov e,m 
+                                        inx h 
+                                        mov d,m 
+                                        xchg 
+                                        pchl 
+
+msi_main_system_calls_handler_error:    lhld msi_PSW_backup_address
+                                        push h 
+                                        pop psw 
+                                        mvi a,msi_system_Call_not_found 
+                                        lhld msi_SP_backup_address
+                                        sphl 
+                                        lhld msi_PC_backup_address
+                                        push h 
+                                        lhld msi_BC_backup_address
+                                        mov e,l 
+                                        mov b,h 
+                                        lhld msi_DE_backup_address
+                                        xchg 
+                                        lhld msi_HL_backup_address
+                                        ret 
+
+
+msi_system_calls_restore_HL_and_return:     lhld msi_SP_backup_address
+                                            sphl 
+                                            lhld msi_PC_backup_address
+                                            push h 
+                                            lhld msi_HL_backup_address
+                                            ret 
+
+msi_system_calls_return:                    lhld msi_SP_backup_address
+                                            sphl 
+                                            lhld msi_PC_backup_address
+                                            push h 
+                                            ret 
+
+;handlers delle funzioni relative ai dispositivi IO     
+
+;msi_IO_write_system_call_handler viene chiamata tramite l'interrupt rst2 e invia un byte al dispositivo IO selezionato precedentemente con rst1 
+;A      -> byte da inviare 
+;PSW    <- CY viene settato ad 1 se si è vrificato un errore. Tutte le altre flags non vengono modificate
+;A      <- se CY = 1 ritorna l'errore generato, altrimenti assume lo stesso valore in ingresso alla funzione
+msi_IO_write_system_call_handler:       shld msi_HL_backup_address
+                                        pop h 
+                                        shld msi_PC_backup_address
+                                        lxi h,0 
+                                        dad sp 
+                                        shld msi_SP_backup_address
+                                        push psw 
+                                        pop h 
+                                        shld msi_PSW_backup_address
+                                        lxi sp,stack_memory_start
+                                        call bios_write_selected_device_byte
+                                        jc msi_IO_write_system_call_handler_error 
+                                        lhld msi_PSW_backup_address
+                                        push h 
+                                        pop psw 
+                                        stc 
+                                        cmc 
+                                        jmp msi_system_calls_restore_HL_and_return
+
+msi_IO_write_system_call_handler_error: xchg 
+                                        shld msi_DE_backup_address
+                                        mov e,a 
+                                        lhld msi_PSW_backup_address
+                                        push h 
+                                        pop psw  
+                                        stc 
+                                        mov a,e 
+                                        lhld msi_DE_backup_address
+                                        xchg 
+                                        jmp msi_system_calls_restore_HL_and_return
+                                        ret 
+
+;msi_IO_read_system_call_handler viene richiamata tramite l'interrupt rst3 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
+;PSW    <- CY viene settato ad 1 se si è vrificato un errore. Tutte le altre flags non vengono modificate
+;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce il carattere letto dal dispositivo IO
+
+msi_IO_read_system_call_handler:        shld msi_HL_backup_address
+                                        pop h 
+                                        shld msi_PC_backup_address
+                                        lxi h,0 
+                                        dad sp 
+                                        shld msi_SP_backup_address
+                                        push psw 
+                                        pop h 
+                                        shld msi_PSW_backup_address
+                                        lxi sp,stack_memory_start
+                                        call bios_read_selected_device_byte
+                                        jc msi_IO_read_system_call_handler_error 
+                                        lhld msi_PSW_backup_address
+                                        xchg 
+                                        shld msi_DE_backup_address
+                                        mov e,a 
+                                        lhld msi_PSW_backup_address
+                                        push h 
+                                        pop psw  
+                                        stc 
+                                        cmc 
+                                        mov a,e 
+                                        lhld msi_DE_backup_address
+                                        xchg 
+                                        jmp msi_system_calls_restore_HL_and_return
+
+msi_IO_read_system_call_handler_error:  xchg 
+                                        shld msi_DE_backup_address
+                                        mov e,a 
+                                        lhld msi_PSW_backup_address
+                                        push h 
+                                        pop psw  
+                                        stc 
+                                        mov a,e 
+                                        lhld msi_DE_backup_address
+                                        xchg 
+                                        jmp msi_system_calls_restore_HL_and_return
+                                        ret      
+
+;msi_IO_get_state_system_call_handler viene richiamata tramite l'interrupt rst3 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
+;PSW    <- CY viene settato ad 1 se si è verificato un errore. Tutte le altre flags non vengono modificate
+;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce lo stato del dispositivo IO
+
+msi_IO_get_state_system_call_handler:       shld msi_HL_backup_address
+                                            pop h 
+                                            shld msi_PC_backup_address
+                                            lxi h,0 
+                                            dad sp 
+                                            shld msi_SP_backup_address
+                                            push psw 
+                                            pop h 
+                                            shld msi_PSW_backup_address
+                                            lxi sp,stack_memory_start
+                                            call bios_get_selected_device_state
+                                            jc msi_IO_write_system_call_handler_error 
+                                            xchg 
+                                            shld msi_DE_backup_address
+                                            mov e,a 
+                                            lhld msi_PSW_backup_address
+                                            push h 
+                                            pop psw  
+                                            stc 
+                                            cmc 
+                                            mov a,e 
+                                            lhld msi_DE_backup_address
+                                            xchg  
+                                            jmp msi_system_calls_restore_HL_and_return
+
+msi_IO_get_state_system_call_handler_error: xchg 
+                                            shld msi_DE_backup_address
+                                            mov e,a 
+                                            lhld msi_PSW_backup_address
+                                            push h 
+                                            pop psw  
+                                            stc 
+                                            mov a,e 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            jmp msi_system_calls_restore_HL_and_return
+                                            ret      
+
+;implementazione delle system calls standard rst1 
+
+msi_system_call_exit:   mvi a,$CC 
+                        hlt 
 
 
 MSI_layer_end:

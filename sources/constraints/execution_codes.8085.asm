@@ -12,9 +12,7 @@ bios_mass_memory_transfer_error         .equ $05
 bios_mass_memory_seek_error             .equ $06
 bios_memory_transfer_error              .equ $07 
 bios_IO_device_not_found                .equ $08 
-
-bios_console_ready                      .equ $08
-bios_console_not_ready                  .equ $09
+bios_IO_device_not_selected             .equ $09 
 
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della mms 
 mms_not_enough_ram_error_code               .equ $11
@@ -65,3 +63,5 @@ fsm_boot_section_not_found          .equ $3B
 fsm_system_section_not_found        .equ $3C 
 fsm_disk_bootable                   .equ $3D
 fsm_operation_ok                    .equ $ff 
+
+msi_system_Call_not_found           .equ $40
