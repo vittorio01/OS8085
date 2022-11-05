@@ -1,67 +1,80 @@
 ;questo file contiene tutti i codici di esecuzione che possono essere generati nel sistema
 ;ogni file sorgente deve importare questo file
+bios_execution_code_mark                .equ %00000000
+mms_execution_code_mark                 .equ %01000000
+fsm_execution_code_mark                 .equ %10000000
+msi_execution_code_mark                 .equ %11000000
 
 ;codici di esecuzione che possono essere generati dalle funzioni del bios
 bios_operation_ok                       .equ $ff 
 
-bios_mass_memory_write_only             .equ $01
-bios_mass_memory_device_not_found       .equ $02
-bios_mass_memory_device_not_selected    .equ $03
-bios_mass_memory_bad_argument           .equ $04
-bios_mass_memory_transfer_error         .equ $05
-bios_mass_memory_seek_error             .equ $06
-bios_memory_transfer_error              .equ $07 
-bios_IO_device_not_found                .equ $08 
-bios_IO_device_not_selected             .equ $09 
+bios_IO_device_not_found                .equ bios_execution_code_mark+$01 
+bios_IO_device_not_selected             .equ bios_execution_code_mark+$02 
+bios_mass_memory_device_not_found       .equ bios_execution_code_mark+$03
+bios_mass_memory_device_not_selected    .equ bios_execution_code_mark+$04
+bios_mass_memory_bad_argument           .equ bios_execution_code_mark+$05
+bios_mass_memory_write_only             .equ bios_execution_code_mark+$06
+bios_mass_memory_transfer_error         .equ bios_execution_code_mark+$07
+bios_mass_memory_seek_error             .equ bios_execution_code_mark+$08
+bios_memory_transfer_error              .equ bios_execution_code_mark+$09 
+
 
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della mms 
-mms_not_enough_ram_error_code               .equ $11
-mms_segment_data_not_found_error_code       .equ $12
-mms_segment_segmentation_fault_error_code   .equ $13
-mms_segment_number_overflow_error_code      .equ $14
-mms_segment_bad_argument                    .equ $15
-
-mms_source_segment_not_selected             .equ $16 
-mms_destination_segment_not_selected        .equ $17
-mms_destination_segment_not_found           .equ $18 
-mms_source_segment_overflow                 .equ $19 
-mms_destination_segment_overflow            .equ $1A 
-mms_program_not_loaded                      .equ $1B
-mms_mass_memory_not_selected                .equ $1C
 
 mms_operation_ok                            .equ $ff
 
+mms_not_enough_ram_error_code               .equ mms_execution_code_mark+$01
+mms_segment_data_not_found_error_code       .equ mms_execution_code_mark+$02
+mms_segment_segmentation_fault_error_code   .equ mms_execution_code_mark+$03
+mms_segment_number_overflow_error_code      .equ mms_execution_code_mark+$04
+mms_segment_bad_argument                    .equ mms_execution_code_mark+$05
+
+mms_source_segment_not_selected             .equ mms_execution_code_mark+$06
+mms_source_segment_overflow                 .equ mms_execution_code_mark+$07
+mms_destination_segment_not_selected        .equ mms_execution_code_mark+$08
+mms_destination_segment_not_found           .equ mms_execution_code_mark+$09 
+mms_destination_segment_overflow            .equ mms_execution_code_mark+$0a 
+mms_program_not_loaded                      .equ mms_execution_code_mark+$0b 
+mms_mass_memory_not_selected                .equ mms_execution_code_mark+$0c 
+
 ;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della fsm
-fsm_mass_memory_sector_not_found    .equ $20
-fsm_bad_argument                    .equ $21
-fsm_disk_not_selected               .equ $22
-fsm_formatting_fat_generation_error .equ $23
-fsm_unformatted_disk                .equ $24
-fsm_device_not_found                .equ $25
-fsm_not_enough_spage_left           .equ $26
-fsm_list_is_empty                   .equ $27
-fsm_header_not_found                .equ $28
-fsm_header_not_selected             .equ $2a
-fsm_end_of_disk                     .equ $29
-fsm_header_exist                    .equ $2A 
-fsm_end_of_list                     .equ $2B 
-fsm_data_pointer_not_setted         .equ $2C 
-fsm_end_of_file                     .equ $2D
-fsm_destination_segment_overflow    .equ $2E
-fsm_file_pointer_overflow           .equ $2F
-fsm_source_segment_overflow         .equ $30
-fsm_selected_file_not_executable    .equ $31 
-fsm_program_too_big                 .equ $32 
-fsm_read_only_file                  .equ $33 
-fsm_selected_disk_not_bootable      .equ $34
-fsm_disk_operating_system_not_found .equ $36
-fsm_not_a_system_file               .equ $37 
-fsm_system_space_too_small          .equ $38
-fsm_disk_not_bootable               .equ $39
-fsm_system_section_overflow         .equ $3A
-fsm_boot_section_not_found          .equ $3B 
-fsm_system_section_not_found        .equ $3C 
-fsm_disk_bootable                   .equ $3D
 fsm_operation_ok                    .equ $ff 
 
-msi_system_Call_not_found           .equ $40
+fsm_mass_memory_sector_not_found    .equ fsm_execution_code_mark+$01
+fsm_disk_not_selected               .equ fsm_execution_code_mark+$02
+fsm_device_not_found                .equ fsm_execution_code_mark+$04
+fsm_unformatted_disk                .equ fsm_execution_code_mark+$05
+fsm_disk_not_bootable               .equ fsm_execution_code_mark+$06
+fsm_disk_bootable                   .equ fsm_execution_code_mark+$07
+
+fsm_not_enough_spage_left           .equ fsm_execution_code_mark+$08
+
+fsm_bad_argument                    .equ fsm_execution_code_mark+$09
+fsm_formatting_fat_generation_error .equ fsm_execution_code_mark+$0A 
+fsm_list_is_empty                   .equ fsm_execution_code_mark+$0B 
+fsm_header_not_found                .equ fsm_execution_code_mark+$0C 
+fsm_header_not_selected             .equ fsm_execution_code_mark+$0D 
+fsm_end_of_disk                     .equ fsm_execution_code_mark+$0E 
+fsm_end_of_list                     .equ fsm_execution_code_mark+$0F 
+fsm_end_of_file                     .equ fsm_execution_code_mark+$10
+fsm_header_exist                    .equ fsm_execution_code_mark+$11 
+fsm_data_pointer_not_setted         .equ fsm_execution_code_mark+$12 
+fsm_destination_segment_overflow    .equ fsm_execution_code_mark+$13
+fsm_file_pointer_overflow           .equ fsm_execution_code_mark+$14
+fsm_source_segment_overflow         .equ fsm_execution_code_mark+$15
+fsm_selected_file_not_executable    .equ fsm_execution_code_mark+$16 
+fsm_program_too_big                 .equ fsm_execution_code_mark+$17 
+fsm_read_only_file                  .equ fsm_execution_code_mark+$18 
+fsm_selected_disk_not_bootable      .equ fsm_execution_code_mark+$19
+fsm_disk_operating_system_not_found .equ fsm_execution_code_mark+$1A 
+fsm_not_a_system_file               .equ fsm_execution_code_mark+$1B 
+fsm_system_space_too_small          .equ fsm_execution_code_mark+$1C 
+
+fsm_system_section_overflow         .equ fsm_execution_code_mark+$1D 
+fsm_boot_section_not_found          .equ fsm_execution_code_mark+$1E 
+fsm_system_section_not_found        .equ fsm_execution_code_mark+$1F 
+
+;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della MSI
+
+msi_operation_ok                    .equ $ff 
+msi_system_Call_not_found           .equ msi_execution_code_mark+$01
