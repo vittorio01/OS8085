@@ -21,3 +21,4 @@ mms_program_bytes_write                         .equ mms_delete_all_temporary_se
 mms_program_bytes_read                          .equ mms_program_bytes_write+3
 mms_mass_memory_read_sector                     .equ mms_program_bytes_read+3
 mms_mass_memory_write_sector                    .equ mms_mass_memory_read_sector+3
+mms_get_selected_segment_ID                     .equ mms_mass_memory_write_sector+3 
