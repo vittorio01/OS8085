@@ -1,6 +1,7 @@
 ;questo file contiene i riferimenti per il linking di tutte le system calls della fsm 
 ;ogni codice sorgente che utilizza la FSM deve importare questo file 
 
+
 fsm_init                                            .equ FSM
 fsm_close                                           .equ fsm_init +3
 fsm_select_disk                                     .equ fsm_close +3

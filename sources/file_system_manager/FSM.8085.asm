@@ -136,7 +136,7 @@
 .include "mms_system_calls.8085.asm"
 .include "libraries_system_calls.8085.asm"
 .include "bios_system_calls.8085.asm"
-.include "execution_codes.8085.asm"
+.include "environment_variables.8085.asm"
 
 fsm_selected_disk                       .equ reserved_memory_start + $0030
 fsm_selected_disk_head_number           .equ reserved_memory_start + $0031
@@ -184,15 +184,7 @@ fsm_boot_sector_compile_address_offset  .equ low_memory_start
 fsm_format_marker_lenght            .equ 6 
 
 fsm_header_dimension                .equ 32 
-fsm_disk_name_max_lenght            .equ 20
-fsm_header_name_dimension           .equ 20
-fsm_header_extension_dimension      .equ 5 
-fsm_header_valid_bit                .equ %10000000
-fsm_header_deleted_bit              .equ %01000000
-fsm_header_system_bit               .equ %00100000
-fsm_header_program_bit              .equ %00010000
-fsm_header_hidden_bit               .equ %00001000
-fsm_header_readonly_bit             .equ %00000100
+
 
 
 fsm_functions:  .org FSM 
@@ -259,6 +251,7 @@ fsm_init:       push h
                 jnz fsm_init_end 
 fsm_init_end:   pop h 
                 ret 
+
 
 ;fsm_close chiude tutte le risorse della fsm 
 ;A <- esito dell'operazione 
