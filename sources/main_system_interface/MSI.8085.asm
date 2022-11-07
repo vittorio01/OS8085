@@ -30,6 +30,7 @@
 ;-  rst3 viene utilizzato per inviare dati al dispositivo I/O selezionato 
 ;-  rst4 viene utilizzato per leggere lo stato del dispositivo 
 
+;con l'interrupt rst1 si possono chiamare diverse system call. Quando l'interrupt rst1 viene generato, il registro C deve contenere il codice relativo alla system call desiderata.
 
 ;tutte le system calls rst, una volta che vengono richiamate, devono:
 ;1- salvare il contenuto dei registri della CPU, lo stack pointer e il return address 
@@ -52,7 +53,7 @@
 ;Nel caso in cui un risultato si trovi all'interno dello stack pointer si deve prima copiare i dati nello stack pointer dell'applicazione e poi restituire l'indirizzo modificato. 
 
 ;----- avvio del sistema -----
-;Come detto precdentemente, la MSI ha il compito di inizializzare correttamente tutti i layers del sistema operativo. In particolare, tutti i layers devono essere inizializzati seguendo quest'ordine:
+;Come detto precedentemente, la MSI ha il compito di inizializzare correttamente tutti i layers del sistema operativo. In particolare, tutti i layers devono essere inizializzati seguendo quest'ordine:
 ;-  BIOS 
 ;-  MMS 
 ;-  FSM 
@@ -117,7 +118,7 @@
 .include "mms_system_calls.8085.asm"
 .include "fsm_system_calls.8085.asm"
 .include "libraries_system_calls.8085.asm"
-.include "execution_codes.8085.asm"
+.include "environment_variables.8085.asm"
 
 rst0_address                .equ    $0000
 rst1_address                .equ    $0008
@@ -125,14 +126,19 @@ rst2_address                .equ    $0010
 rst3_address                .equ    $0018
 rst4_address                .equ    $0020
 
-msi_HL_backup_address       .equ reserved_memory_start+$0050
-msi_DE_backup_address       .equ reserved_memory_start+$0052
-msi_BC_backup_address       .equ reserved_memory_start+$0054
-msi_PSW_backup_address      .equ reserved_memory_start+$0056
-msi_PC_backup_address       .equ reserved_memory_start+$0058
-msi_SP_backup_address       .equ reserved_memory_start+$005A
+msi_HL_backup_address               .equ reserved_memory_start+$0050
+msi_DE_backup_address               .equ reserved_memory_start+$0052
+msi_BC_backup_address               .equ reserved_memory_start+$0054
+msi_PSW_backup_address              .equ reserved_memory_start+$0056
+msi_PC_backup_address               .equ reserved_memory_start+$0058
+msi_SP_backup_address               .equ reserved_memory_start+$005A
+msi_ID_segment_backup_address       .equ reserved_memory_start+$005C 
 
-msi_loaded_program_flags    .equ reserved_memory_start+$005C
+msi_current_program_flags           .equ reserved_memory_start+$005D
+
+
+msi_current_program_loaded          .equ %10000000
+msi_current_program_permissions     .equ %01000000
 
 MSI_functions:                  .org MSI
                                 jmp msi_cold_start 
@@ -145,9 +151,68 @@ msi_shell_extenson      .text "sys"
 
 ;per rendere più efficace la ricerca della system call desiderata viene utilizzata una tabella in cui ogni record da 2 bytes identifica l'indirizzo dell'handler dedcato (la posizione identifica l'handler)
 
-msi_system_calls_id_table:      .word msi_system_call_exit 
-                                ;.word msi_system_call_select_IO_device 
-                               
+msi_system_calls_id_table:      .word msi_system_call_select_IO_device 
+                                .word msi_system_call_get_IO_device_informations 
+                                .word msi_system_call_mass_memory_select_sector 
+                                .word msi_system_call_mass_memory_select_track 
+                                .word msi_system_call_mass_memory_select_head 
+                                .word msi_system_call_mass_memory_status 
+                                .word msi_system_call_mass_memory_get_bps 
+                                .word msi_system_call_mass_memory_get_spt 
+                                .word msi_system_call_mass_memory_get_tph 
+                                .word msi_system_call_mass_memory_get_head_number 
+                                .word msi_system_call_mass_memory_write_sector 
+                                .word msi_system_call_mass_memory_read_sector 
+
+                                .word msi_system_call_get_free_ram_bytes  
+                                .word msi_system_call_get_current_program_dimension 
+                                .word msi_system_call_create_temporary_memory_segment
+                                .word msi_system_call_delete_temporary_memory_segment 
+                                .word msi_system_call_select_temporary_memory_segment 
+                                .word msi_system_call_read_temporary_segment_byte 
+                                .word msi_system_call_write_temporary_segment_byte 
+                                .word msi_system_call_read_temporary_segment_dimension 
+
+                                .word msi_system_call_select_disk 
+                                .word msi_system_call_format_disk 
+                                .word msi_system_call_wipe_disk 
+                                .word msi_system_call_set_disk_name 
+                                .word msi_system_call_get_disk_name 
+                                .word msi_system_call_get_disk_free_space 
+                                .word msi_system_call_search_file 
+                                .word msi_system_call_select_file 
+                                .word msi_system_call_create_file 
+                                .word msi_system_call_get_file_name 
+                                .word msi_system_call_get_file_dimension 
+                                .word msi_system_call_get_attributes 
+                                .word msi_system_call_rename_file
+                                .word msi_system_call_set_system_file 
+                                .word msi_system_call_set_executable_file 
+                                .word msi_system_call_set_read_only_file 
+                                .word msi_system_call_delete_file 
+                                .word msi_system_call_reset_file_scan_pointer 
+                                .word msi_system_call_increment_file_scan_pointer 
+                                .word msi_system_call_change_file_dimension 
+                                .word msi_system_call_read_file_bytes 
+                                .word msi_system_call_write_file_bytes 
+                                .word msi_system_call_wipe_file 
+                                .word msi_system_call_set_data_pointer 
+                                .word msi_system_call_launch_program
+                                .word msi_system_call_write_operative_system_bytes 
+                                .word msi_system_call_read_operative_system_bytes 
+                                .word msi_system_call_write_boot_sector_bytes 
+                                .word msi_system_call_read_boot_sector_bytes 
+                                .word msi_system_call_set_disk_bootable 
+                                .word msi_system_call_unset_disk_bootable 
+                                .word msi_system_call_get_operative_system_space_dimension 
+                                .word msi_system_call_get_boot_section_space_dimension 
+                                .word msi_system_call_read_disk_bootable_flag 
+                                .word msi_system_call_create_message 
+                                .word msi_system_call_exit_program
+                                .word msi_system_call_delete_message 
+                                .word msi_system_call_read_message_byte 
+                                .word msi_system_call_read_message_sender_name 
+
 msi_system_calls_id_table_end:  
 
 msi_cold_start:                 lxi sp,stack_memory_start
@@ -206,8 +271,9 @@ msi_main_system_calls_handler:          shld msi_HL_backup_address
                                         mov h,b 
                                         shld msi_BC_backup_address
                                         lxi sp,stack_memory_start
+                                        mov a,c 
                                         add a 
-                                        mov e,a 
+                                        mov d,a 
                                         mvi a,0 
                                         ral 
                                         mov d,a 
@@ -259,7 +325,7 @@ msi_system_calls_return:                    lhld msi_SP_backup_address
 
 ;msi_IO_write_system_call_handler viene chiamata tramite l'interrupt rst2 e invia un byte al dispositivo IO selezionato precedentemente con rst1 
 ;A      -> byte da inviare 
-;PSW    <- CY viene settato ad 1 se si è vrificato un errore. Tutte le altre flags non vengono modificate
+;PSW    <- CY viene settato ad 1 se si è verificato un errore.
 ;A      <- se CY = 1 ritorna l'errore generato, altrimenti assume lo stesso valore in ingresso alla funzione
 msi_IO_write_system_call_handler:       shld msi_HL_backup_address
                                         pop h 
@@ -267,34 +333,12 @@ msi_IO_write_system_call_handler:       shld msi_HL_backup_address
                                         lxi h,0 
                                         dad sp 
                                         shld msi_SP_backup_address
-                                        push psw 
-                                        pop h 
-                                        shld msi_PSW_backup_address
                                         lxi sp,stack_memory_start
                                         call bios_write_selected_device_byte
-                                        jc msi_IO_write_system_call_handler_error 
-                                        lhld msi_PSW_backup_address
-                                        push h 
-                                        pop psw 
-                                        stc 
-                                        cmc 
                                         jmp msi_system_calls_restore_HL_and_return
-
-msi_IO_write_system_call_handler_error: xchg 
-                                        shld msi_DE_backup_address
-                                        mov e,a 
-                                        lhld msi_PSW_backup_address
-                                        push h 
-                                        pop psw  
-                                        stc 
-                                        mov a,e 
-                                        lhld msi_DE_backup_address
-                                        xchg 
-                                        jmp msi_system_calls_restore_HL_and_return
-                                        ret 
 
 ;msi_IO_read_system_call_handler viene richiamata tramite l'interrupt rst3 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
-;PSW    <- CY viene settato ad 1 se si è vrificato un errore. Tutte le altre flags non vengono modificate
+;PSW    <- CY viene settato ad 1 se si è vrificato un errore.
 ;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce il carattere letto dal dispositivo IO
 
 msi_IO_read_system_call_handler:        shld msi_HL_backup_address
@@ -303,41 +347,13 @@ msi_IO_read_system_call_handler:        shld msi_HL_backup_address
                                         lxi h,0 
                                         dad sp 
                                         shld msi_SP_backup_address
-                                        push psw 
-                                        pop h 
-                                        shld msi_PSW_backup_address
                                         lxi sp,stack_memory_start
                                         call bios_read_selected_device_byte
-                                        jc msi_IO_read_system_call_handler_error 
-                                        lhld msi_PSW_backup_address
-                                        xchg 
-                                        shld msi_DE_backup_address
-                                        mov e,a 
-                                        lhld msi_PSW_backup_address
-                                        push h 
-                                        pop psw  
-                                        stc 
-                                        cmc 
-                                        mov a,e 
-                                        lhld msi_DE_backup_address
-                                        xchg 
                                         jmp msi_system_calls_restore_HL_and_return
-
-msi_IO_read_system_call_handler_error:  xchg 
-                                        shld msi_DE_backup_address
-                                        mov e,a 
-                                        lhld msi_PSW_backup_address
-                                        push h 
-                                        pop psw  
-                                        stc 
-                                        mov a,e 
-                                        lhld msi_DE_backup_address
-                                        xchg 
-                                        jmp msi_system_calls_restore_HL_and_return
-                                        ret      
+   
 
 ;msi_IO_get_state_system_call_handler viene richiamata tramite l'interrupt rst3 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
-;PSW    <- CY viene settato ad 1 se si è verificato un errore. Tutte le altre flags non vengono modificate
+;PSW    <- CY viene settato ad 1 se si è verificato un errore.
 ;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce lo stato del dispositivo IO
 
 msi_IO_get_state_system_call_handler:       shld msi_HL_backup_address
@@ -346,43 +362,502 @@ msi_IO_get_state_system_call_handler:       shld msi_HL_backup_address
                                             lxi h,0 
                                             dad sp 
                                             shld msi_SP_backup_address
-                                            push psw 
-                                            pop h 
-                                            shld msi_PSW_backup_address
                                             lxi sp,stack_memory_start
                                             call bios_get_selected_device_state
-                                            jc msi_IO_write_system_call_handler_error 
-                                            xchg 
-                                            shld msi_DE_backup_address
-                                            mov e,a 
-                                            lhld msi_PSW_backup_address
-                                            push h 
-                                            pop psw  
-                                            stc 
-                                            cmc 
-                                            mov a,e 
-                                            lhld msi_DE_backup_address
-                                            xchg  
-                                            jmp msi_system_calls_restore_HL_and_return
-
-msi_IO_get_state_system_call_handler_error: xchg 
-                                            shld msi_DE_backup_address
-                                            mov e,a 
-                                            lhld msi_PSW_backup_address
-                                            push h 
-                                            pop psw  
-                                            stc 
-                                            mov a,e 
-                                            lhld msi_DE_backup_address
-                                            xchg 
-                                            jmp msi_system_calls_restore_HL_and_return
-                                            ret      
+                                            jmp msi_system_calls_restore_HL_and_return 
 
 ;implementazione delle system calls standard rst1 
 
-msi_system_call_exit:   mvi a,$CC 
-                        hlt 
+;msi_system_call_select_IO_device permette di selezionare il dispositivo IO dal BIOS. 
+;A -> id del dispositivo 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato ad 1 se si è verificato un errore nella selezione 
+msi_system_call_select_IO_device:           lhld msi_PSW_backup_address
+                                            mov a,h 
+                                            call bios_select_IO_device
+                                            cpi bios_operation_ok
+                                            jnz msi_system_call_select_IO_device_error
+                                            stc 
+                                            cmc 
+                                            mvi a,msi_operation_ok
+                                            jmp msi_system_call_select_IO_device_end
+msi_system_call_select_IO_device_error:     stc 
+msi_system_call_select_IO_device_end:       lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            jmp msi_system_calls_restore_HL_and_return
 
+;msi_system_call_get_IO_device_informations restituisce le informazioni sul dispositivo IO
+;A -> ID del dispositivo IO 
+;PSW <- se il dispositivo non esiste CY viene settato ad 1
+;A <- se CY = 1 restituisce l'errore generato, altrimenti restituisce le informazioni sul dispositivo 
+msi_system_call_get_IO_device_informations:         lhld msi_PSW_backup_address
+                                                    mov a,h 
+                                                    call bios_get_IO_device_informations
+                                                    jc msi_system_call_get_IO_device_informations_end
+                                                    stc 
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+                                                    jmp msi_system_call_get_IO_device_informations_end
+msi_system_call_get_IO_device_informations_end:     lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_select_sector permette di selezonare un settore nella memoria di massa selezionata
+; A -> numero di settore 
+; A <- esito dell'operazione 
+; PSW <- se si è verificato un errore CY viene settato ad 1 
+
+msi_system_call_mass_memory_select_sector:          lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_select_sector_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_select_sector_end
+msi_system_call_mass_memory_select_sector_next:     lhld msi_PSW_backup_address
+                                                    mov a,h 
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    stc 
+                                                    jnz msi_system_call_mass_memory_select_sector_end
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+msi_system_call_mass_memory_select_sector_end:      lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_select_head permette di selezonare la testina nella memoria di massa selezionata
+; A -> numero di testina
+; A <- esito dell'operazione 
+; PSW <- se si è verificato un errore CY viene settato ad 1 
+
+msi_system_call_mass_memory_select_head:            lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_select_head_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_select_head_end
+msi_system_call_mass_memory_select_head_next:       lhld msi_PSW_backup_address
+                                                    mov a,h 
+                                                    call bios_mass_memory_select_head
+                                                    cpi bios_operation_ok
+                                                    stc 
+                                                    jnz msi_system_call_mass_memory_select_head_end
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+msi_system_call_mass_memory_select_head_end:        lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_select_track permette di selezionare la traccia nella memoria di massa selezionata 
+;HL -> numero di traccia 
+;A <- esito dell'operazione 
+;PSW <- Csi si è verificato un errore CY viene settato ad 1 
+
+msi_system_call_mass_memory_select_track:           lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_select_track_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_select_track_end
+msi_system_call_mass_memory_select_track_next:      lhld msi_HL_backup_address
+                                                    call bios_mass_memory_select_sector
+                                                    cpi bios_operation_ok
+                                                    stc 
+                                                    jnz msi_system_call_mass_memory_select_track_end
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+msi_system_call_mass_memory_select_track_end:       lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_status restituisce lo stato corrente della memoria di massa selezionata 
+;PSW <- CY viene settata ad 1 se si è verificato un errore 
+;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce lo stato corrente del dispositivo 
+
+msi_system_call_mass_memory_status:                 lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_status_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_status_end
+msi_system_call_mass_memory_status_next:            call bios_mass_memory_status
+msi_system_call_mass_memory_status_end:             lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_get_bps restituisce il numero di settori per traccia della memoria di massa selezionata 
+;PSW <- CY viene settato ad 1 se si è verificato un errore 
+;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce il numero di bytes per settore in multipli di 128b 
+
+msi_system_call_mass_memory_get_bps:                lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_get_bps_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_get_bps_end
+msi_system_call_mass_memory_get_bps_next:           call bios_mass_memory_get_bps
+msi_system_call_mass_memory_get_bps_end:            lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_get_spt restituisce il numero di settori per traccia della memoria di massa selezionata 
+;PSW <- CY viene settato ad 1 se si è verificato un errore 
+;A <- se CY=1 restituiscel'errore generato, altrimenti restituisce il numero di settori per traccia
+
+msi_system_call_mass_memory_get_spt:                lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_get_spt_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_get_spt_end
+msi_system_call_mass_memory_get_spt_next:           call bios_mass_memory_get_bps
+msi_system_call_mass_memory_get_spt_end:            lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_get_spt restituisce il numero di settori per traccia della memoria di massa selezionata 
+;PSW <- CY viene settato ad 1 se si è verificato un errore 
+;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce il numero di tracce per settori in multipli di 128b 
+;HL <- assume 0 se CY=1, altrimenti restituisce il numero di tracce per testina 
+
+msi_system_call_mass_memory_get_tph:                lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_get_tph_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_get_tph_end
+msi_system_call_mass_memory_get_tph_next:           call bios_mass_memory_get_tph
+msi_system_call_mass_memory_get_tph_end:            lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_return 
+
+;msi_system_call_mass_memory_get_head_number restituisce il numero di settori per traccia della memoria di massa selezionata 
+;PSW <- CY viene settato ad 1 se si è verificato un errore 
+;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce il numero di testine del dispositivo
+
+msi_system_call_mass_memory_get_head_number:        lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_get_head_number_next
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_get_head_number_end
+msi_system_call_mass_memory_get_head_number_next:   call bios_mass_memory_get_head_number
+msi_system_call_mass_memory_get_head_number_end:    lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return 
+
+;msi_system_call_mass_memory_write_sector scrive nel settore della memoria di massa i dati precedenti nel segmento di memoria selezionato 
+;HL -> offset nel segmento 
+;A <- esito dell'operazione 
+;PSW <- CY viene settata ad 1 se si è verificato un errore
+;HL <- offset nel segmento dopo l'operazione 
+
+msi_system_call_mass_memory_write_sector:           lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_write_sector_next 
+msi_system_call_mass_memory_write_sector_perm_err:  lhld msi_HL_backup_address
+                                                    xchg 
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_write_sector_end 
+msi_system_call_mass_memory_write_sector_next:      call mms_get_selected_segment_ID
+                                                    ani mms_low_memory_type_segment_mask
+                                                    jz msi_system_call_mass_memory_write_sector_perm_err
+                                                    lhld msi_HL_backup_address
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz msi_system_call_mass_memory_write_sector_error 
+                                                    stc 
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+                                                    jmp msi_system_call_mass_memory_write_sector_end 
+msi_system_call_mass_memory_write_sector_error:     stc 
+                                                    cmc 
+                                                    lhld msi_HL_backup_address
+                                                    xchg 
+msi_system_call_mass_memory_write_sector_end:       lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_return
+
+;msi_system_call_mass_memory_read_sector legge dal settore della memoria di massa i dati e li salva nel segmento di memoria selezionato 
+;HL -> offset nel segmento 
+;A <- esito dell'operazione 
+;PSW <- CY viene settata ad 1 se si è verificato un errore
+;HL <- offset nel segmento dopo l'operazione  
+msi_system_call_mass_memory_read_sector:            lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_mass_memory_read_sector_next 
+msi_system_call_mass_memory_read_sector_perm_err:   lhld msi_HL_backup_address
+                                                    xchg 
+                                                    mvi a,msi_current_program_permissions_error 
+                                                    stc 
+                                                    jmp msi_system_call_mass_memory_read_sector_end 
+msi_system_call_mass_memory_read_sector_next:       call mms_get_selected_segment_ID
+                                                    ani mms_low_memory_type_segment_mask 
+                                                    jz msi_system_call_mass_memory_read_sector_perm_err
+                                                    lhld msi_HL_backup_address
+                                                    call mms_mass_memory_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz msi_system_call_mass_memory_read_sector_error 
+                                                    stc 
+                                                    cmc 
+                                                    mvi a,msi_operation_ok
+                                                    jmp msi_system_call_mass_memory_read_sector_end 
+msi_system_call_mass_memory_read_sector_error:      stc 
+                                                    cmc 
+                                                    lhld msi_HL_backup_address
+                                                    xchg 
+msi_system_call_mass_memory_read_sector_end:        lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_return
+
+;msi_system_call_get_free_ram_bytes restituisce il numero di bytes disponibili nella RAM 
+;HL <- bytes disponibili 
+msi_system_call_get_free_ram_bytes:             call mms_free_low_ram_bytes
+                                                xchg 
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_get_current_program_dimension restituisce la dimensione del programma caricato attualmente in memoria 
+;HL <- bytes occupati dal programma attualmente in esecuzione
+msi_system_call_get_current_program_dimension:  call mms_get_low_memory_program_dimension
+                                                xchg 
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_create_temporary_memory_segment crea un segmento temporaneo all'interno della RAM 
+;PSW <- se si è verificato un errore nella creazione CY assume 1 
+;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce id del segmento creato 
+;HL -> dimensione del segmento da creare 
+msi_system_call_create_temporary_memory_segment:        lhld msi_HL_backup_address
+                                                        mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_temporary_segment_mask
+                                                        call mms_create_low_memory_data_segment
+                                                        cpi mms_operation_ok
+                                                        jnz msi_system_call_create_temporary_memory_segment_error 
+                                                        mvi a,msi_operation_ok
+                                                        stc
+                                                        cmc 
+                                                        jmp msi_system_call_create_temporary_memory_segment_end 
+msi_system_call_create_temporary_memory_segment_error:  stc 
+msi_system_call_create_temporary_memory_segment_end:    lhld msi_BC_backup_address
+                                                        mov c,l 
+                                                        mov b,h 
+                                                        lhld msi_DE_backup_address
+                                                        xchg 
+                                                        jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_delete_temporary_memory_segment elimina il segmento in memoria selezionato 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato ad 1 se si verifica un errore nell'esecuzione 
+msi_system_call_delete_temporary_memory_segment:        call mms_get_selected_data_segment_flags
+                                                        ani mms_low_memory_type_segment_mask
+                                                        jnz msi_system_call_delete_temporary_memory_segment_next
+                                                        mvi a,msi_current_program_permissions_error
+                                                        stc 
+                                                        jmp msi_system_call_delete_temporary_memory_segment_end 
+msi_system_call_delete_temporary_memory_segment_next:   call mms_delete_selected_low_memory_data_segment
+                                                        cpi mms_operation_ok
+                                                        jnz msi_system_call_delete_temporary_memory_segment_error
+                                                        mvi a,fsm_operation_ok
+                                                        stc 
+                                                        cmc 
+                                                        jmp msi_system_call_delete_temporary_memory_segment_end
+msi_system_call_delete_temporary_memory_segment_error:  stc 
+msi_system_call_delete_temporary_memory_segment_end:    lhld msi_BC_backup_address
+                                                        mov c,l 
+                                                        mov b,h 
+                                                        lhld msi_DE_backup_address
+                                                        xchg 
+                                                        jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_select_temporary_memory_segment seleziona il segmento di memoria desiderato 
+;A -> ID del segmento da selezionare 
+;A <- esito dell'operazione 
+;PSW <- se si è verificato un errore CY viene settato a 1 
+msi_system_call_select_temporary_memory_segment:        lhld msi_PSW_backup_address
+                                                        mov b,a 
+                                                        call mms_get_selected_segment_ID
+                                                        mov c,a 
+                                                        mov a,b 
+                                                        call mms_select_low_memory_data_segment
+                                                        cpi mms_operation_ok
+                                                        jnz msi_system_call_select_temporary_memory_segment_error 
+                                                        call mms_get_selected_data_segment_flags
+                                                        ani mms_low_memory_type_segment_mask
+                                                        jnz msi_system_call_select_temporary_memory_segment_next 
+                                                        mov a,c 
+                                                        call mms_select_low_memory_data_segment
+                                                        cpi mms_operation_ok
+                                                        jnz msi_system_call_select_temporary_memory_segment_error 
+                                                        mvi a,msi_current_program_permissions_error
+                                                        jmp msi_system_call_select_temporary_memory_segment_error
+msi_system_call_select_temporary_memory_segment_next:   mvi a,msi_operation_ok
+                                                        stc 
+                                                        cmc 
+                                                        jmp msi_system_call_select_temporary_memory_segment_end
+msi_system_call_select_temporary_memory_segment_error:  stc 
+msi_system_call_select_temporary_memory_segment_end:    lhld msi_BC_backup_address
+                                                        mov c,l 
+                                                        mov b,h 
+                                                        lhld msi_DE_backup_address
+                                                        xchg 
+                                                        jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_read_temporary_segment_dimension restituisce la dimensione del segmento di memoria selezionato 
+;HL <- dimensione del segmento (ritorna 0 se non è stato selezionato nessun segmento)
+;PSW <- CY viene settato ad 1 se si è verificato un errore 
+msi_system_call_read_temporary_segment_dimension:       call mms_get_selected_segment_ID
+                                                        ani mms_low_memory_type_segment_mask 
+                                                        jnz msi_system_call_read_temporary_segment_dimension_next 
+                                                        lxi h,0 
+                                                        stc 
+                                                        jmp msi_system_call_read_temporary_segment_dimension_end 
+msi_system_call_read_temporary_segment_dimension_next:  call mms_get_selected_data_segment_dimension
+                                                        stc 
+                                                        cmc 
+msi_system_call_read_temporary_segment_dimension_end:   xchg 
+                                                        lhld msi_BC_backup_address
+                                                        mov c,l 
+                                                        mov b,h 
+                                                        lhld msi_DE_backup_address
+                                                        xchg 
+                                                        jmp msi_system_calls_return
+
+;msi_system_call_read_temporary_segment_byte il byte dal segmento selezionato 
+;HL -> offset nel segmento 
+;A <- byte letto (se CY viene settato a 1 restituisce l'errore generato)
+;PSW <- se si è verificato un errore nella lettura CY viene settato a 1
+
+msi_system_call_read_temporary_segment_byte:        lhld msi_HL_backup_address 
+                                                    call mms_read_selected_data_segment_byte
+                                                    lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_write_temporary_segment_byte il byte dal segmento selezionato 
+;A -> byte da scrivere
+;HL -> offset nel segmento 
+;A <- se CY viene settato a 1 viene restituito l'errore generato
+;PSW <- se si è verificato un errore nella lettura CY viene settato a 1
+
+msi_system_call_write_temporary_segment_byte:       lda msi_PSW_backup_address+1
+                                                    lhld msi_HL_backup_address 
+                                                    call mms_write_selected_data_segment_byte
+                                                    jc msi_system_call_write_temporary_segment_byte_end
+                                                    mvi a,msi_operation_ok
+msi_system_call_write_temporary_segment_byte_end:   lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    jmp msi_system_calls_restore_HL_and_return
+
+;msi_system_call_select_disk seleziona il disco desiderato 
+;A -> id ASCII del disco da seleionare (compreso fra A e Z)
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+msi_system_call_select_disk:        lda msi_PSW_backup_address+1 
+                                    call fsm_select_disk 
+                                    cpi fsm_operation_ok
+                                    jnz msi_system_call_select_disk_error
+                                    stc 
+                                    cmc 
+                                    mvi a,msi_operation_ok
+                                    jmp msi_system_call_select_disk_end
+msi_system_call_select_disk_error:  stc 
+msi_system_call_select_disk_end:    lhld msi_BC_backup_address
+                                    mov c,l 
+                                    mov b,h 
+                                    lhld msi_DE_backup_address
+                                    xchg 
+                                    jmp msi_system_calls_restore_HL_and_return
+
+
+msi_system_call_format_disk:
+msi_system_call_wipe_disk:
+msi_system_call_set_disk_name:
+msi_system_call_get_disk_name:
+msi_system_call_get_disk_free_space :
+msi_system_call_search_file:
+msi_system_call_select_file:
+msi_system_call_create_file:
+msi_system_call_get_file_name:
+msi_system_call_get_file_dimension:
+msi_system_call_get_attributes: 
+msi_system_call_rename_file:
+msi_system_call_set_system_file: 
+msi_system_call_set_executable_file: 
+msi_system_call_set_read_only_file: 
+msi_system_call_delete_file: 
+msi_system_call_reset_file_scan_pointer: 
+msi_system_call_increment_file_scan_pointer: 
+msi_system_call_change_file_dimension: 
+msi_system_call_read_file_bytes: 
+msi_system_call_write_file_bytes: 
+msi_system_call_wipe_file: 
+msi_system_call_set_data_pointer: 
+msi_system_call_launch_program:
+msi_system_call_write_operative_system_bytes: 
+msi_system_call_read_operative_system_bytes: 
+msi_system_call_write_boot_sector_bytes: 
+msi_system_call_read_boot_sector_bytes: 
+msi_system_call_set_disk_bootable: 
+msi_system_call_unset_disk_bootable: 
+msi_system_call_get_operative_system_space_dimension: 
+msi_system_call_get_boot_section_space_dimension: 
+msi_system_call_read_disk_bootable_flag: 
+msi_system_call_create_message: 
+msi_system_call_delete_message: 
+msi_system_call_exit_program:
+msi_system_call_read_message_byte:
+msi_system_call_read_message_sender_name:
 
 MSI_layer_end:
 .print "Space left in MSI layer ->",MSI_dimension-MSI_layer_end+MSI 
