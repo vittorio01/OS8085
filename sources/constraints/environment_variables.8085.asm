@@ -8,6 +8,7 @@ msi_execution_code_mark                 .equ %11000000
 ;codici di esecuzione che possono essere generati dalle funzioni del bios
 bios_operation_ok                       .equ $ff 
 
+
 bios_IO_device_not_found                .equ bios_execution_code_mark+$01 
 bios_IO_device_not_selected             .equ bios_execution_code_mark+$02 
 bios_mass_memory_device_not_found       .equ bios_execution_code_mark+$03
@@ -74,7 +75,24 @@ fsm_system_section_overflow         .equ fsm_execution_code_mark+$1D
 fsm_boot_section_not_found          .equ fsm_execution_code_mark+$1E 
 fsm_system_section_not_found        .equ fsm_execution_code_mark+$1F 
 
-;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della MSI
+;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della MSI
 
-msi_operation_ok                    .equ $ff 
-msi_system_Call_not_found           .equ msi_execution_code_mark+$01
+msi_operation_ok                        .equ $ff 
+msi_system_call_not_found               .equ msi_execution_code_mark+$01
+msi_current_program_permissions_error   .equ msi_execution_code_mark+$02
+
+;variabili e flags predefinite nella mms
+mms_low_memory_valid_segment_mask           .equ %10000000
+mms_low_memory_type_segment_mask            .equ %01000000
+mms_low_memory_temporary_segment_mask       .equ %00100000
+
+;variabili e flags predefinite nella FSM 
+fsm_disk_name_max_lenght                    .equ 20
+fsm_header_name_dimension                   .equ 20
+fsm_header_extension_dimension              .equ 5 
+fsm_header_valid_bit                        .equ %10000000
+fsm_header_deleted_bit                      .equ %01000000
+fsm_header_system_bit                       .equ %00100000
+fsm_header_program_bit                      .equ %00010000
+fsm_header_hidden_bit                       .equ %00001000
+fsm_header_readonly_bit                     .equ %00000100
