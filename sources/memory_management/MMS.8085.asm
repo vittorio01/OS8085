@@ -122,7 +122,7 @@
 .include "os_constraints.8085.asm"
 .include "bios_system_calls.8085.asm"
 .include "libraries_system_calls.8085.asm"
-.include "execution_codes.8085.asm"
+.include "environment_variables.8085.asm"
 
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0020
@@ -132,10 +132,6 @@ mms_data_selected_segment_address           .equ reserved_memory_start+$0025
 mms_data_selected_segment_dimension         .equ reserved_memory_start+$0027
 
 
-;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram
-mms_low_memory_valid_segment_mask:          .equ %10000000
-mms_low_memory_type_segment_mask            .equ %01000000
-mms_low_memory_temporary_segment_mask       .equ %00100000
 mms_low_memory_bitstream_start              .equ low_memory_end - 32
 
 mms_functions:  .org MMS 
@@ -960,6 +956,7 @@ mms_get_selected_data_segment_flags_next:       lhld mms_data_selected_segment_a
 mms_get_selected_data_segment_flags_end:        pop h
                                                 ret 
 
+
 ;mms_get_selected_data_segment_dimension restituisce la dimensione del segmento selezionato 
 ;HL <- dimensione del segmento (0 se si è verificato un errore)
 
@@ -971,6 +968,10 @@ mms_get_selected_data_segment_dimension:        lda mms_data_selected_segment_id
 mms_get_selected_data_segment_dimension_end:    lxi h,0 
                                                 ret 
 
+;mms_get_selected_segment_ID restituisce l'id del segmento attualmente selezionato 
+;A <- id del segmento (0 se non è stato selezionato un segmento)
+mms_get_selected_segment_ID:        lda mms_data_selected_segment_id
+                                    ret 
 
 ;mms_segment_data_transfer copia i dati da un segmento ad un altro (il segmento sorgente è quello selezionato precedentemente). In caso di overflow di sorgente o destinazione vengono copiati solo i dati che non 
 ;escono fuori dai segmenti
