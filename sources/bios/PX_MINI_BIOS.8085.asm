@@ -26,7 +26,7 @@
 
 .include "os_constraints.8085.asm"
 .include "libraries_system_calls.8085.asm"
-.include "execution_codes.8085.asm"
+.include "environment_variables.8085.asm"
 
 ;le seguenti variabili vengono utilizzate per identificare il tipo di dispositivo. Il byte risultante è formato da:
 ;- due bytes per indicare la direzionalità 
@@ -259,15 +259,19 @@ bios_select_IO_device_error_end:    pop h
 ;Le informazioni vengono assegnate secondo flags e numeri messe in OR in un unico byte (vedi le informazioni sui dispositivi I/O)
 
 ;A -> id del dispositivo 
-;A <- flags di tipologia (se non esiste ritorna $00)
+;PSW <- se il dispositivo non è stato trovato assume 1
+;A <- se CY = 1 restituisce l'errore generato, altrimenti restituisce le informazioni sul dispositivo IO
 
 bios_get_IO_device_informations:        push b 
                                         push d 
                                         push h 
                                         call bios_search_IO_device
                                         jc bios_get_IO_device_informations_end
-                                        xra a 
-bios_get_IO_device_informations_end:    pop h 
+                                        mvi a,bios_IO_device_not_found 
+                                        stc 
+                                        cmc 
+bios_get_IO_device_informations_end:    cmc 
+                                        pop h 
                                         pop d 
                                         pop b 
                                         ret 
@@ -364,53 +368,71 @@ bios_mass_memory_select_drive:              cpi bios_mass_memory_rom_id
                                             mvi a,bios_operation_ok
                                             ret 
 
-bios_mass_memory_select_drive_not_found:    xra a 
+bios_mass_memory_select_drive_not_found:    mvi a,bios_mass_memory_device_not_found
                                             ret 
 
 ;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
 ;(viene utilizzata dalla mms per stabilire il numero di bytes da trasferire)
 
 ;A <- bytes per settore (codificato in multipli di 128 bytes) 
-;     assume 0 se non è stato selezionato un dispositivo
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 
 bios_mass_memory_get_bps:                   lda bios_mass_memory_select_mask
                                             ani %10000000
                                             jz bios_mass_memory_get_bps_not_selected
                                             mvi a,bios_mass_memory_rom_bps_coded_number
+                                            stc 
+                                            cmc 
                                             ret 
 
-bios_mass_memory_get_bps_not_selected:      xra a 
+bios_mass_memory_get_bps_not_selected:      mvi a,bios_mass_memory_device_not_selected
+                                            stc 
                                             ret 
 
 ;bios_mass_memory_get_spt restituisce il numero di settori per traccia (00 se il disco non è stato selezionato)
 ;A <- numero di settori per traccia
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 bios_mass_memory_get_spt:                   lda bios_mass_memory_select_mask
                                             ani %10000000
                                             jz bios_mass_memory_get_spt_not_selected
                                             mvi a,bios_mass_memory_rom_spt_number
+                                            stc 
+                                            cmc 
                                             ret 
-bios_mass_memory_get_spt_not_selected:      xra a 
+bios_mass_memory_get_spt_not_selected:      mvi a,bios_mass_memory_device_not_selected
+                                            stc 
                                             ret 
 
 ;bios_mass_memory_get_tph restituisce il numero di tracce per testina 
 ;HL <- numero di settori per traccia (0000 se il disco non è stato selezionato)
-
+;A <- ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 bios_mass_memory_get_tph:                   lda bios_mass_memory_select_mask
                                             ani %10000000
                                             jz bios_mass_memory_get_tph_not_selected
                                             lxi h,bios_mass_memory_rom_tracks_number
+                                            stc 
+                                            cmc 
                                             ret 
-bios_mass_memory_get_tph_not_selected:      lxi h,0 
+bios_mass_memory_get_tph_not_selected:      mvi a,bios_mass_memory_device_not_selected
+                                            stc 
                                             ret 
 
 ;bios_mass_memory_get_head_number restituisce il numero di testine del disco (00 se il disco non è stato selezionato)
 ;A <- numero di testine
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 bios_mass_memory_get_head_number:                   lda bios_mass_memory_select_mask
                                                     ani %10000000
                                                     jz bios_mass_memory_get_head_number_not_selected
                                                     mvi a,bios_mass_memory_rom_heads_number
+                                                    stc 
+                                                    cmc 
                                                     ret 
-bios_mass_memory_get_head_number_not_selected:      xra a 
+bios_mass_memory_get_head_number_not_selected:      mvi a,bios_mass_memory_device_not_selected
+                                                    stc 
                                                     ret 
 
 ;bios_mass_memory_select_sector
@@ -484,13 +506,17 @@ bios_mass_memory_head_selected:     sta bios_mass_memory_selected_head
                                     ret
 
 ;bios_mass_memory_status restituisce lo stato della memoria di massa
-; A <- esito dell'operazione ($ff se è operativo)
+;PSW <- CY viene settato a 1 se si è verificto un errore 
+; A <- se CY=1 restituisce l'errore, altrimenti restituisce lo stato del dispositivo 
 bios_mass_memory_status:                lda bios_mass_memory_selected_device    
                                         ora a 
                                         jnz bios_mass_memory_status_dselected
                                         mvi a,bios_mass_memory_device_not_selected
+                                        stc 
                                         ret 
 bios_mass_memory_status_dselected:      mvi a,bios_operation_ok
+                                        stc 
+                                        cmc 
                                         ret 
 
 ;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.

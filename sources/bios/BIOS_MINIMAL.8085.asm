@@ -26,7 +26,7 @@
 
 .include "os_constraints.8085.asm"
 .include "libraries_system_calls.8085.asm"
-.include "execution_codes.8085.asm"
+.include "environment_variables.8085.asm"
 
 ;le seguenti variabili vengono utilizzate per identificare il tipo di dispositivo. Il byte risultante è formato da:
 ;- due bytes per indicare la direzionalità 
@@ -221,15 +221,19 @@ bios_select_IO_device_error_end:    pop h
 ;Le informazioni vengono assegnate secondo flags e numeri messe in OR in un unico byte (vedi le informazioni sui dispositivi I/O)
 
 ;A -> id del dispositivo 
-;A <- flags di tipologia (se non esiste ritorna $00)
+;PSW <- se il dispositivo non è stato trovato assume 1
+;A <- se CY = 1 restituisce l'errore generato, altrimenti restituisce le informazioni sul dispositivo IO
 
 bios_get_IO_device_informations:        push b 
                                         push d 
                                         push h 
                                         call bios_search_IO_device
                                         jc bios_get_IO_device_informations_end
-                                        xra a 
-bios_get_IO_device_informations_end:    pop h 
+                                        mvi a,bios_IO_device_not_found 
+                                        stc 
+                                        cmc 
+bios_get_IO_device_informations_end:    cmc 
+                                        pop h 
                                         pop d 
                                         pop b 
                                         ret 
