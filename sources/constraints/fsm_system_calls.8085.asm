@@ -41,3 +41,6 @@ fsm_selected_disk_unset_bootable                    .equ fsm_selected_disk_set_b
 fsm_selected_disk_get_boot_section_dimension        .equ fsm_selected_disk_unset_bootable+3
 fsm_selected_disk_get_system_section_dimension      .equ fsm_selected_disk_get_boot_section_dimension+3
 fsm_selected_disk_is_bootable                       .equ fsm_selected_disk_get_system_section_dimension+3
+
+fsm_file_name_max_dimensions                        .equ fsm_selected_disk_is_bootable+3
+fsm_disk_name_max_dimension                         .equ fsm_file_name_max_dimensions+3

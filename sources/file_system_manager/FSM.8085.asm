@@ -228,6 +228,9 @@ fsm_functions:  .org FSM
                 jmp fsm_selected_disk_get_boot_section_dimension    ;restituisce la dimensione della zona dedicata alla boot section 
                 jmp fsm_selected_disk_get_system_section_dimension  ;restituisce la dimensione della zona dedicata al sistema 
                 jmp fsm_selected_disk_is_bootable                   ;indica sel il disco selezionato è avviabile o non
+                ;informazioni sul layer 
+                jmp fsm_file_name_max_dimensions                    ;ritorna le dimensioni di nome ed estenzione massimi che possono essere attribuiti ad un file
+                jmp fsm_disk_name_max_dimension                     ;ritorna la dimensione massima del nome che si può attribuire al disco 
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
@@ -280,8 +283,8 @@ fsm_select_disk_next:           sta fsm_selected_disk
                                 push h
                                 push d 
                                 call bios_mass_memory_select_drive
-                                ora a  
-                                jnz fsm_select_next2
+                                cpi bios_operation_ok  
+                                jz fsm_select_next2
                                 mvi a,%00000000
                                 sta fsm_selected_disk_loaded_page_flags
                                 mvi a,fsm_device_not_found
@@ -394,9 +397,9 @@ fsm_format_disk:                        push b
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next:                   call bios_mass_memory_format_drive   
-                                        cpi bios_operation_ok 
-                                        jnz fsm_disk_external_generated_error
+fsm_format_disk_next:                   ;call bios_mass_memory_format_drive   
+                                        ;cpi bios_operation_ok 
+                                        ;jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
                                         call bios_mass_memory_select_drive
                                         ora a 
@@ -612,6 +615,17 @@ fsm_disk_external_generated_error:      pop h
                                         pop b 
                                         ret 
 
+;fsm_file_name_max_dimensions restituisce le dimensioni massime del nome attribuibile ad un file 
+;B -> dimensione massima del nome 
+;C -> dimensione massima dell'estensione 
+fsm_file_name_max_dimensions:   mvi b,fsm_header_name_dimension
+                                mvi c,fsm_header_extension_dimension
+                                ret 
+
+;fsm_disk_name_max_dimension restituisce la dimensione massima del nome attribuibile al disco 
+;A <- dimensione massima del nome 
+fsm_disk_name_max_dimension:    mvi a,fsm_disk_name_max_lenght
+                                ret 
 
 ;fsm_disk_set_name sostituisce il nome del disco con quello fornito
 ;DE -> puntatore alla stringa del nome 
@@ -767,6 +781,7 @@ fsm_wipe_disk_disk_selected:                    push h
                                                 cpi fsm_operation_ok
                                                 jnz fsm_wipe_disk_reset_end
                                                 lxi h,0 
+                                                lxi b,0 
                                                 xchg                                    ; bc -> pagina fat 
                                                 lhld fsm_selected_disk_data_page_number ; de -> pagina corrente (valore da scrivere)
                                                 push h                                  ; HL -> puntatore al buffer
@@ -3798,11 +3813,11 @@ fsm_reselect_mms_segment:           lda fsm_page_buffer_segment_id
                                     rnz  
                                     push h 
                                     lxi h,fsm_uncoded_page_dimension
-                                    mvi a,%11000000
+                                    mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_type_segment_mask
+
                                     call mms_create_low_memory_data_segment
                                     pop h 
-                                    ora a 
-                                    rz
+                                    rc
 fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id 
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 

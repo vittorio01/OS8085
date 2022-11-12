@@ -155,6 +155,8 @@ mms_functions:  .org MMS
                 jmp mms_program_bytes_read 
                 jmp mms_mass_memory_read_sector
                 jmp mms_mass_memory_write_sector
+                jmp mms_get_selected_segment_ID  
+                jmp mms_dselect_low_memory_data_segment 
 
 ;Implementazioni delle system calls della mms
 
@@ -603,37 +605,21 @@ mms_create_low_memory_data_segment:                         push d
                                                             xchg 
                                                             shld mms_data_selected_segment_dimension
                                                             xchg 
-                                                            mvi a,mms_operation_ok
-                                                           
                                                             lda mms_data_selected_segment_id
+                                                            stc 
+                                                            cmc 
                                                             jmp mms_create_low_memory_data_segment_return
 
-mms_create_low_memory_data_segment_overflow_error:          mvi a,mms_segment_number_overflow_error_code 
-                                                           
-                                                            lxi h,0
-                                                            shld mms_data_selected_segment_dimension
-                                                            shld mms_data_selected_segment_address 
-                                                            xra a 
-                                                            sta mms_data_selected_segment_id
+mms_create_low_memory_data_segment_overflow_error:          mvi a,mms_segment_number_overflow_error_code
+                                                            stc 
                                                             jmp mms_create_low_memory_data_segment_return
 
 mms_create_low_memory_data_segment_not_enough_ram_error:    mvi a,mms_not_enough_ram_error_code
-                                                           
-                                                            lxi h,0
-                                                            shld mms_data_selected_segment_dimension
-                                                            shld mms_data_selected_segment_address 
-                                                            xra a 
-                                                            sta mms_data_selected_segment_id
+                                                            stc 
                                                             jmp mms_create_low_memory_data_segment_return
 
 mms_create_low_memory_data_segment_bad_argument:            mvi a,mms_segment_bad_argument
-                                                           
-                                                            lxi h,0
-                                                            shld mms_data_selected_segment_dimension
-                                                            shld mms_data_selected_segment_address 
-                                                            xra a 
-                                                            sta mms_data_selected_segment_id
-
+                                                            stc 
 mms_create_low_memory_data_segment_return:                  inx sp 
                                                             inx sp 
                                                             inx sp 
@@ -671,6 +657,15 @@ mms_select_low_memory_data_segment_not_found:   inx sp
                                                 mvi a,mms_segment_data_not_found_error_code
                                                
                                                 ret 
+
+;mms_dselect_low_memory_data_segment deseleziona il segmento corrente (se è stato selezionato)
+;A <- $00
+mms_dselect_low_memory_data_segment:    xra a 
+                                        sta mms_data_selected_segment_dimension
+                                        sta mms_data_selected_segment_dimension+1 
+                                        sta mms_data_selected_segment_id
+                                        sta mms_data_selected_segment_address
+                                        sta mms_data_selected_segment_address+1 
 
 ;la funzione mms_delete_selected_low_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
 ;verso la parte alta della RAM in modo da rimuovere frammenti di spazio vuoto
@@ -947,6 +942,7 @@ mms_get_selected_data_segment_flags:            push h
                                                 stc 
                                                 jmp mms_get_selected_data_segment_flags_end
 mms_get_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
+                                                dcx h 
                                                 dcx h 
                                                 dcx h 
                                                 dcx h 
@@ -1255,8 +1251,7 @@ mms_mass_memory_read_sector:        push d
                                     pop h
                                     jmp mms_mass_memory_read_sector_end 
 mms_mass_memory_read_sector_next:   call bios_mass_memory_get_bps
-                                    ora a 
-                                    jnz mms_mass_memory_read_sector_next2
+                                    jnc mms_mass_memory_read_sector_next2
                                     mvi a,mms_mass_memory_not_selected 
                                     pop h
                                     jmp mms_mass_memory_read_sector_end 
@@ -1287,6 +1282,7 @@ mms_mass_memory_read_sector_loop:   mov a,e
 mms_mass_memory_read_sector_next3:  lhld mms_data_selected_segment_address
                                     dad b 
                                     call bios_mass_memory_read_sector
+                                
                                     cpi bios_operation_ok
                                     jnz mms_mass_memory_read_sector_end
                                     xchg 
@@ -1320,8 +1316,7 @@ mms_mass_memory_write_sector:       push d
                                     pop h
                                     jmp mms_mass_memory_write_sector_end 
 mms_mass_memory_write_sector_next:  call bios_mass_memory_get_bps
-                                    ora a 
-                                    jnz mms_mass_memory_write_sector_next2
+                                    jnc mms_mass_memory_write_sector_next2
                                     mvi a,mms_mass_memory_not_selected 
                                     pop h
                                     jmp mms_mass_memory_write_sector_end 
@@ -1351,7 +1346,7 @@ mms_mass_memory_write_sector_loop:  mov a,e
                                     jmp mms_mass_memory_write_sector_end 
 mms_mass_memory_write_sector_next3: lhld mms_data_selected_segment_address
                                     dad b 
-                                    call bios_mass_memory_write_sector
+                                    call bios_mass_memory_write_sector 
                                     cpi bios_operation_ok
                                     jnz mms_mass_memory_write_sector_end
                                     xchg 
