@@ -71,16 +71,17 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_select_sector 
                 jmp bios_mass_memory_select_track 
                 jmp bios_mass_memory_select_head 
+                jmp bios_mass_memory_status
                 jmp bios_mass_memory_get_bps
                 jmp bios_mass_memory_get_spt
                 jmp bios_mass_memory_get_tph 
                 jmp bios_mass_memory_get_head_number 
-                jmp bios_mass_memory_status 
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
                 jmp bios_memory_transfer
                 jmp bios_memory_transfer_reverse 
+ 
 
 ;per avere una velocità computazionale migliore nel scegliere i dispositivi viene utilizzata una tabella dati in cui ogni record contiene:
 ;-  un byte che contiene l'identificativo 
@@ -312,28 +313,32 @@ bios_mass_memory_select_drive:  ;da implementare
 ;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
 
 ;A <- bytes per settore (codificato in multipli di 128 bytes) 
-;     assume 0 se non è stato selezionato un dispositivo
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 
 bios_mass_memory_get_bps:           ;da implementare
                                     ret 
 
-;bios_mass_memory_get_spt restituisce il numero di settori per traccia
-;A <- bytes settori per traccia
-;     assume 0 se non è stato selezionato un dispositivo
+;bios_mass_memory_get_spt restituisce il numero di settori per traccia (00 se il disco non è stato selezionato)
+;A <- numero di settori per traccia
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 
 bios_mass_memory_get_spt:           ;da implementare 
                                     ret 
 
-;bios_mass_memory_get_tph restituisce il numero di tracce per testina
-;HL <- traccia per testina
-;     assume 0 se non è stato selezionato un dispositivo
+;bios_mass_memory_get_tph restituisce il numero di tracce per testina 
+;HL <- numero di settori per traccia (0000 se il disco non è stato selezionato)
+;A <- ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 bios_mass_memory_get_tph:           ;da implementare
                                     ret 
 
 
-;bios_mass_memory_get_head_number restituisce il numero di destine del dispositivo
+;bios_mass_memory_get_head_number restituisce il numero di testine del disco (00 se il disco non è stato selezionato)
 ;A <- numero di testine
-;     assume 0 se non è stato selezionato un dispositivo
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
 bios_mass_memory_get_head_number:   ;da implementare
                                     ret 
 
@@ -355,8 +360,9 @@ bios_mass_memory_select_track:  ;da implementare
 bios_mass_memory_select_head:   ;da implementare
                                 ret 
 
-;bios_mass_memory_status verifica lo stato del dispositivo selezionato 
-; A <- stato del dispositivo ($ff se è operativo)
+;bios_mass_memory_status restituisce lo stato della memoria di massa
+;PSW <- CY viene settato a 1 se si è verificto un errore 
+; A <- se CY=1 restituisce l'errore, altrimenti restituisce lo stato del dispositivo 
 bios_mass_memory_status:    ;da implementare
                             ret 
 

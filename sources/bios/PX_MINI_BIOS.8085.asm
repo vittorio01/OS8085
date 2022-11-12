@@ -94,11 +94,11 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_select_sector 
                 jmp bios_mass_memory_select_track 
                 jmp bios_mass_memory_select_head 
+                jmp bios_mass_memory_status
                 jmp bios_mass_memory_get_bps
                 jmp bios_mass_memory_get_spt
                 jmp bios_mass_memory_get_tph 
                 jmp bios_mass_memory_get_head_number 
-                jmp bios_mass_memory_status 
                 jmp bios_mass_memory_write_sector 
                 jmp bios_mass_memory_read_sector  
                 jmp bios_mass_memory_format_drive 
@@ -372,7 +372,6 @@ bios_mass_memory_select_drive_not_found:    mvi a,bios_mass_memory_device_not_fo
                                             ret 
 
 ;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
-;(viene utilizzata dalla mms per stabilire il numero di bytes da trasferire)
 
 ;A <- bytes per settore (codificato in multipli di 128 bytes) 
 ;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
@@ -681,7 +680,7 @@ bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok
 ;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
 
 BIOS_layer_end:     
-.print "Space left in MMS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
+.print "Space left in BIOS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
 .memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
 .print "BIOS load address ->",BIOS
 .print "All functions built successfully"
