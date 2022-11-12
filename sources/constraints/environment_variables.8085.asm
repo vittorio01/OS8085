@@ -80,7 +80,11 @@ fsm_system_section_not_found        .equ fsm_execution_code_mark+$1F
 msi_operation_ok                        .equ $ff 
 msi_system_call_not_found               .equ msi_execution_code_mark+$01
 msi_current_program_permissions_error   .equ msi_execution_code_mark+$02
-
+msi_string_too_long                     .equ msi_execution_code_mark+$03 
+msi_invalid_character_in_string         .equ msi_execution_code_mark+$04
+msi_string_empty                        .equ msi_execution_code_mark+$05 
+msi_name_too_long                       .equ msi_execution_code_mark+$06 
+msi_extension_too_long                  .equ msi_execution_code_mark+$07
 ;variabili e flags predefinite nella mms
 mms_low_memory_valid_segment_mask           .equ %10000000
 mms_low_memory_type_segment_mask            .equ %01000000
