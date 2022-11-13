@@ -2,11 +2,11 @@
 ;è possibile modificare alcune informazioni per adattare il sistema ad un computer specifico
 
 ;queste informazioni riguardano la gestione dello spazio nelle varie componenti del sistema (da non modificare se non in fase di sviluppo del sistema)
-MSI_dimension           .equ    2048
+MSI_dimension           .equ    4096
 FSM_dimension           .equ    8192
 MMS_dimension           .equ    2048
-BIOS_dimension          .equ    2048 
-LIBRARIES_dimension     .equ    2048
+BIOS_dimension          .equ    2048+512 
+LIBRARIES_dimension     .equ    2048+512
 SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
 ;queste informazioni riguardano la divisione degli spazi all'interno della ram
