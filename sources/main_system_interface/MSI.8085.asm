@@ -145,6 +145,8 @@ MSI_functions:                  .org MSI
 
 msi_shell_name          .text "sheel"
                         .b 0 
+msi_shell_name2:        .text "file_molto_figo.prg"
+                        .b 0 
 
 
 
@@ -188,13 +190,18 @@ msi_system_calls_id_table:      .word msi_system_call_select_IO_device
                                 .word msi_system_call_set_system_file 
                                 .word msi_system_call_set_executable_file 
                                 .word msi_system_call_set_read_only_file 
+                                .word msi_system_call_set_hidden_file
+                                .word msi_system_call_unset_system_file 
+                                .word msi_system_call_unset_executable_file 
+                                .word msi_system_call_unset_read_only_file 
+                                .word msi_system_call_unset_hidden_file
+
                                 .word msi_system_call_delete_file 
                                 .word msi_system_call_reset_file_scan_pointer 
                                 .word msi_system_call_increment_file_scan_pointer 
                                 .word msi_system_call_change_file_dimension 
                                 .word msi_system_call_read_file_bytes 
                                 .word msi_system_call_write_file_bytes 
-                                .word msi_system_call_wipe_file 
                                 .word msi_system_call_set_data_pointer 
                                 .word msi_system_call_launch_program
                                 .word msi_system_call_write_operative_system_bytes 
@@ -236,10 +243,32 @@ msi_cold_start:                 lxi sp,stack_memory_start
                                 rst 1 
                                 mvi c,27
                                 rst 1
-                                lxi sp,$100
-                                lxi h,$AAAA
-                                push h 
-                                mvi c,24 
+                                lxi d,msi_shell_name2
+                                mvi c,28 
+                                rst 1
+                                mvi c,42 
+                                rst 1 
+                                mvi c,43 
+                                rst 1 
+                                lxi d,0 
+                                lxi h,4096
+                                mvi c,44
+                                rst 1 
+                                lxi d,0 
+                                lxi h,0 
+                                mvi c,47 
+                                rst 1 
+                                lxi h,1024
+                                call mms_create_low_memory_data_segment
+                                lxi h,0 
+loop:                           mov a,l 
+                                inx h 
+                                call mms_write_selected_data_segment_byte
+                                jnc loop 
+                                lxi d,1024 
+                                lxi h,0 
+                                mvi a,2
+                                mvi c,46
                                 rst 1 
                                 hlt 
                                 
@@ -918,7 +947,6 @@ msi_system_call_format_disk_end:    call msi_selected_segment_restore
 msi_system_call_wipe_disk:          call msi_selected_segment_backup
                                     lda msi_PSW_backup_address+1 
                                     call fsm_wipe_disk
-                                    hlt 
                                     cpi fsm_operation_ok
                                     jnz msi_system_call_wipe_disk_error
                                     stc 
@@ -1290,20 +1318,633 @@ msi_system_call_get_file_name_end:          call msi_selected_segment_restore
                                             lhld msi_HL_backup_address  
                                             jmp msi_system_calls_return
 
-msi_system_call_get_file_dimension:
-msi_system_call_get_attributes: 
-msi_system_call_rename_file:
-msi_system_call_set_system_file: 
-msi_system_call_set_executable_file: 
-msi_system_call_set_read_only_file: 
-msi_system_call_delete_file: 
-msi_system_call_reset_file_scan_pointer: 
-msi_system_call_increment_file_scan_pointer: 
-msi_system_call_change_file_dimension: 
-msi_system_call_read_file_bytes: 
-msi_system_call_write_file_bytes: 
-msi_system_call_wipe_file: 
-msi_system_call_set_data_pointer: 
+;msi_system_call_get_file_dimension restituisce la dimensione in bytes del file selezionato 
+;A <- esito dell'operazione 
+;BCDE <- numero di bytes occupati 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+msi_system_call_get_file_dimension:         call msi_selected_segment_backup
+                                            call fsm_get_selected_file_header_dimension
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_get_file_dimension_error
+                                            stc 
+                                            cmc 
+                                            mvi a,msi_operation_ok
+                                            call msi_selected_segment_restore
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+msi_system_call_get_file_dimension_error:   stc 
+                                            call msi_selected_segment_restore
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_get_attributes restituisce gli attributi del files codificati in un byte 
+;A <- flags (se CY=1 restituisce l'errore):
+;       bit 8 -> file di sistema
+;       bit 7 -> file eseguibile 
+;       bit 6 -> file nascosto
+;       bit 5 -> file di sola lettura 
+      
+;PSW <- CY viene settato 1 in caso di errore 
+
+msi_system_call_get_attributes:             call msi_selected_segment_backup
+                                            call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_get_attributes_end
+                                            add a 
+                                            add a 
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_get_attributes_end
+msi_system_call_get_attributes_end:         call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_rename_file reimposta il nome al file selezionato 
+;DE -> puntatore al nome completo del file. Il nome completo è una stringa di caratteri ASCII terminata dal carattere $00 in cui nome ed estensione sono separati da un punto . (l'estensione è facoltativa)
+;A <- esito dell'operazione 
+;PSW <- se si verifica un errore CY viene settato a 1 
+msi_system_call_rename_file:                call msi_selected_segment_backup
+                                            lhld msi_DE_backup_address
+                                            call msi_string_file_copy_and_load
+                                            cpi msi_operation_ok
+                                            jnz msi_system_call_rename_file_error
+                                            call fsm_set_selected_file_header_name_and_extension
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_rename_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_rename_file_end
+msi_system_call_rename_file_error:          stc  
+msi_system_call_rename_file_end:            call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_set_system_file imposta il file selezionato come di sistema 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_set_system_file:            call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_set_system_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_set_system_file_end
+msi_system_call_set_system_file_next:       call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_set_system_file_end
+                                            
+                                            ori fsm_header_system_bit
+                                            call fsm_set_selected_file_header_flags
+                                            
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_set_system_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_set_system_file_end
+msi_system_call_set_system_file_error:      stc 
+msi_system_call_set_system_file_end:        call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+
+;msi_system_call_unset_system_file imposta il file selezionato come non di sistema 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_unset_system_file:          call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_unset_system_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_unset_system_file_end
+msi_system_call_unset_system_file_next:     call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_unset_system_file_end
+                                            ani $ff-fsm_header_system_bit
+                                            call fsm_set_selected_file_header_flags
+                                           
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_unset_system_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_unset_system_file_end
+msi_system_call_unset_system_file_error:    stc 
+msi_system_call_unset_system_file_end:      call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_set_read_only_file imposta il file selezionato come di sola lettura
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_set_read_only_file:         call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_read_only_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_read_only_file_end
+msi_system_call_read_only_file_next:        call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_read_only_file_end
+                                            ori fsm_header_readonly_bit
+                                            call fsm_set_selected_file_header_flags
+                                            
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_read_only_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_read_only_file_end
+msi_system_call_read_only_file_error:       stc 
+msi_system_call_read_only_file_end:         call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+
+;msi_system_call_unread_only_file imposta il file selezionato come accessibile in scrittura
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_unset_read_only_file:       call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_unset_read_only_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_unset_read_only_file_end
+msi_system_call_unset_read_only_file_next:  call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_unset_read_only_file_end
+                                            ani $ff-fsm_header_readonly_bit
+                                            call fsm_set_selected_file_header_flags
+                                            
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_unset_read_only_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_unset_read_only_file_end
+msi_system_call_unset_read_only_file_error: stc 
+msi_system_call_unset_read_only_file_end:   call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+
+;msi_system_call_set_executable_file imposta il file selezionato come eseguibile
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_set_executable_file:        call msi_selected_segment_backup
+                                            call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_set_executable_file_end
+                                            ori fsm_header_program_bit
+                                            call fsm_set_selected_file_header_flags
+                                            
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_set_executable_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_set_executable_file_end
+msi_system_call_set_executable_file_error:  stc 
+msi_system_call_set_executable_file_end:    call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+
+;msi_system_call_unset_executable_file imposta il file selezionato come non eseguibile
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_unset_executable_file:          call msi_selected_segment_backup
+                                                call fsm_get_selected_file_header_flags
+                                                jc msi_system_call_unset_executable_file_end
+                                                ani $ff-fsm_header_program_bit
+                                                call fsm_set_selected_file_header_flags
+                                               
+                                                cpi fsm_operation_ok
+                                                jnz msi_system_call_unset_executable_file_error
+                                                mvi a,msi_operation_ok
+                                                stc 
+                                                cmc 
+                                                jmp msi_system_call_unset_executable_file_end
+msi_system_call_unset_executable_file_error:    stc 
+msi_system_call_unset_executable_file_end:      call msi_selected_segment_restore
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                lhld msi_HL_backup_address  
+                                                jmp msi_system_calls_return
+
+
+;msi_system_call_set_hidden_file imposta il file selezionato come nascosto
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_set_hidden_file:            call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_set_hidden_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_set_hidden_file_end
+msi_system_call_set_hidden_file_next:       call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_set_hidden_file_end
+                                            
+                                            ori fsm_header_hidden_bit
+                                            call fsm_set_selected_file_header_flags
+                                         
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_set_hidden_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_set_hidden_file_end
+msi_system_call_set_hidden_file_error:      stc 
+msi_system_call_set_hidden_file_end:        call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+
+;msi_system_call_unset_hidden_file imposta il file selezionato come visibile
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_unset_hidden_file:          call msi_selected_segment_backup
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_unset_hidden_file_next
+                                            mvi a,msi_current_program_permissions_error 
+                                            stc 
+                                            jmp msi_system_call_unset_hidden_file_end
+msi_system_call_unset_hidden_file_next:     call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_unset_hidden_file_end
+                                            ani $ff-fsm_header_hidden_bit
+                                            call fsm_set_selected_file_header_flags
+                                         
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_unset_hidden_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_unset_hidden_file_end
+msi_system_call_unset_hidden_file_error:    stc 
+msi_system_call_unset_hidden_file_end:      call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_delete_file elimina il file attualmente selezionato 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 in caso di errore 
+msi_system_call_delete_file:                call msi_selected_segment_backup
+                                            call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_delete_file_end
+                                            ani fsm_header_system_bit
+                                            jz msi_system_call_delete_file_next 
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_delete_file_next
+                                            mvi a,msi_current_program_permissions_error
+                                            stc 
+                                            jmp msi_system_call_delete_file_end
+msi_system_call_delete_file_next:           call fsm_delete_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_delete_file_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_delete_file_end
+msi_system_call_delete_file_error:          stc 
+msi_system_call_delete_file_end:            call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_reset_file_scan_pointer reimposta il flne scan spointer alla posizione iniziale 
+
+msi_system_call_reset_file_scan_pointer:    call msi_selected_segment_backup
+                                            call fsm_reset_file_header_scan_pointer
+                                            call msi_selected_segment_restore
+                                            lhld msi_PSW_backup_address
+                                            push h 
+                                            pop psw 
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
+;msi_system_call_increment_file_scan_pointer incrementa il file scan pointer 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore 
+msi_system_call_increment_file_scan_pointer:        call msi_selected_segment_backup
+                                                    call fsm_increment_file_header_scan_pointer
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_system_call_increment_file_scan_pointer_error
+                                                    mvi a,msi_operation_ok
+                                                    stc 
+                                                    cmc 
+                                                    jmp msi_system_call_increment_file_scan_pointer_end
+msi_system_call_increment_file_scan_pointer_error:  stc 
+msi_system_call_increment_file_scan_pointer_end:    call msi_selected_segment_restore
+                                                    lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    lhld msi_HL_backup_address  
+                                                    jmp msi_system_calls_return
+
+;msi_system_call_change_file_dimension modifica la dimensione del file selezionato (può aggiungere bytes o troncare il file alla fine)
+;DEHL -> nuova dimensione del file 
+;A <- esito dell'operazione 
+;psw <- CY viene settato a 1 se si è verificato un errore 
+
+msi_system_call_change_file_dimension:              call msi_selected_segment_backup
+                                                    call fsm_get_selected_file_header_flags
+                                                    jc msi_system_call_change_file_dimension_end
+                                                    ani fsm_header_system_bit
+                                                    jz msi_system_call_change_file_dimension_next 
+                                                    lda msi_current_program_flags
+                                                    ani msi_current_program_permissions
+                                                    jnz msi_system_call_change_file_dimension_next
+                                                    mvi a,msi_current_program_permissions_error
+                                                    stc 
+                                                    jmp msi_system_call_change_file_dimension_end
+msi_system_call_change_file_dimension_next:         lhld msi_DE_backup_address
+                                                    xchg 
+                                                    lhld msi_HL_backup_address
+                                                    mov a,l 
+                                                    ora h 
+                                                    ora e 
+                                                    ora d 
+                                                    jnz msi_system_call_change_file_dimension_modify
+                                                    call fsm_selected_file_wipe
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_system_call_change_file_dimension_error
+                                                    mvi a,msi_operation_ok
+                                                    stc 
+                                                    cmc 
+                                                    jmp msi_system_call_change_file_dimension_end
+msi_system_call_change_file_dimension_modify:       call fsm_get_selected_file_header_dimension
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_system_call_change_file_dimension_error
+                                                    lhld msi_HL_backup_address
+                                                    mov a,e 
+                                                    sub l 
+                                                    mov e,a 
+                                                    mov a,d 
+                                                    sbb h 
+                                                    mov d,a 
+                                                    lhld msi_DE_backup_address
+                                                    mov a,c 
+                                                    sbb l 
+                                                    mov c,a 
+                                                    mov a,b 
+                                                    sbb h 
+                                                    mov b,a 
+                                                    jc msi_system_call_change_file_dimension_grow 
+                                                    mov a,e 
+                                                    ora d 
+                                                    ora c 
+                                                    ora b 
+                                                    jnz msi_system_call_change_file_dimension_decrease
+                                                    mvi a,msi_operation_ok
+                                                    stc 
+                                                    cmc 
+                                                    jmp msi_system_call_change_file_dimension_end
+msi_system_call_change_file_dimension_decrease:     call fsm_selected_file_remove_data_bytes
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_system_call_change_file_dimension_error
+                                                    mvi a,msi_operation_ok
+                                                    stc 
+                                                    cmc 
+                                                    jmp msi_system_call_change_file_dimension_end
+msi_system_call_change_file_dimension_grow:         mov a,e 
+                                                    xri $ff 
+                                                    mov e,a 
+                                                    mov a,d 
+                                                    xri $ff 
+                                                    mov d,a 
+                                                    mov a,b 
+                                                    xri $ff 
+                                                    mov b,a 
+                                                    mov a,c 
+                                                    xri $ff 
+                                                    mov c,a 
+                                                    mvi a,1 
+                                                    add e 
+                                                    mov e,a 
+                                                    mov a,d 
+                                                    aci 0 
+                                                    mov d,a 
+                                                    mov a,c 
+                                                    aci 0 
+                                                    mov c,a  
+                                                    mov a,b 
+                                                    aci 0 
+                                                    mov b,a 
+                                                    
+                                                    call fsm_selected_file_append_data_bytes
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_system_call_change_file_dimension_error
+                                                    mvi a,msi_operation_ok
+                                                    stc 
+                                                    cmc 
+                                                    jmp msi_system_call_change_file_dimension_end
+msi_system_call_change_file_dimension_error:        stc 
+msi_system_call_change_file_dimension_end:          call msi_selected_segment_restore
+                                                    lhld msi_BC_backup_address
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    lhld msi_DE_backup_address
+                                                    xchg 
+                                                    lhld msi_HL_backup_address  
+                                                    jmp msi_system_calls_return
+
+;msi_system_call_read_file_bytes legge i bytes dal file selezionato e li salva nel segmento di memoria specificato
+;A -> ID segmento destinazione 
+;DE -> numero di bytes da leggere 
+;HL -> offset nel segmento destinazione 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore
+
+msi_system_call_read_file_bytes:                call msi_selected_segment_backup
+                                                call fsm_get_selected_file_header_flags
+                                                jc msi_system_call_read_file_bytes_end
+                                                ani fsm_header_system_bit
+                                                jz msi_system_call_read_file_bytes_next 
+                                                lda msi_current_program_flags
+                                                ani msi_current_program_permissions
+                                                jnz msi_system_call_read_file_bytes_next
+msi_system_call_read_file_bytes_permerr:        mvi a,msi_current_program_permissions_error
+                                                stc 
+                                                jmp msi_system_call_read_file_bytes_end
+msi_system_call_read_file_bytes_next:           lda msi_PSW_backup_address+1
+                                                call mms_select_low_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_system_call_read_file_bytes_error
+                                                ani mms_low_memory_type_segment_mask 
+                                                jz msi_system_call_read_file_bytes_permerr
+                                                lda msi_PSW_backup_address+1 
+                                                lhld msi_DE_backup_address
+                                                mov c,l  
+                                                mov b,h 
+                                                lhld msi_HL_backup_address
+                                                call fsm_selected_file_read_bytes
+                                                cpi fsm_operation_ok
+                                                jnz msi_system_call_read_file_bytes_error
+                                                mvi a,msi_operation_ok
+                                                stc 
+                                                cmc 
+                                                jmp msi_system_call_read_file_bytes_end
+msi_system_call_read_file_bytes_error:          stc 
+msi_system_call_read_file_bytes_end:            call msi_selected_segment_restore
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                lhld msi_HL_backup_address  
+                                                jmp msi_system_calls_return
+
+;msi_system_call_write_file_bytes scrive i bytes del segmento di memoria specificato nel file selezionato 
+;A -> ID segmento sorgente 
+;DE -> numero di bytes da leggere 
+;HL -> offset nel segmento sorgente
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 se si è verificato un errore
+
+msi_system_call_write_file_bytes:               call msi_selected_segment_backup
+                                                call fsm_get_selected_file_header_flags
+                                                jc msi_system_call_write_file_bytes_end
+                                                ani fsm_header_system_bit
+                                                jz msi_system_call_write_file_bytes_next 
+                                                lda msi_current_program_flags
+                                                ani msi_current_program_permissions
+                                                jnz msi_system_call_write_file_bytes_next
+msi_system_call_write_file_bytes_permerr:       mvi a,msi_current_program_permissions_error
+                                                stc 
+                                                jmp msi_system_call_write_file_bytes_end
+msi_system_call_write_file_bytes_next:          lda msi_PSW_backup_address+1
+                                                call mms_select_low_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_system_call_write_file_bytes_error
+                                                ani mms_low_memory_type_segment_mask 
+                                                jz msi_system_call_write_file_bytes_permerr
+                                                lda msi_PSW_backup_address+1 
+                                                lhld msi_DE_backup_address
+                                                mov c,l  
+                                                mov b,h 
+                                                lhld msi_HL_backup_address
+                                                call fsm_selected_file_write_bytes
+                                                cpi fsm_operation_ok
+                                                jnz msi_system_call_write_file_bytes_error
+                                                mvi a,msi_operation_ok
+                                                stc 
+                                                cmc 
+                                                jmp msi_system_call_write_file_bytes_end
+msi_system_call_write_file_bytes_error:         stc 
+msi_system_call_write_file_bytes_end:           call msi_selected_segment_restore
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                lhld msi_HL_backup_address  
+                                                jmp msi_system_calls_return
+
+;msi_system_call_set_data_pointer imposta il data pointer nel file selezionato 
+;DEHL -> offset nel file 
+;A <- esito dell'operazione 
+;PSW <- CY viene settato a 1 in caso di errore 
+msi_system_call_set_data_pointer:           call msi_selected_segment_backup
+                                            call fsm_get_selected_file_header_flags
+                                            jc msi_system_call_set_data_pointer_end
+                                            ani fsm_header_system_bit
+                                            jz msi_system_call_set_data_pointer_next 
+                                            lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_set_data_pointer_next
+                                            mvi a,msi_current_program_permissions_error
+                                            stc 
+                                            jmp msi_system_call_set_data_pointer_end
+msi_system_call_set_data_pointer_next:      lhld msi_DE_backup_address  
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_HL_backup_address
+                                            xchg 
+                                            call fsm_selected_file_set_data_pointer
+                                            cpi fsm_operation_ok
+                                            jnz msi_system_call_set_data_pointer_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_set_data_pointer_end
+msi_system_call_set_data_pointer_error:     stc 
+msi_system_call_set_data_pointer_end:       call msi_selected_segment_restore
+                                            lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return
+
 msi_system_call_launch_program:
 msi_system_call_write_operative_system_bytes: 
 msi_system_call_read_operative_system_bytes: 
