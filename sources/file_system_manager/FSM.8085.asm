@@ -2382,7 +2382,7 @@ fsm_selected_file_wipe_next2:   mov a,c
                                 call fsm_load_selected_file_header
                                 cpi fsm_operation_ok
                                 jnz fsm_selected_file_wipe_end
-                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+6 
                                 dad d 
                                 mvi a,$ff
                                 call fsm_write_selected_data_segment_byte
@@ -2843,7 +2843,9 @@ fsm_set_selected_file_header_flags:         push h
 fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
                                             cpi fsm_operation_ok
                                             jnz fsm_set_selected_file_header_flags_end
-                                            pop psw 
+                                            xthl 
+                                            mov a,h 
+                                            xthl  
                                             call fsm_write_selected_data_segment_byte
                                             jc fsm_set_selected_file_header_flags_end
                                             call fsm_writeback_page
@@ -2898,6 +2900,7 @@ fsm_get_selected_file_header_dimension:     push h
                                             call fsm_read_selected_data_segment_byte
                                             jc fsm_get_selected_file_header_dimension_end
                                             mov b,a 
+                                            mvi a,fsm_operation_ok
 fsm_get_selected_file_header_dimension_end: pop h 
                                             ret 
 
