@@ -61,8 +61,7 @@
 
 ;Nel caso in cui si richiama l'interrupt rst0, tutti i layers devono essere inizializzati nuovamente (il BIOS deve eseguire questa volta un warm boot)
 
-;all'avvio, o a un reset, l'MSI lancia un'applicazione di sistema di default (una sheel) direttamente salvata nella memoria di massa (nome ed estenzioni definiti a priori nella programmazione del layer).
-;La sheel, dato che è la prima applicazione ad essere avviata, permetterà all'utente di accedere ad un'interfaccia basilare a linea di comando (vedi la programmazione dell'applicazione)
+;una volta avviato, il sistema lancia automaticamente la sheel integrata nella MSI, che permetterà all'utente di accedere ad un'interfaccia basilare a linea di comando
 
 ;----- sistema a passaggio di messaggi -----
 ;Ogni appicazione al suo avvio ha i registri azzerati e lo stack pointer preimostato alla fine del program space (vedi mms). 
@@ -83,7 +82,6 @@
 ;-  corpo del messaggio -
 ;------------------------
 
-;La sheel, ad esempio, utilizza un messaggio per comunicare all'applicazione da avviare gli i suoi argomenti opzionali.
 ;Un'applicazione può creare solamente un messaggio e lo può inviare tramite le system calls quando richiede l'avvio di un applicazione.
 
 ;----- permessi dell'applicazione -----
@@ -137,18 +135,12 @@ msi_ID_segment_backup_address       .equ reserved_memory_start+$005C
 msi_current_program_flags           .equ reserved_memory_start+$005D
 msi_segment_ID_backup               .equ reserved_memory_start+$005E
 
+
 msi_current_program_loaded          .equ %10000000
 msi_current_program_permissions     .equ %01000000
 
 MSI_functions:                  .org MSI
                                 jmp msi_cold_start 
-
-msi_shell_name          .text "sheel"
-                        .b 0 
-msi_shell_name2:        .text "file_molto_figo.prg"
-                        .b 0 
-
-
 
 ;per rendere più efficace la ricerca della system call desiderata viene utilizzata una tabella in cui ogni record da 2 bytes identifica l'indirizzo dell'handler dedcato (la posizione identifica l'handler)
 
@@ -166,23 +158,27 @@ msi_system_calls_id_table:      .word msi_system_call_select_IO_device
                                 .word msi_system_call_mass_memory_read_sector 
 
                                 .word msi_system_call_get_free_ram_bytes  
-                                .word msi_system_call_get_current_program_dimension 
                                 .word msi_system_call_create_temporary_memory_segment
                                 .word msi_system_call_delete_temporary_memory_segment 
                                 .word msi_system_call_select_temporary_memory_segment 
                                 .word msi_system_call_read_temporary_segment_byte 
                                 .word msi_system_call_write_temporary_segment_byte 
                                 .word msi_system_call_read_temporary_segment_dimension 
+                                .word msi_system_call_get_current_program_dimension 
 
                                 .word msi_system_call_select_disk 
-                                .word msi_system_call_format_disk 
+                                .word msi_system_call_get_disk_format_type 
                                 .word msi_system_call_wipe_disk 
                                 .word msi_system_call_set_disk_name 
                                 .word msi_system_call_get_disk_name 
                                 .word msi_system_call_get_disk_free_space 
+
+                                .word msi_system_call_reset_file_scan_pointer 
+                                .word msi_system_call_increment_file_scan_pointer 
                                 .word msi_system_call_search_file 
                                 .word msi_system_call_select_file 
                                 .word msi_system_call_create_file 
+                                .word msi_system_call_delete_file 
                                 .word msi_system_call_get_file_name 
                                 .word msi_system_call_get_file_dimension 
                                 .word msi_system_call_get_attributes 
@@ -195,32 +191,17 @@ msi_system_calls_id_table:      .word msi_system_call_select_IO_device
                                 .word msi_system_call_unset_executable_file 
                                 .word msi_system_call_unset_read_only_file 
                                 .word msi_system_call_unset_hidden_file
-
-                                .word msi_system_call_delete_file 
-                                .word msi_system_call_reset_file_scan_pointer 
-                                .word msi_system_call_increment_file_scan_pointer 
+                                
                                 .word msi_system_call_change_file_dimension 
+                                .word msi_system_call_set_data_pointer 
                                 .word msi_system_call_read_file_bytes 
                                 .word msi_system_call_write_file_bytes 
-                                .word msi_system_call_set_data_pointer 
+                                
                                 .word msi_system_call_launch_program
-                                .word msi_system_call_write_operative_system_bytes 
-                                .word msi_system_call_read_operative_system_bytes 
-                                .word msi_system_call_write_boot_sector_bytes 
-                                .word msi_system_call_read_boot_sector_bytes 
-                                .word msi_system_call_set_disk_bootable 
-                                .word msi_system_call_unset_disk_bootable 
-                                .word msi_system_call_get_operative_system_space_dimension 
-                                .word msi_system_call_get_boot_section_space_dimension 
-                                .word msi_system_call_read_disk_bootable_flag 
-                                .word msi_system_call_create_message 
-                                .word msi_system_call_exit_program
-                                .word msi_system_call_delete_message 
-                                .word msi_system_call_read_message_byte 
-                                .word msi_system_call_read_message_sender_name 
-                                .word msi_system_call_write_message_byte 
-                                .word msi_system_call_change_message_sender_name
                                 .word msi_system_call_launch_program_with_message 
+                                .word msi_system_call_exit_program
+                            
+
 msi_system_calls_id_table_end:  
 
 msi_cold_start:                 lxi sp,stack_memory_start
@@ -228,51 +209,10 @@ msi_cold_start:                 lxi sp,stack_memory_start
                                 call mms_low_memory_initialize
                                 call fsm_init
                                 call msi_interrupt_reset      
-                                ;da definire 
-                                mvi a,$ff 
+                                mvi a,0 
                                 sta msi_current_program_flags
-                                mvi a,$41
-                                mvi c,20 
-                                rst 1 
-                                mvi c,21
-                                lxi h,0 
-                                rst 1 
-
-                                lxi d,msi_shell_name
-                                mvi c,28 
-                                rst 1 
-                                mvi c,27
-                                rst 1
-                                lxi d,msi_shell_name2
-                                mvi c,28 
-                                rst 1
-                                mvi c,42 
-                                rst 1 
-                                mvi c,43 
-                                rst 1 
-                                lxi d,0 
-                                lxi h,4096
-                                mvi c,44
-                                rst 1 
-                                lxi d,0 
-                                lxi h,0 
-                                mvi c,47 
-                                rst 1 
-                                lxi h,1024
-                                call mms_create_low_memory_data_segment
-                                lxi h,0 
-loop:                           mov a,l 
-                                inx h 
-                                call mms_write_selected_data_segment_byte
-                                jnc loop 
-                                lxi d,1024 
-                                lxi h,0 
-                                mvi a,2
-                                mvi c,46
-                                rst 1 
-                                hlt 
-                                
-
+                                jmp msi_sheel_startup 
+                                 
 msi_interrupt_reset:            mvi a,$c3 
                                 sta rst0_address
                                 sta rst1_address
@@ -296,8 +236,10 @@ msi_warm_reset_handler:             call bios_warm_boot
                                     call mms_low_memory_initialize 
                                     call fsm_init 
                                     call msi_interrupt_reset 
-                                    ;da definire
-                                    hlt 
+                                    mvi a,0 
+                                    sta msi_current_program_flags
+                                    jmp msi_sheel_startup 
+                                     
 
 ;msi_main_system_calls_handler si occupa di gestire tutte le system calls principali  
 msi_main_system_calls_handler:          shld msi_HL_backup_address
@@ -656,15 +598,15 @@ msi_system_call_mass_memory_get_head_number_end:    lhld msi_BC_backup_address
                                                     jmp msi_system_calls_return 
 
 ;msi_system_call_mass_memory_write_sector scrive nel settore della memoria di massa i dati precedenti nel segmento di memoria selezionato 
-;HL -> offset nel segmento 
+;DE -> offset nel segmento 
 ;A <- esito dell'operazione 
 ;PSW <- CY viene settata ad 1 se si è verificato un errore
-;HL <- offset nel segmento dopo l'operazione 
+;DE <- offset nel segmento dopo l'operazione 
 
 msi_system_call_mass_memory_write_sector:           lda msi_current_program_flags
                                                     ani msi_current_program_permissions
                                                     jnz msi_system_call_mass_memory_write_sector_next 
-msi_system_call_mass_memory_write_sector_perm_err:  lhld msi_HL_backup_address
+msi_system_call_mass_memory_write_sector_perm_err:  lhld msi_DE_backup_address
                                                     xchg 
                                                     mvi a,msi_current_program_permissions_error 
                                                     stc 
@@ -672,7 +614,7 @@ msi_system_call_mass_memory_write_sector_perm_err:  lhld msi_HL_backup_address
 msi_system_call_mass_memory_write_sector_next:      call mms_get_selected_segment_ID
                                                     ani mms_low_memory_type_segment_mask
                                                     jnz msi_system_call_mass_memory_write_sector_perm_err
-                                                    lhld msi_HL_backup_address
+                                                    lhld msi_DE_backup_address
                                                     call mms_mass_memory_write_sector
                                                     cpi mms_operation_ok
                                                     jnz msi_system_call_mass_memory_write_sector_error 
@@ -682,24 +624,23 @@ msi_system_call_mass_memory_write_sector_next:      call mms_get_selected_segmen
                                                     mvi a,msi_operation_ok
                                                     jmp msi_system_call_mass_memory_write_sector_end 
 msi_system_call_mass_memory_write_sector_error:     stc 
-                                                    lhld msi_HL_backup_address
+                                                    lhld msi_DE_backup_address
                                                     xchg 
 msi_system_call_mass_memory_write_sector_end:       lhld msi_BC_backup_address
                                                     mov c,l 
                                                     mov b,h 
-                                                    lhld msi_DE_backup_address
-                                                    xchg 
+                                                    lhld msi_HL_backup_address
                                                     jmp msi_system_calls_return
 
 ;msi_system_call_mass_memory_read_sector legge dal settore della memoria di massa i dati e li salva nel segmento di memoria selezionato 
-;HL -> offset nel segmento 
+;DE -> offset nel segmento 
 ;A <- esito dell'operazione 
 ;PSW <- CY viene settata ad 1 se si è verificato un errore
-;HL <- offset nel segmento dopo l'operazione  
+;DE <- offset nel segmento dopo l'operazione  
 msi_system_call_mass_memory_read_sector:            lda msi_current_program_flags
                                                     ani msi_current_program_permissions
                                                     jnz msi_system_call_mass_memory_read_sector_next 
-msi_system_call_mass_memory_read_sector_perm_err:   lhld msi_HL_backup_address
+msi_system_call_mass_memory_read_sector_perm_err:   lhld msi_DE_backup_address
                                                     xchg 
                                                     mvi a,msi_current_program_permissions_error 
                                                     stc 
@@ -707,7 +648,7 @@ msi_system_call_mass_memory_read_sector_perm_err:   lhld msi_HL_backup_address
 msi_system_call_mass_memory_read_sector_next:       call mms_get_selected_segment_ID
                                                     ani mms_low_memory_type_segment_mask 
                                                     jnz msi_system_call_mass_memory_read_sector_perm_err
-                                                    lhld msi_HL_backup_address
+                                                    lhld msi_DE_backup_address
                                                     call mms_mass_memory_read_sector
                                                     cpi mms_operation_ok
                                                     jnz msi_system_call_mass_memory_read_sector_error 
@@ -717,17 +658,16 @@ msi_system_call_mass_memory_read_sector_next:       call mms_get_selected_segmen
                                                     mvi a,msi_operation_ok
                                                     jmp msi_system_call_mass_memory_read_sector_end 
 msi_system_call_mass_memory_read_sector_error:      stc 
-                                                    lhld msi_HL_backup_address
+                                                    lhld msi_DE_backup_address
                                                     xchg 
 msi_system_call_mass_memory_read_sector_end:        lhld msi_BC_backup_address
                                                     mov c,l 
                                                     mov b,h 
-                                                    lhld msi_DE_backup_address
-                                                    xchg 
+                                                    lhld msi_HL_backup_address
                                                     jmp msi_system_calls_return
 
 ;msi_system_call_get_free_ram_bytes restituisce il numero di bytes disponibili nella RAM 
-;HL <- bytes disponibili 
+;DE <- bytes disponibili 
 msi_system_call_get_free_ram_bytes:             call mms_free_low_ram_bytes
                                                 xchg 
                                                 lhld msi_BC_backup_address
@@ -736,14 +676,11 @@ msi_system_call_get_free_ram_bytes:             call mms_free_low_ram_bytes
                                                 lhld msi_PSW_backup_address
                                                 push h 
                                                 pop psw 
-                                                lhld msi_DE_backup_address
-                                                xchg 
-                                                
-                                                lhld msi_HL_backup_address  
+                                                lhld msi_HL_backup_address
                                                 jmp msi_system_calls_return
 
 ;msi_system_call_get_current_program_dimension restituisce la dimensione del programma caricato attualmente in memoria 
-;HL <- bytes occupati dal programma attualmente in esecuzione (restituisce 0 se non è stato caricato un programma)
+;DE <- bytes occupati dal programma attualmente in esecuzione (restituisce 0 se non è stato caricato un programma)
 msi_system_call_get_current_program_dimension:  call mms_get_low_memory_program_dimension
                                                 xchg 
                                                 lhld msi_BC_backup_address
@@ -752,16 +689,14 @@ msi_system_call_get_current_program_dimension:  call mms_get_low_memory_program_
                                                 lhld msi_PSW_backup_address
                                                 push h 
                                                 pop psw 
-                                                lhld msi_DE_backup_address
-                                                xchg  
-                                                
+                                                lhld msi_HL_backup_address
                                                 jmp msi_system_calls_return
 
 ;msi_system_call_create_temporary_memory_segment crea un segmento temporaneo all'interno della RAM 
 ;PSW <- se si è verificato un errore nella creazione CY assume 1 
 ;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce id del segmento creato 
-;HL -> dimensione del segmento da creare 
-msi_system_call_create_temporary_memory_segment:        lhld msi_HL_backup_address
+;DE -> dimensione del segmento da creare 
+msi_system_call_create_temporary_memory_segment:        lhld msi_DE_backup_address
                                                         mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_temporary_segment_mask
                                                         call mms_create_low_memory_data_segment
                                                         jc msi_system_call_create_temporary_memory_segment_end 
@@ -835,7 +770,7 @@ msi_system_call_select_temporary_memory_segment_end:    lhld msi_BC_backup_addre
                                                         jmp msi_system_calls_return
 
 ;msi_system_call_read_temporary_segment_dimension restituisce la dimensione del segmento di memoria selezionato 
-;HL <- dimensione del segmento (ritorna 0 se non è stato selezionato nessun segmento)
+;DE <- dimensione del segmento (ritorna 0 se non è stato selezionato nessun segmento)
 ;A <- esito dell'operazione
 ;PSW <- CY viene settato ad 1 se si è verificato un errore 
 msi_system_call_read_temporary_segment_dimension:       call mms_get_selected_segment_ID
@@ -853,16 +788,15 @@ msi_system_call_read_temporary_segment_dimension_end:   xchg
                                                         lhld msi_BC_backup_address
                                                         mov c,l 
                                                         mov b,h 
-                                                        lhld msi_DE_backup_address
-                                                        xchg 
+                                                        lhld msi_HL_backup_address
                                                         jmp msi_system_calls_return
 
 ;msi_system_call_read_temporary_segment_byte il byte dal segmento selezionato 
-;HL -> offset nel segmento 
+;DE -> offset nel segmento 
 ;A <- byte letto (se CY viene settato a 1 restituisce l'errore generato)
 ;PSW <- se si è verificato un errore nella lettura CY viene settato a 1
 
-msi_system_call_read_temporary_segment_byte:        lhld msi_HL_backup_address 
+msi_system_call_read_temporary_segment_byte:        lhld msi_DE_backup_address 
                                                     call mms_read_selected_data_segment_byte
                                                     lhld msi_BC_backup_address
                                                     mov c,l 
@@ -874,12 +808,12 @@ msi_system_call_read_temporary_segment_byte:        lhld msi_HL_backup_address
 
 ;msi_system_call_write_temporary_segment_byte il byte dal segmento selezionato 
 ;A -> byte da scrivere
-;HL -> offset nel segmento 
+;DE -> offset nel segmento 
 ;A <- se CY viene settato a 1 viene restituito l'errore generato (altrimenti rimane invariato)
 ;PSW <- se si è verificato un errore nella lettura CY viene settato a 1
 
 msi_system_call_write_temporary_segment_byte:       lda msi_PSW_backup_address+1
-                                                    lhld msi_HL_backup_address 
+                                                    lhld msi_DE_backup_address 
                                                     call mms_write_selected_data_segment_byte
                                                     jc msi_system_call_write_temporary_segment_byte_end
                                                     lda msi_PSW_backup_address+1
@@ -916,30 +850,19 @@ msi_system_call_select_disk_end:    call msi_selected_segment_restore
                                     lhld msi_HL_backup_address  
                                     jmp msi_system_calls_return
 
-;msi_system_call_format_disk formatta il disco attualmente selezionato 
-;A <- esito dell'operazione 
-;HL <- dimensione della sezione riservata al sistema 
-;PSW <- se si è verificato un errore CY viene settato a 1
-
-msi_system_call_format_disk:        call msi_selected_segment_backup
-                                    lda msi_PSW_backup_address+1 
-                                    lhld msi_HL_backup_address
-                                    call fsm_format_disk
-                                    cpi fsm_operation_ok
-                                    jnz msi_system_call_format_disk_error
-                                    stc 
-                                    cmc 
-                                    mvi a,fsm_operation_ok
-                                    jmp msi_system_call_format_disk_end
-msi_system_call_format_disk_error:  stc 
-msi_system_call_format_disk_end:    call msi_selected_segment_restore
-                                    lhld msi_BC_backup_address
-                                    mov c,l 
-                                    mov b,h 
-                                    lhld msi_DE_backup_address
-                                    xchg 
-                                    lhld msi_HL_backup_address  
-                                    jmp msi_system_calls_return
+;msi_system_call_get_disk_format_type restituisce il tipo di formattazione del disco 
+;A <- codice di formattazione 
+;PSW <- se si è verificato un errore CY viene settato a 1 
+msi_system_call_get_disk_format_type:   call msi_selected_segment_backup
+                                        call fsm_get_disk_format_type 
+                                        call msi_selected_segment_restore
+                                        lhld msi_BC_backup_address
+                                        mov c,l 
+                                        mov b,h 
+                                        lhld msi_DE_backup_address
+                                        xchg 
+                                        lhld msi_HL_backup_address  
+                                        jmp msi_system_calls_return
 
 ;msi_system_call_wipe_disk rimuove tutti i file presenti nel disco 
 ;A <- esito dell'operazione
@@ -1945,24 +1868,319 @@ msi_system_call_set_data_pointer_end:       call msi_selected_segment_restore
                                             lhld msi_HL_backup_address  
                                             jmp msi_system_calls_return
 
-msi_system_call_launch_program:
-msi_system_call_write_operative_system_bytes: 
-msi_system_call_read_operative_system_bytes: 
-msi_system_call_write_boot_sector_bytes: 
-msi_system_call_read_boot_sector_bytes: 
-msi_system_call_set_disk_bootable: 
-msi_system_call_unset_disk_bootable: 
-msi_system_call_get_operative_system_space_dimension: 
-msi_system_call_get_boot_section_space_dimension: 
-msi_system_call_read_disk_bootable_flag: 
-msi_system_call_create_message: 
-msi_system_call_delete_message: 
-msi_system_call_exit_program:
-msi_system_call_read_message_byte:
-msi_system_call_read_message_sender_name:
-msi_system_call_write_message_byte 
-msi_system_call_change_message_sender_name
-msi_system_call_launch_program_with_message 
+;msi_system_call_launch_program sostituisce il programma attualmente caricato con quello desiderato. 
+;DE -> nome completo del programma 
+;A <- errore generato (se si verifica un errore nell'input il programma riprende la sua esecuzione)
+;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la sheel di default con un errore specificato (exit program)
+
+msi_system_call_launch_program:                 call msi_selected_segment_backup
+                                                lhld msi_DE_backup_address
+                                                call msi_string_file_copy_and_load
+                                                cpi msi_operation_ok
+                                                jnz msi_system_call_launch_program_end
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_system_call_launch_program_error
+                                                call fsm_get_selected_file_header_flags
+                                                mov b,a 
+                                                ani fsm_header_system_bit
+                                                jz msi_system_call_launch_program_next
+                                                lda msi_current_program_flags
+                                                ani msi_current_program_permissions
+                                                jnz msi_system_call_launch_program_next
+                                                mvi a,msi_current_program_permissions_error
+                                                jmp msi_system_call_launch_program_error
+msi_system_call_launch_program_next:            mov a,b 
+                                                ani fsm_header_program_bit
+                                                jnz msi_system_call_launch_program_next2
+                                                mvi a,msi_not_a_program 
+                                                jmp msi_system_call_launch_program_error
+msi_system_call_launch_program_next2:           lda msi_current_program_flags
+                                                ani msi_current_program_loaded
+                                                cnz mms_unload_low_memory_program
+                                                call fsm_load_selected_program
+                                                cpi fsm_operation_ok
+                                                jz msi_system_call_launch_program_next3
+msi_system_call_launch_program_abort:           mvi a,msi_load_program_error_execution_code 
+                                                jmp msi_sheel_startup
+msi_system_call_launch_program_next3:           lda msi_current_program_flags
+                                                ori msi_current_program_loaded
+                                                sta msi_current_program_flags 
+                                                call mms_dselect_low_memory_data_segment 
+                                                call mms_delete_all_temporary_segments
+                                                mvi a,0 
+                                                call mms_start_low_memory_loaded_program
+                                                mvi a,msi_program_start_error 
+                                                jmp msi_sheel_startup
+msi_system_call_launch_program_error:           stc 
+msi_system_call_launch_program_end:             call msi_selected_segment_restore
+                                                lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                lhld msi_HL_backup_address  
+                                                jmp msi_system_calls_return
+
+;esegue la stessa funzione di msi_system_call_launch_program inviando il messaggio creato precedentemente. Se il messaggio non è stato creato l'applicazione viene lanciata normalmente
+;A <- id del segmento da inviare 
+;DE -> nome completo del programma 
+;A <- errore generato (se si verifica un errore nell'input il programma riprende la sua esecuzione)
+;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la sheel di default con un errore specificato (exit program)
+
+msi_system_call_launch_program_with_message:                call msi_selected_segment_backup
+                                                            lhld msi_DE_backup_address
+                                                            call msi_string_file_copy_and_load
+                                                            cpi msi_operation_ok
+                                                            jnz msi_system_call_launch_program_with_message_end
+                                                            call fsm_select_file_header
+                                                            cpi fsm_operation_ok
+                                                            jnz msi_system_call_launch_program_with_message_error
+                                                            call fsm_get_selected_file_header_flags
+                                                            mov b,a 
+                                                            ani fsm_header_system_bit
+                                                            jz msi_system_call_launch_program_with_message_next
+                                                            lda msi_current_program_flags
+                                                            ani msi_current_program_permissions
+                                                            jnz msi_system_call_launch_program_with_message_next
+                                                            mvi a,msi_current_program_permissions_error
+                                                            jmp msi_system_call_launch_program_with_message_error
+msi_system_call_launch_program_with_message_next:           mov a,b 
+                                                            ani fsm_header_program_bit
+                                                            jnz msi_system_call_launch_program_with_message_next2
+                                                            mvi a,msi_not_a_program 
+                                                            jmp msi_system_call_launch_program_with_message_error
+msi_system_call_launch_program_with_message_next2:          lda msi_current_program_flags
+                                                            ani msi_current_program_loaded
+                                                            cnz mms_unload_low_memory_program
+                                                            call fsm_load_selected_program
+                                                            cpi fsm_operation_ok
+                                                            jz msi_system_call_launch_program_with_message_next3
+msi_system_call_launch_program_with_message_abort:          mvi a,msi_load_program_error_execution_code 
+                                                            jmp msi_sheel_startup
+msi_system_call_launch_program_with_message_next3:          lda msi_current_program_flags
+                                                            ori msi_current_program_loaded
+                                                            sta msi_current_program_flags 
+                                                            
+                                                            lda msi_PSW_backup_address+1
+                                                            call mms_get_selected_data_segment_flags
+                                                            cpi mms_operation_ok
+                                                            jnz msi_system_call_launch_program_with_message_share_error 
+                                                            ani $ff-mms_low_memory_temporary_segment_mask
+                                                            call mms_set_selected_data_segment_flags
+                                                            call mms_delete_all_temporary_segments
+                                                            call mms_get_selected_data_segment_flags
+                                                            cpi mms_operation_ok
+                                                            jnz msi_system_call_launch_program_with_message_share_error 
+                                                            ori mms_low_memory_temporary_segment_mask
+                                                            call mms_set_selected_data_segment_flags
+                                                            call mms_dselect_low_memory_data_segment 
+                                                            lda msi_PSW_backup_address+1
+                                                            call mms_start_low_memory_loaded_program
+                                                            mvi a,msi_program_start_error 
+                                                            jmp msi_sheel_startup
+msi_system_call_launch_program_with_message_share_error:    mvi a,msi_program_message_share_error 
+                                                            jmp msi_sheel_startup
+msi_system_call_launch_program_with_message_error:          stc 
+msi_system_call_launch_program_with_message_end:            call msi_selected_segment_restore
+                                                            lhld msi_BC_backup_address
+                                                            mov c,l 
+                                                            mov b,h 
+                                                            lhld msi_DE_backup_address
+                                                            xchg 
+                                                            lhld msi_HL_backup_address  
+                                                            jmp msi_system_calls_return
+;msi_system_call_exit_program chiude il programma attualmente in esecuzione e ritorna alla sheel del sistema restituiendo un codice di esecuzione 
+;A -> codice di esecuzione 
+
+msi_system_call_exit_program:           call mms_unload_low_memory_program
+                                        call mms_delete_all_temporary_segments
+                                        lda msi_PSW_backup_address+1 
+                                        stc 
+                                        cmc 
+                                        jmp msi_sheel_startup
+
+;------ Sheel di sistema ------
+;La sheel di sistema è la parte interattiva del sistema operativo. è basata su un sistema a linea di comando, dove l'utente può inserire i camoandi che il sistema deve eseguire. 
+;L'interfaccia prevede una serie di comandi tra cui:
+;-  COPY "sorgente" "destinazione"  -> copia il file desiderato 
+;-  DELETE "file" -> elimina il file desiderato
+;-  RENAME "file" -> rinomina il file desiderato
+;-  ERASE -> elimina tutti i file nella directory 
+;-  MEM -> stampa in numero di bytes disponibili nella RAM
+;-  LIST -> stampa tutti i file presenti nel disco selezionato
+;-  VER -> restituisce la versione del sistema operativo
+;-  ECHO "stringa" -> stampa la stringa 
+;-  CHANGE -> cambia il disco attualmente selezionato
+;-  DEVICES -> stampa la lista dei dispositivi IO disponibili 
+
+msi_sheel_default_disk              .equ    reserved_memory_start+$005f 
+msi_sheel_input_buffer_id           .equ    reserved_memory_start+$0060 
+msi_sheel_input_buffer_head         .equ    reserved_memory_start+$0061
+msi_sheel_console_input_port        .equ    reserved_memory_start+$0062 
+msi_sheel_console_output_port       .equ    reserved_memory_start+$0063 
+
+msi_sheel_input_buffer_dimension    .equ 64     ;(max 256)
+
+msi_input_buffer_overflow           .equ msi_execution_code_mark+$20 
+
+msi_sheel_load_program_error_message    .text "Failed to load program"
+                                        .b $0d, $0 
+msi_sheel_start_program_error_message   .text "Falied to start program"
+                                        .b $0d, $0 
+msi_sheel_error_code_received_message   .text "Program exited with code: "
+                                        .b $0 
+
+
+msi_sheel_startup:                  push psw 
+                                    mvi a,$03 
+                                    out 21  
+
+                                    xra a  
+                                    sta msi_sheel_input_buffer_id
+                                    sta msi_sheel_input_buffer_head 
+                                    sta msi_sheel_console_input_port
+                                    mvi b,$41 
+msi_sheel_start_disk_search:        mov a,b 
+                                    call fsm_select_disk
+                                    cpi fsm_operation_ok
+                                    jz msi_sheel_start_disk_search_end 
+                                    inr b 
+                                    mvi a,$5A 
+                                    cmp b 
+                                    jnz msi_sheel_start_disk_search
+                                    mvi a,0 
+                                    sta msi_sheel_default_disk 
+msi_sheel_start_disk_search_end:    pop psw
+                                    ora a 
+                                    jz msi_sheel_start_error_code_skip
+                                    cpi msi_load_program_error_execution_code
+                                    jnz msi_sheel_start_error_code2 
+                                    lxi h,msi_sheel_load_program_error_message
+                                    call msi_sheel_send_string_console 
+                                    jmp msi_sheel_start_error_code_skip
+msi_sheel_start_error_code2:        cpi msi_program_start_error 
+                                    jnz msi_sheel_start_error_code_other 
+                                    lxi h,msi_sheel_start_program_error_message
+                                    call msi_sheel_send_string_console 
+                                    jmp msi_sheel_start_error_code_skip
+msi_sheel_start_error_code_other:   mov b,a 
+                                    lxi h,msi_sheel_error_code_received_message
+                                    call msi_sheel_send_string_console 
+msi_sheel_start_error_code_skip:    hlt 
+
+;msi_sheel_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
+;A <- esito dell'operazione 
+msi_sheel_create_input_buffer:      push h 
+                                    lxi h,msi_sheel_input_buffer_dimension
+                                    mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_temporary_segment_mask
+                                    call mms_create_low_memory_data_segment
+                                    pop h 
+                                    rc 
+                                    sta msi_sheel_input_buffer_id
+                                    mvi a,msi_operation_ok
+                                    ret 
+
+;msi_sheel_send_console_byte invia un byte alla console 
+;A -> byte da inviare 
+;A <- esito dell'operazione
+msi_sheel_send_console_byte:            push psw 
+                                        lda msi_sheel_console_output_port
+                                        call bios_select_IO_device
+                                        cpi bios_operation_ok
+                                        jz msi_sheel_send_console_byte_wait 
+                                        inx sp 
+                                        inx sp 
+                                        ret 
+msi_sheel_send_console_byte_wait:       call bios_get_selected_device_state
+                                        ani bios_IO_device_output_byte_ready
+                                        jz msi_sheel_send_console_byte_wait
+                                        pop psw 
+                                        call bios_write_selected_device_byte
+                                        rc 
+                                        mvi a,msi_operation_ok
+                                        ret 
+
+;msi_sheel_send_string_console stampa la stringa desiderata
+;HL -> puntatore alla stringa 
+msi_sheel_send_string_console:          push h 
+                                        lda msi_sheel_console_output_port
+                                        call bios_select_IO_device
+                                        cpi bios_operation_ok
+                                        jnz msi_sheel_send_string_console_end
+msi_sheel_send_string_console_loop:     mov a,m 
+                                        inx h 
+                                        ora a 
+                                        jz msi_sheel_send_string_console_loop_end                            
+msi_sheel_send_string_console_loop2:    call bios_get_selected_device_state
+                                        ani bios_IO_device_output_byte_ready
+                                        jz msi_sheel_send_string_console_loop2                  
+                                        mov a,m 
+                                        call bios_write_selected_device_byte
+                                        jc msi_sheel_send_string_console_end
+                                        jmp msi_sheel_send_string_console_loop2
+msi_sheel_send_string_console_loop_end: mvi a,msi_operation_ok
+msi_sheel_send_string_console_end:      pop h 
+                                        ret 
+
+;msi_get_console_input_buffer_byte legge un byte dalla console e lo inserisce nel buffer  
+;A <- byte letto (se CY=1 restituisce un errore)
+msi_get_console_input_buffer_byte:          push h
+                                            lda msi_sheel_console_input_port
+                                            call bios_select_IO_device
+                                            cpi bios_operation_ok
+                                            jnz msi_get_console_input_buffer_byte
+                                            lda msi_sheel_input_buffer_id
+                                            call mms_select_low_memory_data_segment
+                                            cpi mms_operation_ok
+                                            jnz msi_get_console_input_buffer_byte
+                                            lda msi_sheel_input_buffer_head
+                                            lxi h,0 
+                                            mov l,a 
+msi_get_console_input_buffer_byte_loop:     call bios_get_selected_device_state
+                                            ani bios_IO_device_input_byte_ready
+                                            jz msi_get_console_input_buffer_byte_loop
+                                            call bios_read_selected_device_byte
+                                            jc msi_get_console_input_buffer_byte_end
+                                            call mms_write_selected_data_segment_byte
+                                            jc msi_get_console_input_buffer_byte_end
+                                            inx h 
+                                            push psw 
+                                            mov a,l 
+                                            sta msi_sheel_input_buffer_head
+                                            pop psw 
+                                            stc 
+                                            cmc 
+                                            pop h 
+                                            ret 
+msi_get_console_input_buffer_byte_end:      stc 
+                                            pop h 
+                                            ret 
+
+;msi_read_input_buffer_byte legge un byte dal buffer input 
+;A -> posizione nel buffer 
+;A <- byte letto (se CY=1 restituisce un errore)
+msi_read_input_buffer_byte:             push h 
+                                        lxi h,0 
+                                        mov l,a 
+                                        lda msi_sheel_input_buffer_id
+                                        call mms_select_low_memory_data_segment
+                                        cpi mms_operation_ok
+                                        jz msi_read_input_buffer_byte_next
+                                        stc 
+                                        jmp msi_read_input_buffer_byte_end
+msi_read_input_buffer_byte_next:        lda msi_sheel_input_buffer_head
+                                        sub l 
+                                        jz msi_read_input_buffer_byte_overflow
+                                        jnc msi_read_input_buffer_byte_next2
+msi_read_input_buffer_byte_overflow:    mvi a,msi_input_buffer_overflow 
+                                        stc 
+                                        jmp msi_read_input_buffer_byte_end
+msi_read_input_buffer_byte_next2:       call mms_read_selected_data_segment_byte
+msi_read_input_buffer_byte_end:         pop h 
+                                        ret 
+
+
 
 
 
@@ -1973,3 +2191,4 @@ MSI_layer_end:
 
 .print "MSI load address ->",MSI 
 .print "All functions built successfully"
+.print "System calls number -> ",(msi_system_calls_id_table_end-msi_system_calls_id_table)/2
