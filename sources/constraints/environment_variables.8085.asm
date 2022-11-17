@@ -19,6 +19,12 @@ bios_mass_memory_transfer_error         .equ bios_execution_code_mark+$07
 bios_mass_memory_seek_error             .equ bios_execution_code_mark+$08
 bios_memory_transfer_error              .equ bios_execution_code_mark+$09 
 
+bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
+bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
+bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
+bios_IO_device_readable_mask        .equ %10000000
+bios_IO_device_writerable_mask      .equ %01000000
+bios_IO_device_type_console         .equ %00000000     ;il tipo %0000000 viene assegnato per identificare una console basilare I/O  
 
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della mms 
 
@@ -45,8 +51,6 @@ fsm_mass_memory_sector_not_found    .equ fsm_execution_code_mark+$01
 fsm_disk_not_selected               .equ fsm_execution_code_mark+$02
 fsm_device_not_found                .equ fsm_execution_code_mark+$04
 fsm_unformatted_disk                .equ fsm_execution_code_mark+$05
-fsm_disk_not_bootable               .equ fsm_execution_code_mark+$06
-fsm_disk_bootable                   .equ fsm_execution_code_mark+$07
 
 fsm_not_enough_spage_left           .equ fsm_execution_code_mark+$08
 
@@ -66,14 +70,8 @@ fsm_source_segment_overflow         .equ fsm_execution_code_mark+$15
 fsm_selected_file_not_executable    .equ fsm_execution_code_mark+$16 
 fsm_program_too_big                 .equ fsm_execution_code_mark+$17 
 fsm_read_only_file                  .equ fsm_execution_code_mark+$18 
-fsm_selected_disk_not_bootable      .equ fsm_execution_code_mark+$19
-fsm_disk_operating_system_not_found .equ fsm_execution_code_mark+$1A 
-fsm_not_a_system_file               .equ fsm_execution_code_mark+$1B 
-fsm_system_space_too_small          .equ fsm_execution_code_mark+$1C 
 
-fsm_system_section_overflow         .equ fsm_execution_code_mark+$1D 
-fsm_boot_section_not_found          .equ fsm_execution_code_mark+$1E 
-fsm_system_section_not_found        .equ fsm_execution_code_mark+$1F 
+fsm_not_a_system_file               .equ fsm_execution_code_mark+$1B 
 
 ;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della MSI
 
@@ -85,6 +83,13 @@ msi_invalid_character_in_string         .equ msi_execution_code_mark+$04
 msi_string_empty                        .equ msi_execution_code_mark+$05 
 msi_name_too_long                       .equ msi_execution_code_mark+$06 
 msi_extension_too_long                  .equ msi_execution_code_mark+$07
+
+msi_not_a_program                       .equ msi_execution_code_mark+$08 
+
+msi_load_program_error_execution_code   .equ msi_execution_code_mark+$09 
+msi_program_start_error                 .equ msi_execution_code_mark+$0A
+msi_program_message_share_error         .equ msi_execution_code_mark+$0B
+
 ;variabili e flags predefinite nella mms
 mms_low_memory_valid_segment_mask           .equ %10000000
 mms_low_memory_type_segment_mask            .equ %01000000
@@ -100,3 +105,5 @@ fsm_header_system_bit                       .equ %00100000
 fsm_header_program_bit                      .equ %00010000
 fsm_header_hidden_bit                       .equ %00001000
 fsm_header_readonly_bit                     .equ %00000100
+
+fsm_SFS10_format_ID                         .equ $01

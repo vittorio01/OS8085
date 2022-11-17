@@ -3,10 +3,9 @@
 
 
 fsm_init                                            .equ FSM
-fsm_close                                           .equ fsm_init +3
-fsm_select_disk                                     .equ fsm_close +3
-fsm_format_disk                                     .equ fsm_select_disk+3
-fsm_wipe_disk                                       .equ fsm_format_disk+3
+fsm_select_disk                                     .equ fsm_init +3
+
+fsm_wipe_disk                                       .equ fsm_select_disk +3
 fsm_disk_set_name                                   .equ fsm_wipe_disk+3
 fsm_disk_get_name                                   .equ fsm_disk_set_name+3
 fsm_disk_get_free_space                             .equ fsm_disk_get_name+3
@@ -32,15 +31,6 @@ fsm_selected_file_wipe                              .equ fsm_selected_file_read_
 fsm_selected_file_set_data_pointer                  .equ fsm_selected_file_wipe+3
 fsm_load_selected_program                           .equ fsm_selected_file_set_data_pointer+3
 
-fsm_selected_disk_get_system                        .equ fsm_load_selected_program +3
-fsm_selected_disk_set_system                        .equ fsm_selected_disk_get_system+3
-fsm_selected_disk_get_boot_section                  .equ fsm_selected_disk_set_system+3
-fsm_selected_disk_set_boot_section                  .equ fsm_selected_disk_get_boot_section+3
-fsm_selected_disk_set_bootable                      .equ fsm_selected_disk_set_boot_section+3
-fsm_selected_disk_unset_bootable                    .equ fsm_selected_disk_set_bootable+3
-fsm_selected_disk_get_boot_section_dimension        .equ fsm_selected_disk_unset_bootable+3
-fsm_selected_disk_get_system_section_dimension      .equ fsm_selected_disk_get_boot_section_dimension+3
-fsm_selected_disk_is_bootable                       .equ fsm_selected_disk_get_system_section_dimension+3
-
-fsm_file_name_max_dimensions                        .equ fsm_selected_disk_is_bootable+3
+fsm_get_disk_format_type                            .equ fsm_load_selected_program+3
+fsm_file_name_max_dimensions                        .equ fsm_get_disk_format_type +3
 fsm_disk_name_max_dimension                         .equ fsm_file_name_max_dimensions+3
