@@ -524,10 +524,12 @@ mms_program_bytes_read_end:     pop d
                                 ret 
 
 ;mms_start_low_memory_loaded_program esegue il programma caricato precedentemente in memoria 
+;all'avvio del programma lo stack pointer viene posizionato automaticamente alla fine della program_low_memory 
 ; A <- errore di esecuzione (nel caso in cui il programma non sia partito)
 
 mms_start_low_memory_loaded_program:        push h 
                                             push d 
+                                            push psw 
                                             lhld mms_program_high_pointer
                                             lxi d,low_memory_start
                                             mov a,e 
@@ -535,11 +537,16 @@ mms_start_low_memory_loaded_program:        push h
                                             mov a,d 
                                             sbb h 
                                             jnc mms_start_low_memory_loaded_program_end
-                                            lxi h,stack_memory_start
+                                            pop psw 
+                                            lhld mms_program_high_pointer
                                             sphl 
-                                            lxi h,low_memory_start 
-                                            pchl 
+                                            lxi h,0 
+                                            lxi d,0 
+                                            lxi b,0 
+                                            jmp low_memory_start
 mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded 
+                                            inx sp 
+                                            inx sp 
                                             pop d 
                                             pop h 
                                             ret     
@@ -1179,7 +1186,6 @@ mms_segment_data_transfer_end:      pop h
                                     ret               
 
 ;mms_delete_all_temporary_segments elimina tutti i segmenti temporanei non di sistema presenti in RAM 
-;A -> esito dell'operazione 
 
 mms_delete_all_temporary_segments:          push h 
                                             push d 
@@ -1230,7 +1236,6 @@ mms_delete_all_temporary_segments_end:      xra a
                                             lxi h,0 
                                             shld mms_data_selected_segment_address
                                             shld mms_data_selected_segment_dimension
-                                            mvi a,mms_operation_ok
 mms_delete_all_temporary_segments_end2:     pop d 
                                             pop h 
                                             ret 

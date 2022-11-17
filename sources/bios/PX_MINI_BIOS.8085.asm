@@ -35,19 +35,19 @@
 ;A <- bios_IO_device_readable_mask + bios_IO_device_writerable_mask + bios_IO_device_type_console viene usato per identificare la console basilare
 
 ;bios_IO_device_readable_mask e bios_IO_device_writerable_mask indicano la direzionalità del dispositivo (tre combinazioni disponibili) 
-bios_IO_device_readable_mask    .equ %10000000
-bios_IO_device_writerable_mask  .equ %01000000
+;bios_IO_device_readable_mask    .equ %10000000
+;bios_IO_device_writerable_mask  .equ %01000000
 
 ;vengono usati i restanti 6 bytes per identificare il tipo di dispositivo (64 diversi tipi di dispositivi)
-bios_IO_device_type_console    .equ %00000000     ;il tipo %0000000 viene assegnato per identificare una console basilare I/O  
+;bios_IO_device_type_console    .equ %00000000     ;il tipo %0000000 viene assegnato per identificare una console basilare I/O  
 
 ;si possono aggiungere liberamente altre tipologie di dispositivo, dato che l'applicazione deve saperlo utilizzare, 
 ;ma devono essere sempre mantenuti i due bytes per indicare la direzionaità del dispositivo 
 
 ;la funzione bios_get_selected_device_state restituisce le seguenti flags messe in or logico fra loro
-bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
-bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
-bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
+;bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
+;bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
+;bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
 
 ;Ad esempio, nel caso della console di base:
 ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
@@ -140,25 +140,23 @@ bios_console_input_read_character:      in bios_serial_data_port
 
 ;bios_console_output_ready
 ; A <- stato della console
-bios_console_get_state:                 in bios_serial_command_port
-                                        push psw 
-                                        xthl 
-                                        mvi l,0 
+bios_console_get_state:                 push b
+                                        mvi c,bios_IO_device_connected_mask
+                                        in bios_serial_command_port
+                                        mov b,a 
                                         ani %00000001 
                                         jz bios_console_get_state_next
-                                        mov a,l 
+                                        mov a,c 
                                         ori bios_IO_device_output_byte_ready
-                                        mov l,a 
-bios_console_get_state_next:            mov a,l 
+                                        mov c,a 
+bios_console_get_state_next:            mov a,b
                                         ani %00000010      
                                         jz bios_console_get_state_next2
-                                        mov a,l 
+                                        mov a,c 
                                         ori bios_IO_device_input_byte_ready
-                                        mov l,a 
-bios_console_get_state_next2:           mov a,l 
-                                        ori bios_IO_device_connected_mask 
-                                        inx sp 
-                                        inx sp 
+                                        mov c,a 
+bios_console_get_state_next2:           mov a,c 
+                                        pop b
                                         stc 
                                         cmc 
                                         ret  
@@ -292,11 +290,15 @@ bios_read_selected_device_byte_end:     mvi a,bios_IO_device_not_selected
 ;A -> byte da scrivere 
 ;PSW <- cy viene settato ad 1 se il dispositivo non è stato selezionato 
 
-bios_write_selected_device_byte:        lda bios_selected_IO_device_flags
+bios_write_selected_device_byte:        push psw 
+                                        lda bios_selected_IO_device_flags
                                         ani bios_selected_IO_device_flags_selected
                                         jz bios_write_selected_device_byte_end
+                                        pop psw 
                                         jmp bios_selected_IO_device_write_byte_address
-bios_write_selected_device_byte_end:    mvi a,bios_IO_device_not_selected 
+bios_write_selected_device_byte_end:    inx sp 
+                                        inx sp 
+                                        mvi a,bios_IO_device_not_selected 
                                         stc 
                                         ret
 
