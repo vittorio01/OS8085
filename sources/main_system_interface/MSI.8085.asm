@@ -2030,11 +2030,23 @@ msi_sheel_start_program_error_message   .text "Falied to start program"
                                         .b $0d, $0 
 msi_sheel_error_code_received_message   .text "Program exited with code: "
                                         .b $0 
-
+msi_sheel_arrow:                        .text ":/> "
 
 msi_sheel_startup:                  push psw 
                                     mvi a,$03 
                                     out 21  
+                                    lxi b,$ffff 
+                                    push b 
+                                    lxi b,$FFFF
+                                    push b 
+                                    lxi b,$1111 
+                                    lxi d,$2222 
+                                    lxi h,$3333
+                                    call unsigned_convert_hex_bcd_long 
+                                    pop h 
+                                    pop d 
+                                    pop b 
+                                    hlt 
 
                                     xra a  
                                     sta msi_sheel_input_buffer_id
@@ -2052,22 +2064,7 @@ msi_sheel_start_disk_search:        mov a,b
                                     mvi a,0 
                                     sta msi_sheel_default_disk 
 msi_sheel_start_disk_search_end:    pop psw
-                                    ora a 
-                                    jz msi_sheel_start_error_code_skip
-                                    cpi msi_load_program_error_execution_code
-                                    jnz msi_sheel_start_error_code2 
-                                    lxi h,msi_sheel_load_program_error_message
-                                    call msi_sheel_send_string_console 
-                                    jmp msi_sheel_start_error_code_skip
-msi_sheel_start_error_code2:        cpi msi_program_start_error 
-                                    jnz msi_sheel_start_error_code_other 
-                                    lxi h,msi_sheel_start_program_error_message
-                                    call msi_sheel_send_string_console 
-                                    jmp msi_sheel_start_error_code_skip
-msi_sheel_start_error_code_other:   mov b,a 
-                                    lxi h,msi_sheel_error_code_received_message
-                                    call msi_sheel_send_string_console 
-msi_sheel_start_error_code_skip:    hlt 
+                                    hlt 
 
 ;msi_sheel_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
 ;A <- esito dell'operazione 
@@ -2180,7 +2177,15 @@ msi_read_input_buffer_byte_next2:       call mms_read_selected_data_segment_byte
 msi_read_input_buffer_byte_end:         pop h 
                                         ret 
 
+;msi_sheel_ascii_character verifica se il carattere è stampabile 
+;A -> carattere da verificare 
+;PSW <- se è stampabile CY=0, C=1 altrimenti
 
+msi_sheel_ascii_character:          cpi $20 
+                                    rc 
+                                    cpi $7e 
+                                    cmc 
+                                    ret                  
 
 
 
