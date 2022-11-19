@@ -11,6 +11,9 @@ LIBRARIES_calls:    .org LIBRARIES
                     jmp string_ncompare
                     jmp string_copy
                     jmp string_ncopy 
+                    jmp unsigned_convert_hex_bcd_byte
+                    jmp unsigned_convert_hex_bcd_word
+                    jmp unsigned_convert_hex_bcd_long
 
 .include "multiply/multiply_word.8085.asm"
 .include "multiply/multiply_byte.8085.asm"
@@ -22,6 +25,9 @@ LIBRARIES_calls:    .org LIBRARIES
 .include "string/string_ncopy.8085.asm"
 .include "string/string_compare.8085.asm"
 .include "string/string_ncompare.8085.asm"
+.include "convert/hex_to_bcd_byte.8085.asm"
+.include "convert/hex_to_bcd_word.8085.asm"
+.include "convert/hex_to_bcd_long.8085.asm"
 
 libraries_layer_end:    
 .memory "fill", libraries_layer_end, libraries_dimension-libraries_layer_end+LIBRARIES,$00
