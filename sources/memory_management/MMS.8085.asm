@@ -157,6 +157,10 @@ mms_functions:  .org MMS
                 jmp mms_mass_memory_write_sector
                 jmp mms_get_selected_segment_ID  
                 jmp mms_dselect_low_memory_data_segment 
+                
+                jmp mms_string_segment_ncompare 
+                jmp mms_string_segment_ncopy 
+                jmp mms_string_segment_source_ncopy 
 
 ;Implementazioni delle system calls della mms
 
@@ -1435,6 +1439,91 @@ mms_data_bitstream_reset_requested_bit_shift_end:   ora m
                                                     pop b 
                                                     pop h 
                                                     ret 
+
+;mms_string_segment_ncompare verifica se due stringhe sono uguali (un operando è in un segmento di memoria)
+
+;A -> numero massimo di bytes 
+;DE -> indirizzo della prima stringa
+;HL -> indirizzo della seconda stringa (offset nel segmento selezionato precedentemente)
+
+;A <- esito dell'operazione ($ff se corrispondono, $00 se si verifica un errore o se non corrispondono)
+
+
+mms_string_segment_ncompare:        push psw 
+                                    push b 
+                                    push d 
+                                    push h 
+                                    mov c,l 
+                                    mov b,h 
+                                    lhld mms_data_selected_segment_address
+                                    mov a,l 
+                                    ora a 
+                                    jz mms_string_segment_ncompare_error 
+                                    dad b 
+                                    pop psw 
+                                    call string_ncompare
+                                    jmp mms_string_segment_ncompare_end
+mms_string_segment_ncompare_error:  pop psw 
+                                    xra a 
+mms_string_segment_ncompare_end:    pop h 
+                                    pop d 
+                                    pop b
+                                    ret
+
+;mms_string_segment_ncopy esegue la copia della stringa sorgente a partire dell'indirizzo specificato come destinazione (in un segmento) imponendo un massimo di caratteri da copiare. 
+;La stringa sorgente viene considerata come terminata quando viene rilevato il carattere terminatore.
+;A  -> numero massimo di caratteri
+;DE -> puntatore alla stringa di sorgente
+;HL -> puntatore alla stringa di destinazione (offset nel segmento dati già selezionato)
+
+mms_string_segment_ncopy:       push b 
+                                push d 
+                                push h 
+                                push psw 
+                                mov c,l 
+                                mov b,h 
+                                lhld mms_data_selected_segment_address
+                                mov a,l 
+                                ora a 
+                                jz mms_string_segment_ncopy_error
+                                dad b 
+                                pop psw 
+                                call string_ncopy
+mms_string_segment_ncopy_error: pop psw 
+                                xra a                          
+mms_string_segment_ncopy_end:   pop h 
+                                pop d 
+                                pop b 
+                                ret 
+
+;mms_string_segment_source_ncopy la copia della stringa sorgente a partire dell'indirizzo specificato come destinazione (in un segmento) imponendo un massimo di caratteri da copiare. 
+;La stringa sorgente viene considerata come terminata quando viene rilevato il carattere terminatore.
+;A  -> numero massimo di caratteri
+;DE -> puntatore alla stringa di sorgente (offset nel segmento dati già selezionato)
+;HL -> puntatore alla stringa di destinazione 
+
+
+mms_string_segment_source_ncopy:        push b 
+                                        push d 
+                                        push h 
+                                        push psw 
+                                        xchg 
+                                        mov c,l 
+                                        mov b,h 
+                                        lhld mms_data_selected_segment_address
+                                        mov a,l 
+                                        ora a 
+                                        jz mms_string_segment_source_ncopy_error
+                                        dad b 
+                                        xchg 
+                                        pop psw 
+                                        call string_ncopy
+mms_string_segment_source_ncopy_error:  pop psw 
+                                        xra a                          
+mms_string_segment_source_ncopy_end:    pop h 
+                                        pop d 
+                                        pop b 
+                                        ret 
 
 mms_layer_end:     
 .print "Space left in MMS layer ->",mms_dimension-mms_layer_end+MMS 

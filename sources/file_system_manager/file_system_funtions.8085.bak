@@ -92,7 +92,7 @@ fsm_format_disk_jump1:                  inx b
                                         inx h 
                                         lxi d,fsm_format_marker
                                         mvi a,fsm_format_marker_lenght 
-                                        call string_segment_ncopy
+                                        call mms_string_segment_ncopy
                                         mvi a,fsm_format_marker_lenght 
                                         add l 
                                         mov l,a 

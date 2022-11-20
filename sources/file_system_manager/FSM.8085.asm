@@ -312,7 +312,7 @@ fsm_select_next2:               call bios_mass_memory_get_bps
                                 lxi h,3
                                 lxi d,fsm_format_marker
                                 mvi a,fsm_format_marker_lenght
-                                call string_segment_ncompare
+                                call mms_string_segment_ncompare
                                 ora a 
                                 jnz fsm_select_disk_formatted_disk
                                 mvi a,fsm_unformatted_disk 
@@ -394,7 +394,7 @@ fsm_disk_set_name_next:             lxi h,0
                                     jnz fsm_disk_set_name_end
                                     lxi h,0 
                                     mvi a,fsm_disk_name_max_lenght
-                                    call string_segment_ncopy
+                                    call mms_string_segment_ncopy
                                     call fsm_writeback_page
                                     cpi fsm_operation_ok
                                     jnz fsm_disk_set_name_end
@@ -481,7 +481,7 @@ fsm_disk_get_name_stack_push:       xthl
                                     lxi h,0
                                     xchg 
                                     mvi a,fsm_disk_name_max_lenght
-                                    call string_segment_source_ncopy
+                                    call mms_string_segment_source_ncopy
                                     dad b 
                                     mvi m,0 
                                     mvi a,fsm_operation_ok 
@@ -1827,14 +1827,14 @@ fsm_set_selected_file_header_name_and_extension_ndp:    call fsm_load_selected_f
                                                         pop d 
                                                         pop b 
                                                         mvi a,fsm_header_name_dimension
-                                                        call string_segment_ncompare
+                                                        call mms_string_segment_ncompare
                                                         lxi d,fsm_header_name_dimension
                                                         dad d 
                                                         mov e,c 
                                                         mov d,b 
                                                         mov c,a 
                                                         mvi a,fsm_header_extension_dimension
-                                                        call string_segment_ncompare
+                                                        call mms_string_segment_ncompare
                                                         ana c 
                                                         jz fsm_set_selected_file_header_name_and_extension_next
                                                         inx sp 
@@ -1869,13 +1869,13 @@ fsm_set_selected_file_header_name_and_extension_next2:  call fsm_load_selected_f
                                                         pop d 
                                                         inx h 
                                                         mvi a,fsm_header_name_dimension
-                                                        call string_segment_ncopy
+                                                        call mms_string_segment_ncopy
                                                         lxi d,fsm_header_name_dimension
                                                         dad d 
                                                         mvi a,fsm_header_extension_dimension
                                                         mov e,c 
                                                         mov d,b  
-                                                        call string_segment_ncopy
+                                                        call mms_string_segment_ncopy
                                                         call fsm_writeback_page
 fsm_set_selected_file_header_name_and_extension_end:    pop b 
                                                         pop d 
@@ -1947,7 +1947,7 @@ fsm_get_selected_file_header_name_stack_loop:           xthl
                                                         jnc fsm_get_selected_file_header_name_stack_loop_copy
                                                         dcr b 
 fsm_get_selected_file_header_name_stack_loop_copy:      mov a,b  
-                                                        call string_segment_source_ncopy
+                                                        call mms_string_segment_source_ncopy
                                                         mov a,l 
                                                         add b 
                                                         mov l,a 
@@ -2025,7 +2025,7 @@ fsm_get_selected_file_header_extension_stack_loop:          xthl
                                                             jnc fsm_get_selected_file_header_extension_stack_loop_copy
                                                             dcr b 
 fsm_get_selected_file_header_extension_stack_loop_copy:     mov a,b                          
-                                                            call string_segment_source_ncopy
+                                                            call mms_string_segment_source_ncopy
                                                             mov a,l 
                                                             add b 
                                                             mov l,a 
@@ -2190,7 +2190,7 @@ fsm_create_file_header_write_bytes:     push d
                                         mov e,c 
                                         mov d,b 
                                         mvi a,fsm_header_name_dimension
-                                        call string_segment_ncopy
+                                        call mms_string_segment_ncopy
                                         lxi d,fsm_header_name_dimension
                                         dad d 
                                         lxi d,8
@@ -2210,7 +2210,7 @@ fsm_create_file_header_write_bytes:     push d
                                         mov e,c 
                                         mov d,b 
                                         mvi a,fsm_header_extension_dimension
-                                        call string_segment_ncopy
+                                        call mms_string_segment_ncopy
                                         lxi d,fsm_header_extension_dimension 
                                         dad d 
                                         mvi a,0 
@@ -2329,7 +2329,7 @@ fsm_search_file_header_search_loop:         call fsm_read_selected_data_segment_
                                             dcx sp 
                                             dcx sp 
                                             mvi a,fsm_header_name_dimension
-                                            call string_segment_ncompare
+                                            call mms_string_segment_ncompare
                                             ora a 
                                             jz fsm_search_file_header_search_loop_next
                                             lxi d,fsm_header_name_dimension
@@ -2351,7 +2351,7 @@ fsm_search_file_header_search_loop:         call fsm_read_selected_data_segment_
                                             mov e,c 
                                             mov d,b 
                                             mvi a,fsm_header_extension_dimension
-                                            call string_segment_ncompare
+                                            call mms_string_segment_ncompare
                                             ora a 
                                             jz fsm_search_file_header_search_loop_next
                                             pop d 
@@ -3450,110 +3450,7 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
 fsm_seek_disk_sector_error:                 pop h 
                                             ret 
 
-;string_segment_ncompare verifica se due stringhe sono uguali (un operando è in un segmento di memoria)
 
-;A -> numero massimo di bytes 
-;DE -> indirizzo della prima stringa
-;HL -> indirizzo della seconda stringa (offset nel segmento selezionato precedentemente)
-
-;A <- esito dell'operazione ($ff se corrispondono, $00 se si verifica un errore o se non corrispondono)
-
-
-string_segment_ncompare:        push b 
-                                push d 
-                                push h 
-                                ora a 
-                                jz string_segment_ncmp_loop_end2
-                                mov b,a 
-string_segment_ncmp_loop:       dcr b 
-                                jnz string_segment_ncmp_loop3
-                                ldax d
-                                mov c,a 
-                                call fsm_read_selected_data_segment_byte
-                                jc string_segment_ncmp_loop_end2
-                                cmp c 
-                                jz string_segment_ncmp_loop_end1
-                                jmp string_segment_ncmp_loop_end2
-string_segment_ncmp_loop3:      call fsm_read_selected_data_segment_byte
-                                
-                                jc string_segment_ncmp_loop_end2
-                                ora a 
-                                jz string_segment_ncmp_loop2
-                                ldax d 
-                                mov c,a 
-                                call fsm_read_selected_data_segment_byte
-                                jc string_segment_ncmp_loop_end2
-                                cmp c
-                                jnz string_segment_ncmp_loop_end2
-                                inx h 
-                                inx d 
-                                jmp string_segment_ncmp_loop
-string_segment_ncmp_loop2:      ldax d 
-                                ora a 
-                                jnz string_segment_ncmp_loop_end2
-string_segment_ncmp_loop_end1:  mvi a,$ff
-                                jmp string_segment_ncompare_end
-string_segment_ncmp_loop_end2:  xra a 
-string_segment_ncompare_end:    pop h 
-                                pop d 
-                                pop b
-                                ret
-
-;string_segment_ncopy esegue la copia della stringa sorgente a partire dell'indirizzo specificato come destinazione (in un segmento) imponendo un massimo di caratteri da copiare. 
-;La stringa sorgente viene considerata come terminata quando viene rilevato il carattere terminatore.
-;A  -> numero massimo di caratteri
-;DE -> puntatore alla stringa di sorgente
-;HL -> puntatore alla stringa di destinazione (offset nel segmento dati già selezionato)
-
-string_segment_ncopy:       push b 
-                            push d 
-                            push h 
-                            ora a 
-                            jz string_segment_ncopy_end1
-                            mov b,a 
-string_segment_ncopy_loop:  ldax d 
-                            ora a 
-                            jz string_segment_ncopy_end
-                            call fsm_write_selected_data_segment_byte
-                            jc string_segment_ncopy_end1 
-                            inx h 
-                            inx d 
-                            dcr b 
-                            jnz string_segment_ncopy_loop
-string_segment_ncopy_end:   call fsm_write_selected_data_segment_byte
-string_segment_ncopy_end1:  pop h 
-                            pop d 
-                            pop b 
-                            ret 
-
-;string_segment_source_ncopy la copia della stringa sorgente a partire dell'indirizzo specificato come destinazione (in un segmento) imponendo un massimo di caratteri da copiare. 
-;La stringa sorgente viene considerata come terminata quando viene rilevato il carattere terminatore.
-;A  -> numero massimo di caratteri
-;DE -> puntatore alla stringa di sorgente (offset nel segmento dati già selezionato)
-;HL -> puntatore alla stringa di destinazione 
-
-
-string_segment_source_ncopy:            push b 
-                                        push d 
-                                        push h 
-                                        ora a 
-                                        jz string_segment_source_ncopy_end1
-                                        xchg 
-                                        mov b,a 
-string_segment_source_ncopy_loop:       call fsm_read_selected_data_segment_byte
-                                        jc string_segment_source_ncopy_end1 
-                                        ora a 
-                                        jz string_segment_source_ncopy_end
-                                        stax d 
-                                        inx h 
-                                        inx d 
-                                        dcr b 
-                                        jnz string_segment_source_ncopy_loop
-string_segment_source_ncopy_end:        stax d 
-string_segment_source_ncopy_end1:       pop h 
-                                        pop d 
-                                        pop b 
-                                        ret 
 
 fsm_layer_end:      
 .print "Space left in FSM layer ->",fsm_dimension-fsm_layer_end+FSM

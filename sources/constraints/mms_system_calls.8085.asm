@@ -23,3 +23,7 @@ mms_mass_memory_read_sector                     .equ mms_program_bytes_read+3
 mms_mass_memory_write_sector                    .equ mms_mass_memory_read_sector+3
 mms_get_selected_segment_ID                     .equ mms_mass_memory_write_sector+3 
 mms_dselect_low_memory_data_segment             .equ mms_get_selected_segment_ID+3
+
+mms_string_segment_ncompare                     .equ mms_dselect_low_memory_data_segment
+mms_string_segment_ncopy                        .equ mms_string_segment_ncompare
+mms_string_segment_source_ncopy                 .equ mms_string_segment_ncopy
