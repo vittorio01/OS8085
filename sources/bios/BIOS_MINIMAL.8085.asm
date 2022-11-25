@@ -1,72 +1,44 @@
 ;Il BIOS prevede l'implementazione di una serie di funzioni a basso livello che devono adattarsi alle varie specifiche della macchina fisica. 
 ;Tra le funzioni disponibili troviamo:
-;-  funzioni di avvio (bios_cold_boot e bios_warm_boot) che servono per inizializzare le risorse ed eventualmente eseguire test preliminari. In particolare, bios_cold_boot
-;   viene invocata dopo l'avvio del computer, mentre bios_warm_boot viene utilizzata invocata quando è necessario un reset interno
+;-  funzioni di avvio del sistema
 ;-  funzioni per la gestione dei dispositivi I/O tra cui la console, che serve per la gestione dei dispositivi base per l'interazione con l'utente (lettura di caratteri e stampa su schermo)
 ;-  funzioni per la gestione delle memorie di massa, tra cui sono presenti alcune dedicate alla selezione di tracce, settori e testine e altre alla gestione del flusso dei dati, tra cui lettura
 ;   scrittura di una traccia e formattazione del disco
-;-  funzioni per la copia di blocchi di memoria, che vengono utilizzati nel caso di trasferimenti di grandi blocchi di dati da e verso la memoria. 
+;-  funzioni per la gestione dei trasferimenti DMA memory-to-memory.
 
-;----- dispositivi I/O -----
-;I dispositivi I/O hanno un identificativo formato da un byte che può assumere un numero da $00 a $ff.
-;Un dispositivo può coprire anche più identificativi, nel caso in cui si vuole accedere a dspositivi che necessitano di più porte I/O hardware per la loro gestione. 
-;Un identificativo I/O può essere assegnato a un dispositivo hardware secondo tre modalità:
-;-  sola lettura (il dispositivo può solamente inviare i dati)
-;-  sola scritura (il dispositivo può solamente leggere i dati)
-;-  bidirezionale (il dispositivo può leggere o scrivere i dati)
-
-;l'id $00 viene sempre assegnato alla console base, che è sempre bidirezionale e viene utilizzato come dispositivo basilare di input/output dalla shell del sistema. 
-;Ad esempio:
-;-  se si desidera aggiungere un dispositivo seriale si può utilizzare un unico ID bidirezionale
-;-  se si desidera registrare un dispositivo grafico ASCII si possono utilizzare due ID (uno di sola scrittura per indicare la posizione del carattere e uno bidirezionale per leggere/scrivere il carattere sullo schermo)
-;Ad ogni Id vengono assegnte due funzioni per leggere e scrivere un unico byte, una funzione per richiedere informazioni sul dispositivo e una funzione per richiedere lo stato attuale del dispositivo:
-;- la funzione bios_get_selected_device_state restituisce le informazioni sulla disponibilità di lettura o scrittura di un byte sul dispositivo tramite un byte che contiene delle flags
-;- la funzione bios_get_IO_device_informations restituisce le informazioni sulla tipologia del dispositivo sempre tramite un byte contenente delle flags
-
+;la prima parte del bios viene sedicara all'implementazione del sistema di mantenimento dei dispositivi. I dispositivi possono essere modificati nella sezione successiva. 
 
 .include "os_constraints.8085.asm"
 .include "libraries_system_calls.8085.asm"
 .include "environment_variables.8085.asm"
 
-;le seguenti variabili vengono utilizzate per identificare il tipo di dispositivo. Il byte risultante è formato da:
-;- due bytes per indicare la direzionalità 
-;- sei bytes per indicare il tipo di dispositivo 
-;il risultato finale si ottiene mettendo in OR le seguenti informazioni. Ad esempio 
-;A <- bios_IO_device_readable_mask + bios_IO_device_writerable_mask + bios_IO_device_type_console viene usato per identificare la console basilare
+bios_selected_IO_device_initialize_address  .equ reserved_memory_start+$0000
+bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0003
+bios_selected_IO_device_set_state_address   .equ reserved_memory_start+$0006 
+bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0009 
+bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$000C 
+bios_selected_devices_flags                 .equ reserved_memory_start+$000F
 
-;bios_IO_device_readable_mask e bios_IO_device_writerable_mask indicano la direzionalità del dispositivo (tre combinazioni disponibili) 
-bios_IO_device_readable_mask    .equ %10000000
-bios_IO_device_writerable_mask  .equ %01000000
+bios_mass_memory_selected_sector            .equ reserved_memory_start+$0010  
+bios_mass_memory_selected_track             .equ reserved_memory_start+$0011 
+bios_mass_memory_selected_head              .equ reserved_memory_start+$0013 
+bios_mass_memory_vector_address             .equ reserved_memory_start+$0014
 
-;vengono usati i restanti 6 bytes per identificare il tipo di dispositivo (64 diversi tipi di dispositivi)
-bios_IO_device_type_console    .equ %00000000     ;il tipo %0000000 viene assegnato per identificare una console basilare I/O  
+bios_selected_devices_flags_IO_selected     .equ %00001000
 
-;si possono aggiungere liberamente altre tipologie di dispositivo, dato che l'applicazione deve saperlo utilizzare, 
-;ma devono essere sempre mantenuti i due bytes per indicare la direzionaità del dispositivo 
-
-;la funzione bios_get_selected_device_state restituisce le seguenti flags messe in or logico fra loro
-bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
-bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
-bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
-
-;Ad esempio, nel caso della console di base:
-;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
-
-bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0000
-bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0003
-bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$0006
-bios_selected_IO_device_flags               .equ reserved_memory_start+$0009
-
-bios_selected_IO_device_flags_Selected      .equ %10000000
+bios_selected_devices_flags_head           .equ %10000000
+bios_selected_devices_flags_track          .equ %01000000
+bios_selected_devices_flags_sector         .equ %00100000
 
 bios_functions: .org BIOS 
-                jmp bios_cold_boot 
-                jmp bios_warm_boot 
+                jmp bios_system_start  
                 jmp bios_select_IO_device
                 jmp bios_get_IO_device_informations 
-                jmp bios_get_selected_device_state
-                jmp bios_read_selected_device_byte
-                jmp bios_write_selected_device_byte 
+                jmp bios_selected_IO_device_initialize_address
+                jmp bios_selected_IO_device_get_state_address
+                jmp bios_selected_IO_device_set_state_address 
+                jmp bios_selected_IO_device_read_byte_address
+                jmp bios_selected_IO_device_write_byte_address 
                 jmp bios_mass_memory_select_drive 
                 jmp bios_mass_memory_select_sector 
                 jmp bios_mass_memory_select_track 
@@ -81,113 +53,54 @@ bios_functions: .org BIOS
                 jmp bios_mass_memory_format_drive 
                 jmp bios_memory_transfer
                 jmp bios_memory_transfer_reverse 
+
  
+;bios_system_start esegue un test e un reset della memoria ram e inizializza i dispositivi per la gestione della memoria di massa.
 
-;per avere una velocità computazionale migliore nel scegliere i dispositivi viene utilizzata una tabella dati in cui ogni record contiene:
-;-  un byte che contiene l'identificativo 
-;-  un byte che identifica il tipo di dispositivo 
-;-  due bytes che contengono l'indirizzo della funzione bios_get_selected_device_state relativa 
-;-  due bytes che contengono l'indirizzo della funzione bios_read_selected_device_byte
-;-  due bytes che contengono l'indirizzo della funzione bios_write_selected_device_byte
+bios_system_start:      call bios_IO_device_system_initialize
+                        call bios_mass_memory_system_initialize
+                        
+                        ret 
 
-;per aggiungere un dispositivo basta inserire un campo tramite la macro .byte "flags del dipositivo"
-bios_device_IO_table:       .byte $00                                                                                       
-                            .byte bios_IO_device_readable_mask+bios_IO_device_writerable_mask+bios_IO_device_type_console   
-                            .word bios_console_get_state
-                            .word bios_console_input_read_character
-                            .word bios_console_output_write_character
-bios_device_IO_table_end:                                                                                              
-;una volta selezionato il dispsitivo il BIOS deve sapere l'indirizzo delle tre funzioni 
+;funzioni relative alla gestione della bios_device_IO_table 
 
-;implementazione delle funzioni inserite nell'bios_device_IO_table (la console è già stata inserita nella tabella)
-;Tutte le funzioni prima dell'istruzione RET devono anche settare la flag CY a 0 
-
-;bios_console_output_write_character, bios_console_input_read_character e bios_console_output_get_state sono vengono dedicate alla gestione della console.
-;bios_console_output_write_character
-; A -> carattere ASCII da scrivere
-bios_console_output_write_character:    ;da implementare
-                                        mvi a,$AA
-                                        stc 
-                                        cmc 
-                                        ret 
-
-; A <- carattere ASCII in ingresso
-bios_console_input_read_character:      ;da implementare
-                                        mvi a,$BB 
-                                        stc 
-                                        cmc 
-                                        ret 
-
-;bios_console_output_ready
-; A <- stato della console
-bios_console_get_state:                 ;da implementare
-                                        mvi a,$CC 
-                                        stc 
-                                        cmc 
-                                        ret  
-
-
-;funzioni relative alla gestione della bios_device_IO_table
-
-bios_search_IO_device:              mov b,a 
-                                    lxi d,bios_device_IO_table_end
-                                    lxi h,bios_device_IO_table
-bios_search_IO_device_loop:         mov a,m 
-                                    cmp b 
-                                    jz bios_search_IO_device_search_found
-                                    mvi a,8 
-                                    add l 
-                                    mov l,a 
-                                    mov a,h 
-                                    aci 0 
-                                    mov h,a 
-                                    mov a,e 
-                                    sub l 
-                                    mov a,d 
-                                    sbb h 
-                                    jc bios_search_IO_device_loop 
+bios_IO_device_system_initialize:   lxi h,bios_IO_default_handler
+                                    mvi a,$c3 
+                                    sta bios_selected_IO_device_initialize_address
+                                    sta bios_selected_IO_device_get_state_address
+                                    sta bios_selected_IO_device_set_state_address
+                                    sta bios_selected_IO_device_write_byte_address
+                                    sta bios_selected_IO_device_read_byte_address
+                                    shld bios_selected_IO_device_initialize_address+1
+                                    shld bios_selected_IO_device_get_state_address+1 
+                                    shld bios_selected_IO_device_set_state_address+1
+                                    shld bios_selected_IO_device_write_byte_address+1 
+                                    shld bios_selected_IO_device_read_byte_address+1 
+                                    lda bios_selected_devices_flags
+                                    ani $ff-bios_selected_devices_flags_IO_selected 
+                                    sta bios_selected_devices_flags
                                     ret 
-bios_search_IO_device_search_found: mvi a,7 
-                                    add l 
-                                    mov l,a 
-                                    mov a,h 
-                                    aci 0 
-                                    mov h,a 
-                                    mov b,m 
-                                    dcx h 
-                                    mov c,m 
-                                    dcx h 
-                                    mov d,m 
-                                    dcx h 
-                                    mov e,m 
-                                    dcx h 
-                                    push h 
-                                    mov a,m 
-                                    xthl 
-                                    mov h,a 
-                                    xthl 
-                                    dcx h 
-                                    mov a,m 
-                                    xthl 
-                                    mov l,a 
-                                    xthl 
-                                    dcx h 
-                                    mov a,m 
-                                    pop h 
+
+
+bios_IO_default_handler:            mvi a,bios_IO_device_not_selected
                                     stc 
                                     ret 
 
-bios_IO_device_initialize:          lxi h,0 
-                                    mvi a,$c3 
-                                    sta bios_selected_IO_device_get_state_address
-                                    sta bios_selected_IO_device_write_byte_address
-                                    sta bios_selected_IO_device_read_byte_address
-                                    shld bios_selected_IO_device_get_state_address+1 
-                                    shld bios_selected_IO_device_write_byte_address+1 
-                                    shld bios_selected_IO_device_read_byte_address+1 
-                                    xra a 
-                                    sta bios_selected_IO_device_flags
-                                    ret 
+bios_device_ID_record_dimension                 .equ 14
+bios_device_IO_device_record_name_dimension     .equ 4 
+
+bios_search_IO_device:              lxi d,bios_device_IO_table_end
+                                    lxi h,bios_device_IO_table
+                                    mov b,a 
+                                    mvi c,bios_device_ID_record_dimension
+                                    call unsigned_multiply_byte 
+                                    dad b 
+                                    mov a,l 
+                                    sub e 
+                                    mov a,h 
+                                    sbb d 
+                                    cmc 
+                                    ret
 
 ;bios_select_IO_device viene utilizzata per selezionare il dispositivo desiderato ($00 seleziona la console)
 ;A -> Id del dispositivo 
@@ -197,118 +110,173 @@ bios_select_IO_device:              push b
                                     push d  
                                     push h 
                                     call bios_search_IO_device
-                                    jnc bios_select_IO_device_error
-                                    shld bios_selected_IO_device_get_state_address+1
-                                    xchg 
-                                    shld bios_selected_IO_device_read_byte_address+1 
-                                    mov l,c 
-                                    mov h,b 
-                                    shld bios_selected_IO_device_write_byte_address+1 
-                                    mvi a,bios_selected_IO_device_flags_selected
-                                    sta bios_selected_IO_device_flags
-                                    
+                                    jc bios_select_IO_device_error
+                                    mvi a,bios_device_IO_device_record_name_dimension
+                                    mov a,m 
+                                    sta bios_selected_IO_device_initialize_address+1 
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_initialize_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_get_state_address+1
+                                    inx h  
+                                    mov a,m 
+                                    sta bios_selected_IO_device_get_state_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_set_state_address+1
+                                    inx h  
+                                    mov a,m 
+                                    sta bios_selected_IO_device_set_state_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_read_byte_address+1 
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_read_byte_address+2 
+                                    inx h 
+                                    mov a,m  
+                                    sta bios_selected_IO_device_write_byte_address+1 
+                                    inx h 
+                                    mov a,m  
+                                    sta bios_selected_IO_device_write_byte_address+2
+                                    mvi a,bios_selected_devices_flags_IO_selected
+                                    sta bios_selected_devices_flags
                                     mvi a,bios_operation_ok
-                                    jmp bios_select_IO_device_error_end
+                                    jmp bios_select_IO_device_end
 bios_select_IO_device_error:        mvi a,bios_IO_device_not_found 
-bios_select_IO_device_error_end:    pop h 
+bios_select_IO_device_end:          pop h 
                                     pop d 
                                     pop b 
                                     ret 
 
 
-;bios_get_IO_device_informations restituisce le informazioni sul dispositivo specificato. Se il BIOS esiste, restituisce le seguenti informazioni sul dispositivo:
-;-  tipo di dispositivo (seriale, grafico, tastiera, ...)
-;-  direzionalità (sola lettura, sola scrittura o bidirezionale)
-;Le informazioni vengono assegnate secondo flags e numeri messe in OR in un unico byte (vedi le informazioni sui dispositivi I/O)
+;bios_get_IO_device_informations restituisce le informazioni sul dispositivo specificato. 
 
 ;A -> id del dispositivo 
 ;PSW <- se il dispositivo non è stato trovato assume 1
-;A <- se CY = 1 restituisce l'errore generato, altrimenti restituisce le informazioni sul dispositivo IO
+;A <- se CY = 1 restituisce un errore
+;SP <- se CY = 0 restituisce i bytes che identificano il dispositivo (4 bytes)
 
-bios_get_IO_device_informations:        push b 
-                                        push d 
-                                        push h 
-                                        call bios_search_IO_device
-                                        jc bios_get_IO_device_informations_end
-                                        mvi a,bios_IO_device_not_found 
-                                        stc 
-                                        cmc 
-bios_get_IO_device_informations_end:    cmc 
-                                        pop h 
-                                        pop d 
-                                        pop b 
-                                        ret 
+bios_get_IO_device_informations:            push b 
+                                            push d 
+                                            push h 
+                                            call bios_search_IO_device
+                                            jnc bios_get_IO_device_informations_next 
+                                            mvi a,bios_IO_device_not_found 
+                                            jmp bios_get_IO_device_informations_end
+bios_get_IO_device_informations_next:       push h 
+                                            lxi h,0 
+                                            dad sp 
+                                            xchg 
+                                            lxi h,$ffff-bios_device_IO_device_record_name_dimension+1 
+                                            dad sp
+                                            sphl  
+                                            xchg 
+                                            mvi b,10 
+bios_get_IO_device_informations_sp_shift:   mov a,m 
+                                            stax d 
+                                            inx d 
+                                            inx h 
+                                            dcr b 
+                                            jnz bios_get_IO_device_informations_sp_shift
+                                            pop h 
+                                            mvi b,bios_device_IO_device_record_name_dimension
+bios_get_IO_device_informations_write_info: mov a,m 
+                                            stax d 
+                                            inx d 
+                                            inx h 
+                                            dcr b 
+                                            jnz bios_get_IO_device_informations_write_info
+                                            stc 
+                                            cmc 
+                                            mvi a,bios_operation_ok
+bios_get_IO_device_informations_end:        pop h 
+                                            pop d 
+                                            pop b 
+                                            ret 
 
-;bios_read_selected_device_byte legge il byte del dispositivo selezionato precedentemente
-;A <- byte da leggere 
-;PSW <- cy viene settato ad 1 se il dispositivo non è stato selezionato 
+bios_mass_memory_device_record_dimension                .equ 15 
 
-bios_read_selected_device_byte:         lda bios_selected_IO_device_flags
-                                        ani bios_selected_IO_device_flags_selected
-                                        jz bios_read_selected_device_byte_end
-                                        jmp bios_selected_IO_device_read_byte_address
-bios_read_selected_device_byte_end:     mvi a,bios_IO_device_not_selected 
-                                        stc 
-                                        ret 
+bios_mass_memory_device_record_initialize_position      .equ 0 
+bios_mass_memory_device_record_read_sector_position     .equ 2
+bios_mass_memory_device_record_write_sector_position    .equ 4
+bios_mass_memory_device_record_get_state_position       .equ 6
+bios_mass_memory_device_record_format_position          .equ 8
+bios_mass_memory_device_record_hnum_position            .equ 10
+bios_mass_memory_device_record_tph_position             .equ 11
+bios_mass_memory_device_record_spt_position             .equ 13
+bios_mass_memory_device_record_bps_position             .equ 14
 
-;bios_write_selected_device_byte scrive il byte del dispositivo selezionato precedentemente
-;A -> byte da scrivere 
-;PSW <- cy viene settato ad 1 se il dispositivo non è stato selezionato 
+bios_mass_memory_system_initialize:             lda bios_selected_devices_flags
+                                                ani $ff-bios_selected_devices_flags_head-bios_selected_devices_flags_sector-bios_selected_devices_flags_track
+                                                sta bios_selected_devices_flags
+                                                xra a
+                                                sta bios_mass_memory_vector_address
+                                                sta bios_mass_memory_vector_address+1 
+                                                lxi b,bios_device_disk_table
+                                                lxi d,bios_device_disk_table_end 
+bios_mass_memory_system_initialize_disks:       mov a,c 
+                                                sub e 
+                                                mov a,b 
+                                                sbb d 
+                                                jnc bios_mass_memory_system_initialize_end
+                                                ldax b 
+                                                mov l,a 
+                                                inx b 
+                                                ldax b 
+                                                mov h,a 
+                                                inx b 
+                                                push b 
+                                                push d  
+                                                lxi b,bios_mass_memory_system_initialize_disk_next
+                                                push b 
+                                                pchl 
+bios_mass_memory_system_initialize_disk_next:   pop d 
+                                                pop b 
+                                                mvi a,bios_mass_memory_device_record_dimension-2 
+                                                add c 
+                                                mov c,a 
+                                                mov a,b 
+                                                aci 0 
+                                                mov b,a 
+                                                jmp bios_mass_memory_system_initialize_disks
+bios_mass_memory_system_initialize_end:         
+                                                ret 
 
-bios_write_selected_device_byte:        lda bios_selected_IO_device_flags
-                                        ani bios_selected_IO_device_flags_selected
-                                        jz bios_write_selected_device_byte_end
-                                        jmp bios_selected_IO_device_write_byte_address
-bios_write_selected_device_byte_end:    mvi a,bios_IO_device_not_selected 
-                                        stc 
-                                        ret
-
-;bios_get_selected_device_state restituisce lo stato del dispositivo selezionato precedentemente
-;A <- flags del dispositivo 
-;PSW <- cy viene settato ad 1 se il dispositivo non è stato selezionato 
-
-bios_get_selected_device_state:         lda bios_selected_IO_device_flags
-                                        ani bios_selected_IO_device_flags_selected
-                                        jz bios_get_selected_device_state_end
-                                        jmp bios_selected_IO_device_get_state_address
-bios_get_selected_device_state_end:     mvi a,bios_IO_device_not_selected 
-                                        stc 
-                                        ret
-
-;bios_cold_boot esegue un test e un reset della memoria ram e procede con l'inizializzazione delle risorse hardware. Tra le operazioni che deve eseguire troviamo quindi:
-;- inizializzazione e test (facoltativo) della ram 
-;- inzializzazione dei dispositivi per interfacciare la console
-;- inzializzazione dei dispositivi per la gestione delle memoria di massa
-
-bios_cold_boot:         call bios_IO_device_initialize
-                        ;da implementare
-                        ret 
-
-;bios_warm_boot esegue delle operazioni simili a bios_warm_boot escludendo il test e l'inizializzazione della ram. Prevede quindi:
-;- inzializzazione dei dispositivi per interfacciare la console
-;- inzializzazione dei dispositivi per la gestione delle memoria di massa
-;tuttavia, è possibile specificare operazioni diverse per la gestione dei dispositivi IO, in caso si desidera ad esempio lasciare invariato il setup dei dispositivi
-bios_warm_boot:         call bios_IO_device_initialize
-                        ;da implementare
-                        ret 
-
-
-;le prossime funzioni servono per la gestione della memoria di massa. Troviamo quindi le seguente funzioni di selezione:
-;-  bios_mass_memory_select_drive seleziona il drive, restituisce l'esito dell'operazione e le informazioni sul dispositivo selezionato. 
-;   Si possno gestire fino a 25 dispositivi
-;-  bios_mass_memory_select_sector seleziona il settore nella traccia desiderato nella memoria di massa (gia selezionata in precedenza) e restituisce l'esito dell'operazione.
-;   Possono essere gestiti fino a 256 settori in un'unica traccia
-;-  bios_mass_memory_select_track seleziona la traccia desiderata nella memoria di massa (gia selezionata in precedenza) e restituisce l'esito dell'operazione.
-;   Possono essere gestite fino a 65536 tracce per testina
-;-  bios_mass_memory_select_head seleziona la testina desiderata nella memoria di massa (gia selezionata in precedenza) e restituisce l'esito dell'operazione.
-;   Possono essere gestite fino a 256 testine 
-
-;bios_mass_memory_select_drive
-; A -> dispositivo da selezionare (sono diponibili 25 identificativi da $41 a $5A)
-; A <- esito dell'operazione
-
-bios_mass_memory_select_drive:  ;da implementare
-                                ret 
+bios_mass_memory_select_drive:              push h 
+                                            push d 
+                                            push b 
+                                            cpi $41 
+                                            jnc bios_mass_memory_select_drive_next 
+bios_mass_memory_Select_drive_error:        mvi a,bios_bad_argument 
+                                            jmp bios_mass_memory_select_drive_end
+bios_mass_memory_select_drive_next:         cpi $5b 
+                                            jnc bios_mass_memory_select_drive_error 
+                                            sui $41
+                                            mov b,a 
+                                            mvi c,bios_mass_memory_device_record_dimension
+                                            lxi h,bios_device_disk_table
+                                            lxi d,bios_device_disk_table_end 
+                                            call unsigned_multiply_byte
+                                            dad b 
+                                            mov a,l 
+                                            sub e 
+                                            mov a,h 
+                                            sbb d 
+                                            jc bios_mass_memory_select_drive_next2
+                                            mvi a,bios_mass_memory_device_not_found
+                                            jmp bios_mass_memory_select_drive_end
+bios_mass_memory_select_drive_next2:        shld bios_mass_memory_vector_address
+                                            lda bios_selected_devices_flags
+                                            ani $ff-bios_selected_devices_flags_head-bios_selected_devices_flags_sector-bios_selected_devices_flags_track
+                                            sta bios_selected_devices_flags
+                                            mvi a,bios_operation_ok
+bios_mass_memory_select_drive_end:          pop b 
+                                            pop d 
+                                            pop h 
+                                            ret 
 
 ;bios_mass_memory_get_bps restituisce il numero di bytes per settore 
 
@@ -316,77 +284,348 @@ bios_mass_memory_select_drive:  ;da implementare
 ;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
 ;PSW <- CY assume 1 se si è verificato un errore 
 
-bios_mass_memory_get_bps:           ;da implementare
-                                    ret 
+bios_mass_memory_get_bps:       push h 
+                                push d 
+                                lhld bios_mass_memory_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_mass_memory_get_bps_next 
+                                mvi a,bios_mass_memory_device_not_selected 
+                                stc 
+                                jmp bios_mass_memory_get_bps_end    
+bios_mass_memory_get_bps_next:  lxi d,bios_mass_memory_device_record_bps_position
+                                dad d 
+                                mov a,m 
+                                stc 
+                                cmc 
+bios_mass_memory_get_bps_end:   pop d 
+                                pop h             
+                                ret 
 
 ;bios_mass_memory_get_spt restituisce il numero di settori per traccia (00 se il disco non è stato selezionato)
 ;A <- numero di settori per traccia
 ;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
 ;PSW <- CY assume 1 se si è verificato un errore 
-
-bios_mass_memory_get_spt:           ;da implementare 
-                                    ret 
+bios_mass_memory_get_spt:       push h 
+                                push d 
+                                lhld bios_mass_memory_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_mass_memory_get_spt_next 
+                                mvi a,bios_mass_memory_device_not_selected 
+                                stc 
+                                jmp bios_mass_memory_get_spt_end    
+bios_mass_memory_get_spt_next:  lxi d,bios_mass_memory_device_record_spt_position
+                                dad d 
+                                mov a,m 
+                                stc 
+                                cmc 
+bios_mass_memory_get_spt_end:   pop d 
+                                pop h             
+                                ret 
 
 ;bios_mass_memory_get_tph restituisce il numero di tracce per testina 
 ;HL <- numero di settori per traccia (0000 se il disco non è stato selezionato)
 ;A <- ritorna il codice dell'errore se non è stato selezionato un dispositivo
 ;PSW <- CY assume 1 se si è verificato un errore 
-bios_mass_memory_get_tph:           ;da implementare
-                                    ret 
-
+bios_mass_memory_get_tph:       push d 
+                                lhld bios_mass_memory_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_mass_memory_get_tph_next 
+                                mvi a,bios_mass_memory_device_not_selected 
+                                lxi h,0 
+                                stc 
+                                jmp bios_mass_memory_get_tph_end    
+bios_mass_memory_get_tph_next:  lxi d,bios_mass_memory_device_record_tph_position
+                                dad d 
+                                mov e,m 
+                                inx h 
+                                mov d,m 
+                                xchg 
+                                stc 
+                                cmc 
+bios_mass_memory_get_tph_end:   pop d             
+                                ret 
 
 ;bios_mass_memory_get_head_number restituisce il numero di testine del disco (00 se il disco non è stato selezionato)
 ;A <- numero di testine
 ;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
 ;PSW <- CY assume 1 se si è verificato un errore 
-bios_mass_memory_get_head_number:   ;da implementare
-                                    ret 
+bios_mass_memory_get_head_number:       push h 
+                                        push d 
+                                        lhld bios_mass_memory_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_mass_memory_get_head_number_next 
+                                        mvi a,bios_mass_memory_device_not_selected 
+                                        stc 
+                                        jmp bios_mass_memory_get_head_number_end    
+bios_mass_memory_get_head_number_next:  lxi d,bios_mass_memory_device_record_hnum_position
+                                        dad d 
+                                        mov a,m 
+                                        stc 
+                                        cmc 
+bios_mass_memory_get_head_number_end:   pop d 
+                                        pop h             
+                                        ret 
 
 ;bios_mass_memory_select_sector
 ; A -> settore da selezionare 
 ; A <- esito dell'operazione
-bios_mass_memory_select_sector: ;da implementare
-                                ret 
+bios_mass_memory_select_sector:         push h
+                                        push d
+                                        mov e,a 
+                                        lhld bios_mass_memory_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_mass_memory_select_sector_next 
+                                        mvi a,bios_mass_memory_device_not_selected
+                                        jmp bios_mass_memory_select_sector_end
+bios_mass_memory_select_sector_next:    mvi a,bios_mass_memory_device_record_spt_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        cmp m 
+                                        jc bios_mass_memory_select_sector_ok 
+                                        mvi a,bios_mass_memory_number_overflow 
+                                        jmp bios_mass_memory_select_sector_end 
+bios_mass_memory_select_sector_ok:      sta bios_mass_memory_selected_sector
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_sector 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_mass_memory_select_sector_end:     pop d 
+                                        pop h 
+                                        ret 
 
 ;bios_mass_memory_select_track
 ; HL -> traccia da selezionare
 ; A <- esito dell'operazione
-bios_mass_memory_select_track:  ;da implementare
-                                ret 
+bios_mass_memory_select_track:          push h
+                                        push d
+                                        xchg 
+                                        lhld bios_mass_memory_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_mass_memory_select_track_next 
+                                        mvi a,bios_mass_memory_device_not_selected
+                                        jmp bios_mass_memory_select_track_end
+bios_mass_memory_select_track_next:     mvi a,bios_mass_memory_device_record_tph_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        sub l 
+                                        mov a,d 
+                                        sbb h 
+                                        jc bios_mass_memory_select_track_ok 
+                                        mvi a,bios_mass_memory_number_overflow 
+                                        jmp bios_mass_memory_select_track_end 
+bios_mass_memory_select_track_ok:       xchg 
+                                        shld bios_mass_memory_selected_track
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_track 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_mass_memory_select_track_end:      pop d 
+                                        pop h 
+                                        ret  
 
 ;bios_mass_memory_select_head
 ; A -> testina da selezionare
 ; A <- esito dell'operazione
-bios_mass_memory_select_head:   ;da implementare
-                                ret 
+bios_mass_memory_select_head:           push h
+                                        push d
+                                        mov e,a 
+                                        lhld bios_mass_memory_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_mass_memory_select_head_next 
+                                        mvi a,bios_mass_memory_device_not_selected
+                                        jmp bios_mass_memory_select_head_end
+bios_mass_memory_select_head_next:      mvi a,bios_mass_memory_device_record_hnum_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        cmp m 
+                                        jc bios_mass_memory_select_head_ok 
+                                        mvi a,bios_mass_memory_number_overflow 
+                                        jmp bios_mass_memory_select_head_end 
+bios_mass_memory_select_head_ok:        sta bios_mass_memory_selected_head 
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_head 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_mass_memory_select_head_end:       pop d 
+                                        pop h 
+                                        ret 
+
 
 ;bios_mass_memory_status restituisce lo stato della memoria di massa
 ;PSW <- CY viene settato a 1 se si è verificto un errore 
 ; A <- se CY=1 restituisce l'errore, altrimenti restituisce lo stato del dispositivo 
-bios_mass_memory_status:    ;da implementare
-                            ret 
+bios_mass_memory_status:            push h 
+                                    push d 
+                                    push b 
+                                    lhld bios_mass_memory_vector_address
+                                    mov a,l 
+                                    ora h 
+                                    jnz bios_mass_memory_status_next 
+                                    mvi a,bios_mass_memory_device_not_selected
+                                    stc 
+                                    jmp bios_mass_memory_status_end
+bios_mass_memory_status_next:       lxi d,bios_mass_memory_device_record_get_state_position
+                                    dad d
+                                    mov e,m 
+                                    inx h 
+                                    mov d,m 
+                                    xchg 
+                                    lxi d,bios_mass_memory_status_end
+                                    push d 
+                                    pchl  
+bios_mass_memory_status_end:        pop b 
+                                    pop d 
+                                    pop h 
+                                    ret 
 
 ;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.
 ;-  bios_mass_memory_write_sector scrive i dati nel settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo in memoria dei dati da scrivere
 ;-  bios_mass_memory_read_sector legge i dati dal settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo della ram per indicare dove scrivere i dati ricevuti
-;-  bios_mass_memory_format_drive formatta l'intero disco, sovrascrivendo tutti i dati e restituisce l'esito dell'operazione
+;-  bios_mass_memory_format_drive formatta l'intero disco sovrascrivendo tutti i dati e restituisce l'esito dell'operazione
 
 ;bios_mass_memory_write_sector
 ; HL -> indirizzo in memoria 
 ; A <- esito dell'operazione
-bios_mass_memory_write_sector:      ;da implementare
-                                    ret 
+; HL <- indirizzo di memoria dopo l'esecuzione
+
+bios_mass_memory_write_sector:              push b 
+                                            push d 
+                                            push h 
+                                            lhld bios_mass_memory_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_mass_memory_write_sector_next 
+                                            mvi a,bios_mass_memory_device_not_selected
+                                            pop h 
+                                            jmp bios_mass_memory_write_sector_end
+bios_mass_memory_write_sector_next:         lda bios_selected_devices_flags              
+                                            xri $ff 
+                                            ani bios_selected_devices_flags_head+bios_selected_devices_flags_sector+bios_selected_devices_flags_track
+                                            ora a 
+                                            jz bios_mass_memory_write_sector_next2 
+                                            mvi a,bios_mass_memory_values_not_setted 
+                                            pop h 
+                                            jmp bios_mass_memory_write_sector_end
+bios_mass_memory_write_sector_next2:        lxi d,bios_mass_memory_device_record_write_sector_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_mass_memory_write_sector_end
+                                            pop psw  
+                                            push d 
+                                            push psw  
+                                            push d 
+                                            lda bios_mass_memory_selected_head 
+                                            mov b,a 
+                                            lda bios_mass_memory_selected_sector
+                                            mov c,a
+                                            lda bios_mass_memory_selected_track
+                                            mov e,a 
+                                            lda bios_mass_memory_selected_track+1 
+                                            xthl 
+                                            ret   
+bios_mass_memory_write_sector_end:          pop d  
+                                            pop b 
+                                            ret 
 
 ; bios_mass_memory_read_sector
 ; HL -> indirizzo in memoria
 ; A <- esito dell'operazione
-bios_mass_memory_read_sector:       ;da implementare
-                                    ret 
+; HL <- indirizzo di memoria dopo l'esecuzione
+bios_mass_memory_read_sector:               push b 
+                                            push d 
+                                            push h 
+                                            lhld bios_mass_memory_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_mass_memory_read_sector_next 
+                                            mvi a,bios_mass_memory_device_not_selected
+                                            pop h 
+                                            jmp bios_mass_memory_read_sector_end
+bios_mass_memory_read_sector_next:          lda bios_selected_devices_flags                        
+                                            xri $ff 
+                                            ani bios_selected_devices_flags_head+bios_selected_devices_flags_sector+bios_selected_devices_flags_track
+                                            ora a 
+                                            
+                                            jz bios_mass_memory_read_sector_next2 
+                                            mvi a,bios_mass_memory_values_not_setted 
+                                            pop h 
+                                            jmp bios_mass_memory_read_sector_end
+bios_mass_memory_read_sector_next2:         lxi d,bios_mass_memory_device_record_read_sector_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_mass_memory_read_sector_end
+                                            pop psw  
+                                            push d 
+                                            push psw 
+                                            push d 
+                                            lda bios_mass_memory_selected_head 
+                                            mov b,a 
+                                            lda bios_mass_memory_selected_sector
+                                            mov c,a
+                                            lda bios_mass_memory_selected_track
+                                            mov e,a 
+                                            lda bios_mass_memory_selected_track+1 
+                                            mov d,a  
+                                            xthl 
+                                            ret  
+bios_mass_memory_read_sector_end:           pop d  
+                                            pop b 
+                                            ret 
 
 ;bios_mass_memory_format_drive
 ; A <- esito dell'operazione
-bios_mass_memory_format_drive:  ;da implementare
-                                ret 
+bios_mass_memory_format_drive:              push h 
+                                            push d 
+                                            push b 
+                                            lhld bios_mass_memory_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_mass_memory_format_drive_next 
+                                            mvi a,bios_mass_memory_device_not_selected
+                                            stc 
+                                            jmp bios_mass_memory_format_drive_end
+bios_mass_memory_format_drive_next:         lxi d,bios_mass_memory_device_record_format_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_mass_memory_format_drive_end 
+                                            push d 
+                                            pchl 
+bios_mass_memory_format_drive_end:          pop b 
+                                            pop d 
+                                            pop h 
+                                            ret  
+
+
+
+;----- data transfer ----- 
 
 ;opzionalmente può essere inserito un dispositivo DMA per gestire il flusso dati CPU/IO in modo più efficente. Il dispositivo DMa può essere inizializzato nelle funzioni cold_boot e warm_boot e i trasferimenti
 ;possono essere avviati e gestiti tramite le funzioni bios_mass_memory_write_sector e bios_mass_memory_read_sector.
@@ -414,8 +653,7 @@ bios_memory_transfer:       mov a,b
 bios_memory_transfer_end:   mvi a,bios_operation_ok 
                             ret 
 
-;bios_memory_transfer_reverse viene utilizzata per la copia di grandi quantità di dati all'interno della memoria. Dato che alcuni dispositivi DMA possono gestire il trasferimento mem-to-mem si preferisce mantenere 
-;questa funzione nel bios. Nel caso non sia presente un dispositivo DMA o non sia disponibile la funzionalità, è possibile implementare una copoa software dei dati
+;bios_memory_transfer_reverse ha la funzione analoga di bios_memory_transfer ma trasferisce i dati decrementando a partire dall'indirizzo fornito
 ; BC -> numero di bytes da trasferire 
 ; DE -> indirizzo sorgente
 ; HL -> indirizzo destinazione
@@ -437,9 +675,165 @@ bios_memory_transfer_reverse:       mov a,b
 bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok 
                                     ret 
 
-;l'implementazione della funzione può essere utilizzato in tutte le implementazioni. Se viene installato un dispositivo DMA può essere modificata secondo le sue caratteristiche
 
-BIOS_layer_end:
+;----- device drivers ----- 
+
+;----- dispositivi I/O -----
+;I dispositivi I/O hanno un identificativo formato da un byte che può assumere un numero da $00 a $ff.
+;l'id $00 viene sempre assegnato alla console base, che è sempre bidirezionale e viene utilizzato come dispositivo basilare di input/output dalla shell del sistema. 
+
+;Ad ogni Id vengono assegnte le seguenti funzioni:
+;- la funzione bios_get_selected_device_state restituisce le informazioni sulla disponibilità di lettura o scrittura di un byte sul dispositivo tramite un byte che contiene delle flags
+;- la funzione bios_get_IO_device_informations restituisce le informazioni sulla tipologia del dispositivo sempre tramite un byte contenente delle flags
+;- la funzione bios_read_selected_device_byte riceve un byte al dispositivo
+;- la funzione bios_write_selected_device_byte invia un byte al dispositivo
+;- la funzione bios_initialize_selected_device reinizializza il dispositivo 
+;- la funzione bios_set_selected_device_state modifica le impostazioni del dispositivo 
+
+;per avere una velocità computazionale migliore nel scegliere i dispositivi viene utilizzata una tabella dati in cui ogni record contiene:
+
+;-  quattro bytes ASCII che identificano il tipo di dispositivo
+;-  due bytes che contengono l'indirizzo della funzione bios_device_initialize_relativo
+;   questa funzione inizializza il dispositivo I/O. I registri che vengono utilizzati devono essere ripristinati. 
+;   La funzione non riceve in ingresso nessun parametro.
+
+;-  due bytes che contengono l'indirizzo della funzione bios_get_selected_device_state relativa 
+;   La funzione restituisce un byte in cui ogni bit contiene un'informazione sul dispositivo. Ad esempio, nel caso di una console di base:
+    ;bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
+    ;bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
+    ;bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
+    ;quindi la funzione restituisce 
+    ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_set_selected_device_state relativa 
+;   La funzione invia al dispositivo un byte in cui ogni bit del dispositivo contiene un'impostazione specifica.
+;   A -> impostazioni 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_read_selected_device_byte
+;   La funzione legge un dato dal dispositivo. Per esempio, nel caso della console di base il byte letto è un carattere ASCII inserito dalla tastiera
+;   A <- dato letto 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_write_selected_device_byte
+;   La funzione invia un dato al dispositivo. Per esempio, nel caso della console di base, il byte da inviare è un carattere ASCII che verrà stampato sullo schermo. 
+;   A -> dato da inviare 
+;   CY <- '0'
+
+;Al termine dell'esecuzione, tutte le funzioni devono impostare CY a '0' per indicare l'esecuzione completa. 
+
+;Nella tabella deve essere sempre registrato almeno un dispositivo di tipo "BTTY", che identifica la console basilare del sistema. 
+
+;per aggiungere un dispositivo basta inserire un campo tramite la macro .text "tipo" e i relativi indirizzi alle funzioni 
+bios_device_IO_table:       .text "BTTY"
+                            .word bios_console_initialize 
+                            .word bios_console_get_state
+                            .word bios_console_set_state 
+                            .word bios_console_input_read_character
+                            .word bios_console_output_write_character
+
+                            ;inserisci qui il vettore 
+bios_device_IO_table_end:                                                                                               
+
+;viene già inserito un dispositivo di tipo BTTY da implementare tramite le seguenti 5 funzioni:
+;bios_console_initialize inizializza la conaole 
+bios_console_initialize:                stc 
+                                        cmc 
+                                        ret 
+
+;bios_console_output_write_character
+; A -> carattere ASCII da scrivere
+bios_console_output_write_character:    stc 
+                                        cmc 
+                                        ret 
+
+; A <- carattere ASCII in ingresso
+bios_console_input_read_character:      stc 
+                                        cmc 
+                                        ret 
+
+;bios_console_output_ready
+; A <- stato della console
+bios_console_get_state:                 stc 
+                                        cmc 
+                                        ret 
+
+;bios_console_set_state (funzione che non ha bisogno di essere implementata)
+bios_console_set_state:                 stc 
+                                        cmc 
+                                        ret 
+
+;---- disk devices ----- 
+;come per i device drivers, è possibile registrare più dispositivi per la gestione dei dischi 
+;ongni record della tabella viene assegnato a un identificativo del disco, partendo dal carattere ASCII "A" fino a "Z". Un record contiene:
+;-  due bytes che contengono l'indirizzo per la funzione bios_mass_memory_initialize relativa 
+;   Questa funzione inizializza ll dispositivo. Viene richiamata una volta all'avvio del computer. 
+
+;-  due bytes che contengono l'indirizzo per la funzione bios_mass_memory_read_sector relativa 
+;   Questa funzione posiziona la testina del disco alla posizione fornita e procede con il caricamento del settore nella RAM all'indirizzo specificato. 
+;   Alla fine dell'esecuzione deve restituire l'indirizzo RAM incrementato della dimensione del settore caricato 
+;   B -> numero di testina 
+;   C -> numero di settore nella traccia 
+;   DE -> numero di traccia nella testina 
+;   HL -> indirizzo di caricamento dei dati 
+
+;   A <- esito dell'operazione
+;   HL <- indirizzo incrementato
+
+;-  due bytes che contengono l'indirizzo per la funzione bios_mass_memory_write_sector relativa 
+;   Questa funzione posiziona la testina del disco alla posizione fornita e procede con il caricamento dei dati dalla RAM all'indirizzo specificato al settore selezionato.
+;   Alla fine dell'esecuzione deve restituire l'indirizzo RAM incrementato della dimensione del settore caricato 
+;   B -> numero di testina 
+;   C -> numero di settore nella traccia 
+;   DE -> numero di traccia nella testina 
+;   HL -> indirizzo di caricamento dei dati 
+
+;   A <- esito dell'operazione
+;   HL <- indirizzo incrementato
+
+;-  due bytes che contengono l'indirizzo per la funzione bios_mass_memory_get_state relativa 
+;   Questa funzione restituisce lo stato del dispositivo sotto forma di byte. La funzione deve restituire le flags nel formato riconosciuto dal sistema operativo.
+;-  due bytes che contengono l'indirizzo per la funzione bios_mass_memory_format_drive relativa 
+;   Questa funzione viene utilizzata per formattare la memoria di massa. La formattazione deve cancellare tutti i dati presenti nel disco ed, eventualmente, sostituirli con un valore predefinito.
+;   A <- esito dell'operazione
+
+;-  un byte che contiene il numero di testine del disco 
+;-  due bytes che contiene il numero di tracce per testina del disco 
+;-  un byte che contiene il numero di settori per traccia del disco 
+;-  un byte che contiene il numero di bytes per settore (codificato in multipli di 128bytes)
+
+;Le funzioni possono anche non preservare il contenuto dei registri che utilizzano ma, tuttavia, devono rispettare le convenzioni sull'output.
+;le coordinate del settore fornite nelle funzioni bios_mass_memory_write_sector e bios_mass_memory_read_sector sono sempre verificate secondo i parametri inseriti nel record del dispositivo.
+
+bios_device_disk_table:         .word bios_default_disk_initialize
+                                .word bios_default_disk_read_sector
+                                .word bios_default_disk_write_sector
+                                .word bios_default_disk_get_state
+                                .word bios_default_disk_format_drive 
+                                .byte 0
+                                .word 0
+                                .byte 0 
+                                .byte 0 
+
+                                ;inserisci i dispositivi qui 
+bios_device_disk_table_end: 
+
+;Nella tabella è già stato inserito un record di un dispositivo da implementare.
+bios_default_disk_initialize:   ret
+
+bios_default_disk_read_sector:  ret 
+
+bios_default_disk_write_sector: ret 
+
+bios_default_disk_get_state:    ret 
+
+bios_default_disk_format_drive: ret 
+
+
+
+
+BIOS_layer_end:     
 .print "Space left in BIOS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
 .memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
 .print "BIOS load address ->",BIOS
