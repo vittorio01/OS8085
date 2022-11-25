@@ -123,6 +123,8 @@ rst1_address                .equ    $0008
 rst2_address                .equ    $0010 
 rst3_address                .equ    $0018
 rst4_address                .equ    $0020
+rst5_address                .equ    $0028 
+rst6_address                .equ    $0030
 
 msi_HL_backup_address               .equ reserved_memory_start+$0050
 msi_DE_backup_address               .equ reserved_memory_start+$0052
@@ -156,6 +158,7 @@ msi_system_calls_id_table:      .word msi_system_call_select_IO_device
                                 .word msi_system_call_mass_memory_get_head_number 
                                 .word msi_system_call_mass_memory_write_sector 
                                 .word msi_system_call_mass_memory_read_sector 
+                                .word msi_system_call_mass_memory_format
 
                                 .word msi_system_call_get_free_ram_bytes  
                                 .word msi_system_call_create_temporary_memory_segment
@@ -205,7 +208,7 @@ msi_system_calls_id_table:      .word msi_system_call_select_IO_device
 msi_system_calls_id_table_end:  
 
 msi_cold_start:                 lxi sp,stack_memory_start
-                                call bios_cold_boot
+                                call bios_system_start
                                 call mms_low_memory_initialize
                                 call fsm_init
                                 call msi_interrupt_reset      
@@ -219,7 +222,7 @@ msi_interrupt_reset:            mvi a,$c3
                                 sta rst2_address
                                 sta rst3_address 
                                 sta rst4_address 
-                                lxi h,msi_warm_reset_handler
+                                lxi h,msi_console_reset_handler
                                 shld rst0_address+1 
                                 lxi h,msi_main_system_calls_handler
                                 shld rst1_address+1 
@@ -232,8 +235,7 @@ msi_interrupt_reset:            mvi a,$c3
                                 ret 
 
 ;msi_warm_reset_handler si occupa di eseguire il warm reset
-msi_warm_reset_handler:             call bios_warm_boot 
-                                    call mms_low_memory_initialize 
+msi_console_reset_handler:          call mms_low_memory_initialize 
                                     call fsm_init 
                                     call msi_interrupt_reset 
                                     mvi a,0 
@@ -384,6 +386,37 @@ msi_IO_get_state_system_call_handler:       shld msi_HL_backup_address
                                             lhld msi_HL_backup_address  
                                             jmp msi_system_calls_return 
 
+;msi_IO_get_state_system_call_handler viene richiamata tramite l'interrupt rst4 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
+;PSW    <- CY viene settato ad 1 se si è verificato un errore.
+;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce lo stato del dispositivo IO
+
+msi_IO_set_state_system_call_handler:       shld msi_HL_backup_address
+                                            pop h 
+                                            shld msi_PC_backup_address
+                                            lxi h,0 
+                                            dad sp 
+                                            shld msi_SP_backup_address
+                                            lxi sp,stack_memory_start
+                                            call bios_set_selected_device_state
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return 
+
+;msi_IO_get_state_system_call_handler viene richiamata tramite l'interrupt rst5 e legge un byte dal dispositivo IO selezionato precedentemente con rst1 
+;PSW    <- CY viene settato ad 1 se si è verificato un errore.
+;A      <- se CY = 1 ritorna l'errore generato, altrimenti restituisce lo stato del dispositivo IO
+
+msi_IO_initialize_system_call_handler:      shld msi_HL_backup_address
+                                            pop h 
+                                            shld msi_PC_backup_address
+                                            lxi h,0 
+                                            dad sp 
+                                            shld msi_SP_backup_address
+                                            lxi sp,stack_memory_start
+                                            call bios_initialize_selected_device 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return 
+
+
 ;implementazione delle system calls standard rst1 
 
 ;msi_system_call_select_IO_device permette di selezionare il dispositivo IO dal BIOS. 
@@ -411,10 +444,33 @@ msi_system_call_select_IO_device_end:       lhld msi_BC_backup_address
 ;msi_system_call_get_IO_device_informations restituisce le informazioni sul dispositivo IO
 ;A -> ID del dispositivo IO 
 ;PSW <- se il dispositivo non esiste CY viene settato ad 1
-;A <- se CY = 1 restituisce l'errore generato, altrimenti restituisce le informazioni sul dispositivo 
+;A <- se CY = 1 restituisce l'errore generato
+;SP <- se CY = 0 restituisce i 4 bytes dell'identificativo
 msi_system_call_get_IO_device_informations:         lda msi_PSW_backup_address+1
                                                     call bios_get_IO_device_informations
-                                                    lhld msi_BC_backup_address
+                                                    jc msi_system_call_get_IO_device_informations_end
+                                                    mvi b,4
+                                                    lhld msi_SP_backup_address
+                                                    mov a,l 
+                                                    sub b 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    sbi 0 
+                                                    mov h,a 
+                                                    shld msi_SP_backup_address
+                                                    xchg 
+                                                    lxi h,0 
+                                                    dad sp 
+msi_system_call_get_IO_device_informations_copy:    mov a,m 
+                                                    stax d  
+                                                    inx d 
+                                                    inx h 
+                                                    dcr b 
+                                                    jnz msi_system_call_get_IO_device_informations_copy
+                                                    mvi a,bios_operation_ok
+                                                    stc 
+                                                    cmc 
+msi_system_call_get_IO_device_informations_end:     lhld msi_BC_backup_address
                                                     mov c,l 
                                                     mov b,h 
                                                     lhld msi_DE_backup_address
@@ -666,6 +722,32 @@ msi_system_call_mass_memory_read_sector_end:        lhld msi_BC_backup_address
                                                     lhld msi_HL_backup_address
                                                     jmp msi_system_calls_return
 
+;msi_system_call_mass_memory_format esegue la formattazione hardware al disco selezionato 
+;A <- esito dell'operazione 
+;PSW <- se si è verificato un errore CY viene settato a 1 
+msi_system_call_mass_memory_format:         lda msi_current_program_flags
+                                            ani msi_current_program_permissions
+                                            jnz msi_system_call_mass_memory_format_next 
+                                            mvi a,msi_current_program_permissions_error
+                                            stc 
+                                            jmp msi_system_call_mass_memory_format_end
+msi_system_call_mass_memory_format_next:    call bios_mass_memory_format_drive 
+                                            cpi bios_operation_ok
+                                            jnz msi_system_call_mass_memory_format_error
+                                            mvi a,msi_operation_ok
+                                            stc 
+                                            cmc 
+                                            jmp msi_system_call_mass_memory_format_end
+msi_system_call_mass_memory_format_error:   stc 
+msi_system_call_mass_memory_format_end:     lhld msi_BC_backup_address
+                                            mov c,l 
+                                            mov b,h 
+                                            lhld msi_DE_backup_address
+                                            xchg 
+                                            lhld msi_HL_backup_address  
+                                            jmp msi_system_calls_return 
+
+
 ;msi_system_call_get_free_ram_bytes restituisce il numero di bytes disponibili nella RAM 
 ;DE <- bytes disponibili 
 msi_system_call_get_free_ram_bytes:             call mms_free_low_ram_bytes
@@ -743,7 +825,6 @@ msi_system_call_select_temporary_memory_segment:        lda msi_PSW_backup_addre
                                                         call mms_get_selected_segment_ID
                                                         mov c,a 
                                                         mov a,b 
-                                                        
                                                         call mms_select_low_memory_data_segment
                                                         cpi mms_operation_ok
                                                         jnz msi_system_call_select_temporary_memory_segment_error 
@@ -1325,10 +1406,8 @@ msi_system_call_set_system_file:            call msi_selected_segment_backup
                                             jmp msi_system_call_set_system_file_end
 msi_system_call_set_system_file_next:       call fsm_get_selected_file_header_flags
                                             jc msi_system_call_set_system_file_end
-                                            
                                             ori fsm_header_system_bit
                                             call fsm_set_selected_file_header_flags
-                                            
                                             cpi fsm_operation_ok
                                             jnz msi_system_call_set_system_file_error
                                             mvi a,msi_operation_ok
@@ -1361,7 +1440,6 @@ msi_system_call_unset_system_file_next:     call fsm_get_selected_file_header_fl
                                             jc msi_system_call_unset_system_file_end
                                             ani $ff-fsm_header_system_bit
                                             call fsm_set_selected_file_header_flags
-                                           
                                             cpi fsm_operation_ok
                                             jnz msi_system_call_unset_system_file_error
                                             mvi a,msi_operation_ok
@@ -1393,7 +1471,6 @@ msi_system_call_read_only_file_next:        call fsm_get_selected_file_header_fl
                                             jc msi_system_call_read_only_file_end
                                             ori fsm_header_readonly_bit
                                             call fsm_set_selected_file_header_flags
-                                            
                                             cpi fsm_operation_ok
                                             jnz msi_system_call_read_only_file_error
                                             mvi a,msi_operation_ok
@@ -2033,37 +2110,17 @@ msi_sheel_error_code_received_message   .text "Program exited with code: "
 msi_sheel_arrow:                        .text ":/> "
 
 msi_sheel_startup:                  push psw 
-                                    mvi a,$03 
-                                    out 21  
-                                    lxi b,$ffff 
-                                    push b 
-                                    lxi b,$FFFF
-                                    push b 
-                                    lxi b,$1111 
-                                    lxi d,$2222 
-                                    lxi h,$3333
-                                    call unsigned_convert_hex_bcd_long 
-                                    pop h 
-                                    pop d 
-                                    pop b 
-                                    hlt 
-
-                                    xra a  
-                                    sta msi_sheel_input_buffer_id
-                                    sta msi_sheel_input_buffer_head 
-                                    sta msi_sheel_console_input_port
-                                    mvi b,$41 
-msi_sheel_start_disk_search:        mov a,b 
-                                    call fsm_select_disk
-                                    cpi fsm_operation_ok
-                                    jz msi_sheel_start_disk_search_end 
-                                    inr b 
-                                    mvi a,$5A 
-                                    cmp b 
-                                    jnz msi_sheel_start_disk_search
-                                    mvi a,0 
-                                    sta msi_sheel_default_disk 
-msi_sheel_start_disk_search_end:    pop psw
+                                    mvi a,$41 
+                                    call bios_mass_memory_select_drive
+                                    call bios_mass_memory_format_drive
+                                    mvi a,0
+                                    call bios_mass_memory_select_head
+                                    mvi a,2 
+                                    call bios_mass_memory_select_sector
+                                    lxi h,2 
+                                    call bios_mass_memory_select_track 
+                                    lxi h,$3400 
+                                    call bios_mass_memory_write_sector
                                     hlt 
 
 ;msi_sheel_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
@@ -2186,9 +2243,6 @@ msi_sheel_ascii_character:          cpi $20
                                     cpi $7e 
                                     cmc 
                                     ret                  
-
-
-
 
 MSI_layer_end:
 .print "Space left in MSI layer ->",MSI_dimension-MSI_layer_end+MSI 

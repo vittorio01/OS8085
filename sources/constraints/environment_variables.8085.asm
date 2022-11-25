@@ -9,15 +9,17 @@ msi_execution_code_mark                 .equ %11000000
 bios_operation_ok                       .equ $ff 
 
 
-bios_IO_device_not_found                .equ bios_execution_code_mark+$01 
-bios_IO_device_not_selected             .equ bios_execution_code_mark+$02 
-bios_mass_memory_device_not_found       .equ bios_execution_code_mark+$03
-bios_mass_memory_device_not_selected    .equ bios_execution_code_mark+$04
-bios_mass_memory_bad_argument           .equ bios_execution_code_mark+$05
-bios_mass_memory_write_only             .equ bios_execution_code_mark+$06
-bios_mass_memory_transfer_error         .equ bios_execution_code_mark+$07
-bios_mass_memory_seek_error             .equ bios_execution_code_mark+$08
-bios_memory_transfer_error              .equ bios_execution_code_mark+$09 
+bios_IO_device_not_found                        .equ bios_execution_code_mark+$01 
+bios_IO_device_not_selected                     .equ bios_execution_code_mark+$02 
+bios_mass_memory_device_not_found               .equ bios_execution_code_mark+$03
+bios_mass_memory_device_not_selected            .equ bios_execution_code_mark+$04
+bios_mass_memory_values_not_setted              .equ bios_execution_code_mark+$05
+bios_mass_memory_number_overflow                .equ bios_execution_code_mark+$06
+bios_mass_memory_write_only                     .equ bios_execution_code_mark+$07
+bios_mass_memory_transfer_error                 .equ bios_execution_code_mark+$08
+bios_mass_memory_seek_error                     .equ bios_execution_code_mark+$09
+bios_memory_transfer_error                      .equ bios_execution_code_mark+$0A 
+bios_bad_argument                               .equ bios_execution_code_mark+$0B
 
 bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
 bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
