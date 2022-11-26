@@ -19,7 +19,7 @@ mms_get_selected_data_segment_flags             .equ mms_get_selected_data_segme
 mms_delete_all_temporary_segments               .equ mms_get_selected_data_segment_flags+3
 mms_program_bytes_write                         .equ mms_delete_all_temporary_segments+3
 mms_program_bytes_read                          .equ mms_program_bytes_write+3
-mms_mass_memory_read_sector                     .equ mms_program_bytes_read+3
-mms_mass_memory_write_sector                    .equ mms_mass_memory_read_sector+3
-mms_get_selected_segment_ID                     .equ mms_mass_memory_write_sector+3 
+mms_disk_device_read_sector                     .equ mms_program_bytes_read+3
+mms_disk_device_write_sector                    .equ mms_disk_device_read_sector+3
+mms_get_selected_segment_ID                     .equ mms_disk_device_write_sector+3 
 mms_dselect_low_memory_data_segment             .equ mms_get_selected_segment_ID+3

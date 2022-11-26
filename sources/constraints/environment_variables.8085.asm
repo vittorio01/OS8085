@@ -11,22 +11,27 @@ bios_operation_ok                       .equ $ff
 
 bios_IO_device_not_found                        .equ bios_execution_code_mark+$01 
 bios_IO_device_not_selected                     .equ bios_execution_code_mark+$02 
-bios_mass_memory_device_not_found               .equ bios_execution_code_mark+$03
-bios_mass_memory_device_not_selected            .equ bios_execution_code_mark+$04
-bios_mass_memory_values_not_setted              .equ bios_execution_code_mark+$05
-bios_mass_memory_number_overflow                .equ bios_execution_code_mark+$06
-bios_mass_memory_write_only                     .equ bios_execution_code_mark+$07
-bios_mass_memory_transfer_error                 .equ bios_execution_code_mark+$08
-bios_mass_memory_seek_error                     .equ bios_execution_code_mark+$09
-bios_memory_transfer_error                      .equ bios_execution_code_mark+$0A 
+bios_disk_device_device_not_found               .equ bios_execution_code_mark+$03
+bios_disk_device_device_not_selected            .equ bios_execution_code_mark+$04
+bios_disk_device_values_not_setted              .equ bios_execution_code_mark+$05
+bios_disk_device_number_overflow                .equ bios_execution_code_mark+$06
 bios_bad_argument                               .equ bios_execution_code_mark+$0B
 
-bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
-bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
-bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
-bios_IO_device_readable_mask        .equ %10000000
-bios_IO_device_writerable_mask      .equ %01000000
-bios_IO_device_type_console         .equ %00000000     ;il tipo %0000000 viene assegnato per identificare una console basilare I/O  
+bios_IO_console_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
+bios_IO_console_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
+bios_IO_console_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
+
+;flags del byte inviato dalla funzione bios_disk_device_set_state 
+bios_disk_device_motor_control_bit_mask                 .equ %10000000      ;se il bit è settato a 1 il motore del disco selezionato deve essere avviato
+bios_disk_device_head_align_control_bit_mask            .equ %01000000      ;se il bit è settato a 1 il disk device deve riallineare la testina nel disco 
+
+;flags del byte di stato ricevuto dalla funzione bios_disk_device_get_state 
+bios_disk_device_disk_inserted_status_bit_mask          .equ %10000000      ;questo bit deve essere settato a 1 se il disco è stato inserito nel drive 
+bios_disk_device_controller_ready_status_bit_mask       .equ %01000000      ;questo bit deve essere settato a 1 quando il disk device è pronto per il trasferimento dei dati 
+bios_disk_device_disk_write_protected_status_bit_mask   .equ %00100000      ;questo bit deve essere settato a 1 se il disco inserito è protetto da scrittura 
+bios_disk_device_data_transfer_error_status_bit_mask    .equ %00001000      ;questo bit deve essere settato a 1 se si è verificato un errore durante il trasferimento dei dati 
+bios_disk_device_seek_error_status_bit_mask             .equ %00000100      ;questo bit deve essere settato a 1 se si è verificato un errore durante lo spostamento della testina 
+bios_disk_device_bad_sector_status_bit_mask             .equ %00000010      ;questo bit deve essere settato a 1 se il settore che si desidera leggere/scrivere non è valido
 
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni della mms 
 
@@ -44,12 +49,18 @@ mms_destination_segment_not_selected        .equ mms_execution_code_mark+$08
 mms_destination_segment_not_found           .equ mms_execution_code_mark+$09 
 mms_destination_segment_overflow            .equ mms_execution_code_mark+$0a 
 mms_program_not_loaded                      .equ mms_execution_code_mark+$0b 
-mms_mass_memory_not_selected                .equ mms_execution_code_mark+$0c 
+mms_disk_device_not_selected                .equ mms_execution_code_mark+$0c 
 
 ;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della fsm
 fsm_operation_ok                    .equ $ff 
 
-fsm_mass_memory_sector_not_found    .equ fsm_execution_code_mark+$01
+fsm_disk_not_inserted               .equ fsm_execution_code_mark+$20 
+fsm_disk_seek_error                 .equ fsm_execution_code_mark+$21 
+fsm_disk_write_protected            .equ fsm_execution_code_mark+$22 
+fsm_disk_data_transfer_error        .equ fsm_execution_code_mark+$23 
+fsm_disk_bad_sector                 .equ fsm_execution_code_mark+$24
+
+fsm_disk_device_sector_not_found    .equ fsm_execution_code_mark+$01
 fsm_disk_not_selected               .equ fsm_execution_code_mark+$02
 fsm_device_not_found                .equ fsm_execution_code_mark+$04
 fsm_unformatted_disk                .equ fsm_execution_code_mark+$05

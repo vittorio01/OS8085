@@ -153,8 +153,8 @@ mms_functions:  .org MMS
                 jmp mms_delete_all_temporary_segments
                 jmp mms_program_bytes_write 
                 jmp mms_program_bytes_read 
-                jmp mms_mass_memory_read_sector
-                jmp mms_mass_memory_write_sector
+                jmp mms_disk_device_read_sector
+                jmp mms_disk_device_write_sector
                 jmp mms_get_selected_segment_ID  
                 jmp mms_dselect_low_memory_data_segment 
 
@@ -1240,37 +1240,37 @@ mms_delete_all_temporary_segments_end2:     pop d
                                             pop h 
                                             ret 
 
-;mms_mass_memory_read_sector preleva un settore dalla memoria di massa e salva i dati nel segmento selezionato
+;mms_disk_device_read_sector preleva un settore dalla memoria di massa e salva i dati nel segmento selezionato
 ;HL -> offset nel segmento dati
 
 ;A <- esito dell'operazione
 ;HL -> offset nel segmento dati (dopo l'esecuzione)
 
-mms_mass_memory_read_sector:        push d
+mms_disk_device_read_sector:        push d
                                     push b 
                                     push h 
                                     lda mms_data_selected_segment_id
                                     ora a 
-                                    jnz mms_mass_memory_read_sector_next 
+                                    jnz mms_disk_device_read_sector_next 
                                     mvi a,mms_destination_segment_not_selected
                                     pop h
-                                    jmp mms_mass_memory_read_sector_end 
-mms_mass_memory_read_sector_next:   call bios_mass_memory_get_bps
-                                    jnc mms_mass_memory_read_sector_next2
-                                    mvi a,mms_mass_memory_not_selected 
+                                    jmp mms_disk_device_read_sector_end 
+mms_disk_device_read_sector_next:   call bios_disk_device_get_bps
+                                    jnc mms_disk_device_read_sector_next2
+                                    mvi a,mms_disk_device_not_selected 
                                     pop h
-                                    jmp mms_mass_memory_read_sector_end 
-mms_mass_memory_read_sector_next2:  mvi b,7 
+                                    jmp mms_disk_device_read_sector_end 
+mms_disk_device_read_sector_next2:  mvi b,7 
                                     mvi d,0 
                                     mov e,a 
-mms_mass_memory_read_sector_loop:   mov a,e 
+mms_disk_device_read_sector_loop:   mov a,e 
                                     add a   
                                     mov e,a 
                                     mov a,d 
                                     ral
                                     mov d,a 
                                     dcr b 
-                                    jnz mms_mass_memory_read_sector_loop
+                                    jnz mms_disk_device_read_sector_loop
                                     mov c,l 
                                     mov b,h 
                                     dad d 
@@ -1280,16 +1280,13 @@ mms_mass_memory_read_sector_loop:   mov a,e
                                     sub e 
                                     mov a,h
                                     sbb d
-                                    jnc mms_mass_memory_read_sector_next3 
+                                    jnc mms_disk_device_read_sector_next3 
                                     mvi a,mms_destination_segment_overflow
                                     pop h
-                                    jmp mms_mass_memory_read_sector_end 
-mms_mass_memory_read_sector_next3:  lhld mms_data_selected_segment_address
+                                    jmp mms_disk_device_read_sector_end 
+mms_disk_device_read_sector_next3:  lhld mms_data_selected_segment_address
                                     dad b 
-                                    call bios_mass_memory_read_sector
-                                
-                                    cpi bios_operation_ok
-                                    jnz mms_mass_memory_read_sector_end
+                                    call bios_disk_device_read_sector
                                     xchg 
                                     lhld mms_data_selected_segment_address
                                     mov a,e 
@@ -1301,41 +1298,41 @@ mms_mass_memory_read_sector_next3:  lhld mms_data_selected_segment_address
                                     inx sp 
                                     inx sp
                                     mvi a,mms_operation_ok
-mms_mass_memory_read_sector_end:    pop b 
+mms_disk_device_read_sector_end:    pop b 
                                     pop d 
                                     ret 
 
-;mms_mass_memory_write_sector salva i dati nel segmento selezionato in un settore nella memoria di massa 
+;mms_disk_device_write_sector salva i dati nel segmento selezionato in un settore nella memoria di massa 
 ;HL -> offset nel segmento dati
 
 ;A <- esito dell'operazione
 ;HL -> offset nel segmento dati (dopo l'esecuzione)
 
-mms_mass_memory_write_sector:       push d
+mms_disk_device_write_sector:       push d
                                     push b 
                                     push h 
                                     lda mms_data_selected_segment_id
                                     ora a 
-                                    jnz mms_mass_memory_write_sector_next 
+                                    jnz mms_disk_device_write_sector_next 
                                     mvi a,mms_destination_segment_not_selected
                                     pop h
-                                    jmp mms_mass_memory_write_sector_end 
-mms_mass_memory_write_sector_next:  call bios_mass_memory_get_bps
-                                    jnc mms_mass_memory_write_sector_next2
-                                    mvi a,mms_mass_memory_not_selected 
+                                    jmp mms_disk_device_write_sector_end 
+mms_disk_device_write_sector_next:  call bios_disk_device_get_bps
+                                    jnc mms_disk_device_write_sector_next2
+                                    mvi a,mms_disk_device_not_selected 
                                     pop h
-                                    jmp mms_mass_memory_write_sector_end 
-mms_mass_memory_write_sector_next2: mvi b,7 
+                                    jmp mms_disk_device_write_sector_end 
+mms_disk_device_write_sector_next2: mvi b,7 
                                     mvi d,0 
                                     mov e,a 
-mms_mass_memory_write_sector_loop:  mov a,e 
+mms_disk_device_write_sector_loop:  mov a,e 
                                     add a   
                                     mov e,a 
                                     mov a,d 
                                     ral
                                     mov d,a 
                                     dcr b 
-                                    jnz mms_mass_memory_write_sector_loop
+                                    jnz mms_disk_device_write_sector_loop
                                     mov c,l 
                                     mov b,h 
                                     dad d 
@@ -1345,15 +1342,13 @@ mms_mass_memory_write_sector_loop:  mov a,e
                                     sub e
                                     mov a,h
                                     sbb d
-                                    jnc mms_mass_memory_write_sector_next3 
+                                    jnc mms_disk_device_write_sector_next3 
                                     mvi a,mms_source_segment_overflow
                                     pop h
-                                    jmp mms_mass_memory_write_sector_end 
-mms_mass_memory_write_sector_next3: lhld mms_data_selected_segment_address
+                                    jmp mms_disk_device_write_sector_end 
+mms_disk_device_write_sector_next3: lhld mms_data_selected_segment_address
                                     dad b 
-                                    call bios_mass_memory_write_sector 
-                                    cpi bios_operation_ok
-                                    jnz mms_mass_memory_write_sector_end
+                                    call bios_disk_device_write_sector 
                                     xchg 
                                     lhld mms_data_selected_segment_address
                                     mov a,e 
@@ -1365,7 +1360,7 @@ mms_mass_memory_write_sector_next3: lhld mms_data_selected_segment_address
                                     inx sp 
                                     inx sp
                                     mvi a,mms_operation_ok
-mms_mass_memory_write_sector_end:   pop b 
+mms_disk_device_write_sector_end:   pop b 
                                     pop d 
                                     ret 
 

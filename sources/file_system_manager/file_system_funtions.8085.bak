@@ -9,26 +9,26 @@ fsm_format_disk:                        push b
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next:                   ;call bios_mass_memory_format_drive   
+fsm_format_disk_next:                   ;call bios_disk_device_format_drive   
                                         ;cpi bios_operation_ok 
                                         ;jnz fsm_disk_external_generated_error
                                         lda fsm_selected_disk
-                                        call bios_mass_memory_select_drive
+                                        call bios_disk_device_select_drive
                                         ora a 
                                         jnz fsm_format_disk_next2
                                         mvi a,fsm_device_not_found
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next2:                  call bios_mass_memory_get_bps
+fsm_format_disk_next2:                  call bios_disk_device_get_bps
                                         sta fsm_selected_disk_bps_number
                                         mvi a,fsm_disk_loaded_flags_selected_disk_mask
                                         sta fsm_selected_disk_loaded_page_flags
-                                        call bios_mass_memory_get_spt
+                                        call bios_disk_device_get_spt
                                         mov b,a 
                                         sta fsm_selected_disk_spt_number
-                                        call bios_mass_memory_get_head_number
+                                        call bios_disk_device_get_head_number
                                         mov c,a 
                                         sta fsm_selected_disk_head_number
-                                        call bios_mass_memory_get_tph
+                                        call bios_disk_device_get_tph
                                         shld fsm_selected_disk_tph_number
                                         call unsigned_multiply_byte
                                         xchg 
@@ -66,15 +66,15 @@ fsm_format_disk_jump1:                  inx b
                                         mov h,b 
                                         shld fsm_selected_disk_data_first_sector
                                         xra a 
-                                        call bios_mass_memory_select_head
+                                        call bios_disk_device_select_head
                                         cpi bios_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         xra a 
-                                        call bios_mass_memory_select_sector
+                                        call bios_disk_device_select_sector
                                         cpi bios_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         lxi h,0 
-                                        call bios_mass_memory_select_track
+                                        call bios_disk_device_select_track
                                         cpi bios_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         call fsm_reselect_mms_segment
@@ -210,7 +210,7 @@ fsm_format_disk_jump2:                  pop d
                                         call mms_write_selected_data_segment_byte
                                         jc fsm_disk_external_generated_error 
                                         lxi h,0
-                                        call mms_mass_memory_write_sector
+                                        call mms_disk_device_write_sector
                                         cpi mms_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         mvi a,fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
@@ -352,15 +352,15 @@ fsm_selected_disk_set_boot_section_next:            call fsm_writeback_page
                                                     lxi d,0 
                                                     call fsm_seek_disk_sector
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     mov a,b 
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     lxi b,fsm_boot_sector_start_position
@@ -392,7 +392,7 @@ fsm_selected_disk_set_boot_section_next:            call fsm_writeback_page
                                                     call fsm_reselect_mms_segment
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     xthl 
@@ -434,7 +434,7 @@ fsm_selected_disk_set_boot_section_next:            call fsm_writeback_page
 fsm_selected_disk_set_boot_section_transfer_ok:     call fsm_reselect_mms_segment
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
-                                                    call mms_mass_memory_write_sector
+                                                    call mms_disk_device_write_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     mvi a,fsm_operation_ok
@@ -469,15 +469,15 @@ fsm_selected_disk_get_boot_section_next:            call fsm_writeback_page
                                                     lxi d,0 
                                                     call fsm_seek_disk_sector
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_boot_section_end
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_boot_section_end
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_boot_section_end
                                                     lxi b,fsm_boot_sector_start_position
@@ -501,7 +501,7 @@ fsm_selected_disk_get_boot_section_next:            call fsm_writeback_page
                                                     call fsm_reselect_mms_segment
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_get_boot_section_end
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_boot_section_end
                                                     lxi h,fsm_boot_sector_start_position
@@ -554,20 +554,20 @@ fsm_selected_disk_set_bootable_next:            call fsm_writeback_page
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 mov a,c 
-                                                call bios_mass_memory_select_head
+                                                call bios_disk_device_select_head
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 xchg 
-                                                call bios_mass_memory_select_track
+                                                call bios_disk_device_select_track
                                                 cpi bios_operation_ok 
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 mov a,b 
-                                                call bios_mass_memory_select_sector
+                                                call bios_disk_device_select_sector
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 lxi h,0 
                                                 call fsm_reselect_mms_segment
-                                                call mms_mass_memory_read_sector
+                                                call mms_disk_device_read_sector
                                                 cpi mms_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 pop h 
@@ -588,7 +588,7 @@ fsm_selected_disk_set_bootable_next:            call fsm_writeback_page
                                                 call mms_write_selected_data_segment_byte
                                                 jc fsm_selected_disk_set_bootable_end
                                                 lxi h,0 
-                                                call mms_mass_memory_write_sector
+                                                call mms_disk_device_write_sector
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_set_bootable_end
                                                 lda fsm_selected_disk_loaded_page_flags
@@ -624,20 +624,20 @@ fsm_selected_disk_unset_bootable_next:          call fsm_writeback_page
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 mov a,c 
-                                                call bios_mass_memory_select_head
+                                                call bios_disk_device_select_head
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 xchg 
-                                                call bios_mass_memory_select_track
+                                                call bios_disk_device_select_track
                                                 cpi bios_operation_ok 
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 mov a,b 
-                                                call bios_mass_memory_select_sector
+                                                call bios_disk_device_select_sector
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 lxi h,0 
                                                 call fsm_reselect_mms_segment
-                                                call mms_mass_memory_read_sector
+                                                call mms_disk_device_read_sector
                                                 cpi mms_operation_ok
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 lxi h,0 
@@ -645,7 +645,7 @@ fsm_selected_disk_unset_bootable_next:          call fsm_writeback_page
                                                 call mms_write_selected_data_segment_byte
                                                 jc fsm_selected_disk_unset_bootable_end
                                                 lxi h,0 
-                                                call mms_mass_memory_write_sector
+                                                call mms_disk_device_write_sector
                                                 cpi bios_operation_ok
                                                 jnz fsm_selected_disk_unset_bootable_end
                                                 lda fsm_selected_disk_loaded_page_flags
@@ -720,16 +720,16 @@ fsm_selected_disk_get_system_dimension_ok:          xchg
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_get_system_end
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_end
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_end
                                                     xchg 
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_end
                                                     lda fsm_selected_disk_bps_number
@@ -749,7 +749,7 @@ fsm_selected_disk_get_system_dimension_ok:          xchg
                                                     sbb h 
                                                     mov h,a 
                                                     push h 
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end3
                                                     pop h 
@@ -807,16 +807,16 @@ fsm_selected_disk_get_system_loop:                  inx sp
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end2
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end2
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end2
                                                     xchg 
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end2
                                                     pop b 
@@ -829,7 +829,7 @@ fsm_selected_disk_get_system_loop:                  inx sp
                                                     dcx sp 
                                                     dcx sp 
                                                     xchg 
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_get_system_loop_end 
                                                     xchg 
@@ -918,16 +918,16 @@ fsm_selected_disk_set_system_dimension_ok:          xchg
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_set_system_end
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_end
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_end
                                                     xchg 
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_end
                                                     lda fsm_selected_disk_bps_number
@@ -947,7 +947,7 @@ fsm_selected_disk_set_system_dimension_ok:          xchg
                                                     sbb h 
                                                     mov h,a 
                                                     push h 
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end3
                                                     pop h 
@@ -1007,7 +1007,7 @@ fsm_selected_disk_set_system_loop:                  inx sp
                                                     push h
                                                     dcx sp 
                                                     dcx sp
-                                                    call mms_mass_memory_write_sector
+                                                    call mms_disk_device_write_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end
                                                     xthl 
@@ -1021,16 +1021,16 @@ fsm_selected_disk_set_system_loop:                  inx sp
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     xchg 
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     pop b 
@@ -1042,7 +1042,7 @@ fsm_selected_disk_set_system_loop:                  inx sp
                                                     push h
                                                     dcx sp 
                                                     dcx sp
-                                                    call mms_mass_memory_read_sector
+                                                    call mms_disk_device_read_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end
                                                     inx sp 
@@ -1060,16 +1060,16 @@ fsm_selected_disk_set_system_loop_ok:               xthl
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     mov a,c
-                                                    call bios_mass_memory_select_head
+                                                    call bios_disk_device_select_head
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     xchg 
-                                                    call bios_mass_memory_select_track
+                                                    call bios_disk_device_select_track
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     xchg 
                                                     mov a,b
-                                                    call bios_mass_memory_select_sector
+                                                    call bios_disk_device_select_sector
                                                     cpi bios_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end2
                                                     inx sp 
@@ -1078,7 +1078,7 @@ fsm_selected_disk_set_system_loop_ok:               xthl
                                                     push h 
                                                     dcx sp 
                                                     dcx sp 
-                                                    call mms_mass_memory_write_sector
+                                                    call mms_disk_device_write_sector
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end
                                                     mvi a,fsm_operation_ok

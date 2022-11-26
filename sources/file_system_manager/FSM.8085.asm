@@ -220,6 +220,7 @@ fsm_functions:  .org FSM
                 jmp fsm_get_disk_format_type                        ;restituisce il tipo di formattazione del disco selezionato 
                 jmp fsm_file_name_max_dimensions                    ;ritorna le dimensioni di nome ed estenzione massimi che possono essere attribuiti ad un file
                 jmp fsm_disk_name_max_dimension                     ;ritorna la dimensione massima del nome che si può attribuire al disco 
+                                    
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
@@ -257,24 +258,24 @@ fsm_select_disk_bad_argument:   mvi a,fsm_bad_argument
 fsm_select_disk_next:           sta fsm_selected_disk 
                                 push h
                                 push d 
-                                call bios_mass_memory_select_drive
+                                call bios_disk_device_select_drive
                                 cpi bios_operation_ok  
                                 jz fsm_select_next2
                                 mvi a,%00000000
                                 sta fsm_selected_disk_loaded_page_flags
                                 mvi a,fsm_device_not_found
                                 jmp fsm_select_disk_end
-fsm_select_next2:               call bios_mass_memory_get_bps
+fsm_select_next2:               call bios_disk_device_get_bps
                                 sta fsm_selected_disk_bps_number
                                 mvi a,fsm_disk_loaded_flags_selected_disk_mask
                                 sta fsm_selected_disk_loaded_page_flags
-                                call bios_mass_memory_get_spt
+                                call bios_disk_device_get_spt
                                 mov b,a 
                                 sta fsm_selected_disk_spt_number
-                                call bios_mass_memory_get_head_number
+                                call bios_disk_device_get_head_number
                                 mov c,a 
                                 sta fsm_selected_disk_head_number
-                                call bios_mass_memory_get_tph
+                                call bios_disk_device_get_tph
                                 shld fsm_selected_disk_tph_number
                                 call unsigned_multiply_byte
                                 xchg 
@@ -291,23 +292,23 @@ fsm_select_next2:               call bios_mass_memory_get_bps
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end       
                                 mov a,b 
-                                call bios_mass_memory_select_sector
+                                call bios_disk_device_select_sector
                                 cpi bios_operation_ok
                                 jnz fsm_select_disk_end
                                 mov a,c 
-                                call bios_mass_memory_select_head
+                                call bios_disk_device_select_head
                                 cpi bios_operation_ok
                                 jnz fsm_select_disk_end
                                 xchg 
-                                call bios_mass_memory_select_track
+                                call bios_disk_device_select_track
                                 cpi bios_operation_ok
                                 jnz fsm_select_disk_end
                                 call fsm_reselect_mms_segment
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
                                 lxi h,0
-                                call mms_mass_memory_read_sector
-                                cpi mms_operation_ok
+                                call fsm_disk_device_read_sector
+                                cpi fsm_operation_ok
                                 jnz fsm_select_disk_end    
                                 lxi h,3
                                 lxi d,fsm_format_marker
@@ -2724,7 +2725,7 @@ fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 
 
-;fsm_write_selected_data_segment_byte, fsm_read_selected_data_segment_byte e fsm_mass_memory_read_sector vengono usate per modificare i dati nel buffer 
+;fsm_write_selected_data_segment_byte, fsm_read_selected_data_segment_byte e fsm_disk_device_read_sector vengono usate per modificare i dati nel buffer 
 ;quando viene scritto un byte nel buffer viene segnalato implicitamente al sistema di writeback che la pagina corrente è stata modificata
 fsm_write_selected_data_segment_byte:   call fsm_page_set_modified_flag
                                         jmp mms_write_selected_data_segment_byte
@@ -2967,20 +2968,20 @@ fsm_read_fat_page_operation_ok:     lda fsm_selected_disk_loaded_page_flags
                                     lda fsm_selected_disk_spp_number  
                                     push psw 
 fsm_read_fat_page_operation_loop:   mov a,c 
-                                    call bios_mass_memory_select_head
+                                    call bios_disk_device_select_head
                                     cpi bios_operation_ok
                                     jnz fsm_read_fat_page_end_loop
                                     xchg 
-                                    call bios_mass_memory_select_track
+                                    call bios_disk_device_select_track
                                     xchg 
                                     cpi bios_operation_ok
                                     jnz fsm_read_fat_page_end_loop
                                     mov a,b 
-                                    call bios_mass_memory_select_sector
+                                    call bios_disk_device_select_sector
                                     cpi bios_operation_ok
                                     jnz fsm_read_fat_page_end_loop
-                                    call mms_mass_memory_read_sector
-                                    cpi bios_operation_ok
+                                    call fsm_disk_device_read_sector
+                                    cpi fsm_operation_ok
                                     jnz fsm_read_fat_page_end_loop
                                     inr b 
                                     lda fsm_selected_disk_spt_number
@@ -3074,21 +3075,21 @@ fsm_write_fat_page_operation_ok:    call fsm_reselect_mms_segment
                                     lda fsm_selected_disk_spp_number  
                                     push psw 
 fsm_write_fat_page_operation_loop:  mov a,c 
-                                    call bios_mass_memory_select_head
+                                    call bios_disk_device_select_head
                                     cpi bios_operation_ok
                                     jnz fsm_write_fat_page_end_loop
                                     xchg 
-                                    call bios_mass_memory_select_track
+                                    call bios_disk_device_select_track
                                     xchg 
                                     cpi bios_operation_ok
                                     jnz fsm_write_fat_page_end_loop
                                     mov a,b 
-                                    call bios_mass_memory_select_sector
+                                    call bios_disk_device_select_sector
                                     cpi bios_operation_ok
                                     jnz fsm_write_fat_page_end_loop
-                                    call mms_mass_memory_write_sector
+                                    call fsm_disk_device_write_sector
                                 
-                                    cpi bios_operation_ok
+                                    cpi fsm_operation_ok
                                     jnz fsm_write_fat_page_end_loop
                                     inr b 
                                     lda fsm_selected_disk_spt_number
@@ -3209,20 +3210,20 @@ fsm_read_data_page_operation_ok:        lda fsm_selected_disk_loaded_page_flags
                                         lda fsm_selected_disk_spp_number
                                         push psw 
 fsm_read_data_page_operation_loop:      mov a,c 
-                                        call bios_mass_memory_select_head
+                                        call bios_disk_device_select_head
                                         cpi bios_operation_ok
                                         jnz fsm_read_data_page_end_loop
                                         xchg 
-                                        call bios_mass_memory_select_track
+                                        call bios_disk_device_select_track
                                         xchg 
                                         cpi bios_operation_ok
                                         jnz fsm_read_data_page_end_loop
                                         mov a,b 
-                                        call bios_mass_memory_select_sector
+                                        call bios_disk_device_select_sector
                                         cpi bios_operation_ok
                                         jnz fsm_read_data_page_end_loop
-                                        call mms_mass_memory_read_sector
-                                        cpi bios_operation_ok
+                                        call fsm_disk_device_read_sector
+                                        cpi fsm_operation_ok
                                         jnz fsm_read_data_page_end_loop
                                         inr b 
                                         lda fsm_selected_disk_spt_number
@@ -3335,20 +3336,20 @@ fsm_write_data_page_operation_ok:       call fsm_reselect_mms_segment
                                         lda fsm_selected_disk_spp_number
                                         push psw 
 fsm_write_data_page_operation_loop:     mov a,c 
-                                        call bios_mass_memory_select_head
+                                        call bios_disk_device_select_head
                                         cpi bios_operation_ok
                                         jnz fsm_write_data_page_end_loop
                                         xchg 
-                                        call bios_mass_memory_select_track
+                                        call bios_disk_device_select_track
                                         xchg 
                                         cpi bios_operation_ok
                                         jnz fsm_write_data_page_end_loop
                                         mov a,b 
-                                        call bios_mass_memory_select_sector
+                                        call bios_disk_device_select_sector
                                         cpi bios_operation_ok
                                         jnz fsm_write_data_page_end_loop
-                                        call mms_mass_memory_write_sector
-                                        cpi mms_operation_ok
+                                        call fsm_disk_device_write_sector
+                                        cpi fsm_operation_ok
                                         jnz fsm_write_data_page_end_loop
                                         inr b 
                                         lda fsm_selected_disk_spt_number
@@ -3381,7 +3382,7 @@ fsm_write_data_page_end:                pop h
                                         pop b 
                                         ret 
 
-;fsm_seek_mass_memory_sector decodifica il numero di settore in numeri di testina, traccia e settore
+;fsm_seek_disk_device_sector decodifica il numero di settore in numeri di testina, traccia e settore
 ;BCDE -> posizione in settori
 ;B <- numero di settore 
 ;C <- numero di testina 
@@ -3397,7 +3398,7 @@ fsm_seek_disk_sector:                       push h
                                             lda fsm_selected_disk_sectors_number+3
                                             sbb b 
                                             jnc fsm_seek_disk_sector_not_overflow
-                                            mvi a,fsm_mass_memory_sector_not_found
+                                            mvi a,fsm_disk_device_sector_not_found
                                             jmp fsm_seek_disk_sector_error
 fsm_seek_disk_sector_not_overflow:          lxi h,0 
                                             push h                                  ;SP -> [sector, head][track]
@@ -3449,6 +3450,125 @@ fsm_seek_disk_sector_not_overflow:          lxi h,0
                                             mvi a,fsm_operation_ok
 fsm_seek_disk_sector_error:                 pop h 
                                             ret 
+
+;fsm_disk_device_start_motor avvia il motore della memoria di massa 
+;A <- esito dell'operazione 
+fsm_disk_device_start_motor:        mvi a,$ff 
+                                    call bios_disk_device_set_motor 
+                                    rc 
+                                    mvi a,fsm_operation_ok
+                                    ret 
+
+;fsm_disk_device_stop_motor spegne il motore della memoria di massa 
+;A <- esito dell'operazione 
+fsm_disk_device_stop_motor:         xra a 
+                                    call bios_disk_device_set_motor
+                                    rc 
+                                    mvi a,fsm_operation_ok
+                                    ret 
+
+fsm_disk_transfers_attempts     .equ 3 
+
+;fsm_disk_device_read_sector legge il settore attualmente selezionato e salva i dati nel segmento a partire dall'offset desiderato
+;HL -> offset nel segmento di memoria 
+
+;A <- esito dell'operazione 
+;HL <- offset nel segmento dopo l'esecuzione
+fsm_disk_device_read_sector:                        push b 
+                                                    push h 
+                                                    mvi b,fsm_disk_transfers_attempts 
+fsm_disk_device_read_sector_retry:                  call bios_disk_device_status
+                                                    jc fsm_disk_device_read_sector_device_not_selected
+                                                    ani bios_disk_device_disk_inserted_status_bit_mask
+                                                    jnz fsm_disk_device_read_sector_next 
+                                                    mvi a,fsm_disk_not_inserted 
+                                                    jmp fsm_disk_device_read_sector_end
+fsm_disk_device_read_sector_next:                   call bios_disk_device_status
+                                                    ani bios_disk_device_controller_ready_status_bit_mask
+                                                    jz fsm_disk_device_read_sector_next
+                                                    call mms_disk_device_read_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_disk_device_read_sector_end
+                                                    call bios_disk_device_status
+                                                    ani bios_disk_device_data_transfer_error_status_bit_mask+bios_disk_device_seek_error_status_bit_mask+bios_disk_device_bad_sector_status_bit_mask
+                                                    jnz fsm_disk_device_read_sector_error
+                                                    mvi a,fsm_operation_ok
+                                                    jmp fsm_disk_device_read_sector_end
+fsm_disk_device_read_sector_error:                  mov c,a 
+                                                    ani bios_disk_device_data_transfer_error_status_bit_mask
+                                                    jnz fsm_disk_device_read_sector_error2
+                                                    pop h 
+                                                    push h 
+                                                    dcr b 
+                                                    jnz fsm_disk_device_read_sector_retry
+                                                    mvi a,fsm_disk_data_transfer_error 
+                                                    jmp fsm_disk_device_read_sector_end
+fsm_disk_device_read_sector_error2:                 mov a,c 
+                                                    ani bios_disk_device_seek_error_status_bit_mask
+                                                    jnz fsm_disk_device_read_sector_error3 
+                                                    mvi a,fsm_disk_seek_error 
+                                                    jmp fsm_disk_device_read_sector_end
+fsm_disk_device_read_sector_error3:                 mvi a,fsm_disk_bad_sector 
+                                                    jmp fsm_disk_device_read_sector_end
+fsm_disk_device_read_sector_device_not_selected:    mvi a,fsm_disk_not_selected
+fsm_disk_device_read_sector_end:                    inx sp
+                                                    inx sp 
+                                                    pop b 
+                                                    ret 
+
+;fsm_disk_device_write_sector scrive i dati nel settore attualmente selezionato a partire dal segmento nell'offset desiderato
+;HL -> offset nel segmento 
+
+;A <- esito dell'operazione
+;HL <- offset nel segmento dopo l'esecuzione 
+fsm_disk_device_write_sector:                       push b 
+                                                    push h 
+                                                    mvi b,fsm_disk_transfers_attempts 
+fsm_disk_device_write_sector_retry:                 call bios_disk_device_status
+                                                    jc fsm_disk_device_write_sector_device_not_selected
+                                                    mov c,a 
+                                                    ani bios_disk_device_disk_inserted_status_bit_mask
+                                                    jnz fsm_disk_device_write_sector_next 
+                                                    mvi a,fsm_disk_not_inserted 
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_next:                  mov a,c 
+                                                    ani bios_disk_device_disk_write_protected_status_bit_mask
+                                                    jz fsm_disk_device_write_sector_next2
+                                                    mvi a,fsm_disk_write_protected 
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_next2:                 call bios_disk_device_status
+                                                    ani bios_disk_device_controller_ready_status_bit_mask
+                                                    jz fsm_disk_device_write_sector_next2
+                                                    call mms_disk_device_write_sector
+                                                    cpi mms_operation_ok
+                                                    jnz fsm_disk_device_write_sector_end
+                                                    call bios_disk_device_status
+                                                    jc fsm_disk_device_write_sector_device_not_selected
+                                                    ani bios_disk_device_data_transfer_error_status_bit_mask+bios_disk_device_seek_error_status_bit_mask+bios_disk_device_bad_sector_status_bit_mask
+                                                    jnz fsm_disk_device_write_sector_error
+                                                    mvi a,fsm_operation_ok
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_error:                 mov c,a 
+                                                    ani bios_disk_device_data_transfer_error_status_bit_mask
+                                                    jnz fsm_disk_device_write_sector_error2
+                                                    pop h 
+                                                    push h 
+                                                    dcr b 
+                                                    jnz fsm_disk_device_write_sector_retry
+                                                    mvi a,fsm_disk_data_transfer_error 
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_error2:                mov a,c 
+                                                    ani bios_disk_device_seek_error_status_bit_mask
+                                                    jnz fsm_disk_device_write_sector_error3 
+                                                    mvi a,fsm_disk_seek_error 
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_error3:                mvi a,fsm_disk_bad_sector 
+                                                    jmp fsm_disk_device_write_sector_end
+fsm_disk_device_write_sector_device_not_selected:   mvi a,fsm_disk_not_selected
+fsm_disk_device_write_sector_end:                   inx sp 
+                                                    inx sp 
+                                                    pop b 
+                                                    ret 
 
 ;fsm_string_segment_ncompare verifica se le stringhe sono uguali
 ;A -> dimensione massima
