@@ -979,7 +979,7 @@ bios_rom_disk_write_sector:         push h
                                     xchg 
                                     ret 
 
-bios_rom_disk_status:       mvi a,bios_disk_device_controller_ready_status_bit_mask+bios_disk_device_disk_inserted_status_bit_mask+bios_disk_device_disk_write_protected_status_bit_mask
+bios_rom_disk_status:       mvi a,bios_disk_device_controller_ready_status_bit_mask+bios_disk_device_disk_inserted_status_bit_mask
                             ret 
 
 bios_rom_disk_format_drive:             lxi h,bios_rom_disk_address_start
@@ -994,9 +994,7 @@ bios_rom_disk_format_drive_loop:        mvi m,bios_rom_disk_format_fill_byte
                                         jc bios_rom_disk_format_drive_loop
                                         ret  
 
-bios_rom_disk_set_motor:    mvi a,$ff 
-                            out 0 
-                            ret 
+bios_rom_disk_set_motor:    ret 
 
 
 BIOS_layer_end:     
