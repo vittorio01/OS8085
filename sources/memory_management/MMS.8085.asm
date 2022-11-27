@@ -151,9 +151,11 @@ mms_functions:  .org MMS
                 jmp mms_read_selected_data_segment_byte
                 jmp mms_write_selected_data_segment_byte
                 jmp mms_segment_data_transfer
-                jmp mms_set_selected_data_segment_flags
+                jmp mms_set_selected_data_segment_type_flag 
+                jmp mms_set_selected_data_segment_temporary_flag 
                 jmp mms_get_selected_data_segment_dimension
-                jmp mms_get_selected_data_segment_flags
+                jmp mms_get_selected_data_segment_type_flag_status 
+                jmp mms_get_selected_data_segment_temporary_flag_status 
                 jmp mms_delete_all_temporary_segments
                 jmp mms_program_bytes_write 
                 jmp mms_program_bytes_read 
@@ -557,7 +559,7 @@ mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded
                                             ret     
 
 ;la funzione mms_create_low_memory_user_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
-; A  -> flags del segmento
+
 ; HL -> dimensione del segmento da creare
 ; A  <- ID del segmento creato. Se non è stato creato correttamente assume $00
 ;       in caso di errore nella creazione, per ottenere informazioni sull'errore generato si deve lanciare la funzione mms_read_data_segment_operation_error_code
@@ -589,15 +591,7 @@ mms_create_low_memory_data_segment:                         push d
                                                             xchg  
                                                             jc mms_create_low_memory_data_segment_not_enough_ram_error
                                                             shld mms_data_low_pointer
-                                                            inx sp  
-                                                            inx sp 
-                                                            xthl 
-                                                            mov a,h 
-                                                            xthl 
-                                                            dcx sp 
-                                                            dcx sp 
-                                                            ori mms_low_memory_valid_segment_mask
-                                                            mov m,a 
+                                                            mvi m,mms_low_memory_valid_segment_mask
                                                             inx h 
                                                             call mms_data_bitstream_number_request 
                                                             ora a 
@@ -915,53 +909,129 @@ mms_read_selected_data_segment_dimension:       lhld mms_data_selected_segment_d
 mms_read_selected_data_segment_dimension_next:  mvi a,mms_operation_ok
                                                 ret 
 
-;mms_set_selected_data_segment_flags imposta le flags del segmento selezionato
-; A -> flags 
-; A <- esito dell'operazione 
+;mms_set_selected_data_segment_type_flag imposta il tipo al segmento di memoria selezionato 
+;A -> $00 se il segmento deve essere utente, altro se deve essere di sistema 
+;A <- esito dell'operazione 
+mms_set_selected_data_segment_type_flag:            push h
+                                                    push psw 
+                                                    lda mms_data_selected_segment_id
+                                                    ora a 
+                                                    jnz mms_set_selected_data_segment_type_flag_next
+                                                    mvi a,mms_segment_data_not_found_error_code  
+                                                    jmp mms_set_selected_data_segment_type_flag
+mms_set_selected_data_segment_type_flag_next:       lhld mms_data_selected_segment_address
+                                                    dcx h 
+                                                    dcx h 
+                                                    dcx h 
+                                                    dcx h 
+                                                    xthl 
+                                                    mov a,h 
+                                                    xthl 
+                                                    ora a 
+                                                    jnz mms_set_selected_data_segment_type_flag_system 
+                                                    mov a,m 
+                                                    ani $ff-mms_low_memory_type_segment_mask
+                                                    mov m,a 
+                                                    jmp mms_set_selected_data_segment_type_flag_ok
+mms_set_selected_data_segment_type_flag_system:     mov a,m     
+                                                    ori mms_low_memory_type_segment_mask
+                                                    mov m,a 
+mms_set_selected_data_segment_type_flag_ok:         mvi a,mms_operation_ok
+mms_set_selected_data_segment_type_flag_end:        inx sp 
+                                                    inx sp 
+                                                    pop h
+                                                    ret 
 
-mms_set_selected_data_segment_flags:            push h
-                                                push psw 
-                                                lda mms_data_selected_segment_id
-                                                ora a 
-                                                jnz mms_set_selected_data_segment_flags_next 
-                                                mvi a,mms_segment_data_not_found_error_code  
-                                               
-                                                jmp mms_set_selected_data_segment_flags_end
-mms_set_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
-                                                dcx h 
-                                                dcx h 
-                                                dcx h 
-                                                xthl 
-                                                mov a,h 
-                                                xthl 
-                                                ori mms_low_memory_valid_segment_mask
-                                                mov m,a 
-                                                mvi a,mms_operation_ok
-mms_set_selected_data_segment_flags_end:        inx sp 
-                                                inx sp 
-                                                pop h
-                                                ret 
+;mms_set_selected_data_segment_type_flag imposta la temporaneità al segmento di memoria selezionato 
+;A -> $00 se il segmento non deve essere temporaneo, altro se deve essere temporaneo
+;A <- esito dell'operazione 
+mms_set_selected_data_segment_temporary_flag:           push h
+                                                        push psw 
+                                                        lda mms_data_selected_segment_id
+                                                        ora a 
+                                                        jnz mms_set_selected_data_segment_temporary_flag_next 
+                                                        mvi a,mms_segment_data_not_found_error_code  
+                                                        jmp mms_set_selected_data_segment_temporary_flag
+mms_set_selected_data_segment_temporary_flag_next:      lhld mms_data_selected_segment_address
+                                                        dcx h 
+                                                        dcx h 
+                                                        dcx h
+                                                        dcx h  
+                                                        xthl 
+                                                        mov a,h 
+                                                        xthl 
+                                                        ora a 
+                                                        jnz mms_set_selected_data_segment_temporary_flag_system 
+                                                        mov a,m 
+                                                        ani $ff-mms_low_memory_temporary_segment_mask
+                                                        mov m,a 
+                                                        jmp mms_set_selected_data_segment_temporary_flag_ok
+mms_set_selected_data_segment_temporary_flag_system:    mov a,m     
+                                                        ori mms_low_memory_temporary_segment_mask
+                                                        mov m,a 
+mms_set_selected_data_segment_temporary_flag_ok:        mvi a,mms_operation_ok
+mms_set_selected_data_segment_temporary_flag_end:       inx sp 
+                                                        inx sp 
+                                                        pop h
+                                                        ret 
 
-;mms_get_selected_data_segment_flags legge le flags del segmento selezionato
-;A <- flags (se si verifica un errore ritorna il codice di esecuzione)
-;PSW <- se il segmento non è stato selezionato viene generato un errore (CY=1)
-mms_get_selected_data_segment_flags:            push h
-                                                lda mms_data_selected_segment_id
-                                                ora a 
-                                                jnz mms_get_selected_data_segment_flags_next 
-                                                mvi a,mms_segment_data_not_found_error_code  
-                                                stc 
-                                                jmp mms_get_selected_data_segment_flags_end
-mms_get_selected_data_segment_flags_next:       lhld mms_data_selected_segment_address
-                                                dcx h 
-                                                dcx h 
-                                                dcx h 
-                                                dcx h 
-                                                mov a,m 
-                                                stc 
-                                                cmc 
-mms_get_selected_data_segment_flags_end:        pop h
-                                                ret 
+;mms_get_selected_data_segment_type_flag_status restituisce il tipo di segmento selezionato
+;A <- se CY = 0 restituisce il tipo di segmento selezionato ($ff se di sistema, $00 altrimenti)
+;     se CY = 1 restituisce l'errore generato
+mms_get_selected_data_segment_type_flag_status:         push h
+                                                        lda mms_data_selected_segment_id
+                                                        ora a 
+                                                        jnz mms_get_selected_data_segment_type_flag_status_next 
+                                                        mvi a,mms_segment_data_not_found_error_code  
+                                                        stc 
+                                                        jmp mms_get_selected_data_segment_type_flag_status_end
+mms_get_selected_data_segment_type_flag_status_next:    lhld mms_data_selected_segment_address
+                                                        dcx h 
+                                                        dcx h 
+                                                        dcx h 
+                                                        dcx h 
+                                                        mov a,m 
+                                                        ani mms_low_memory_type_segment_mask
+                                                        ora a 
+                                                        jz mms_get_selected_data_segment_type_flag_status_user
+                                                        mvi a,$ff 
+                                                        stc 
+                                                        cmc 
+                                                        jmp mms_get_selected_data_segment_type_flag_status_end
+mms_get_selected_data_segment_type_flag_status_user:    mvi a,$00 
+                                                        stc 
+                                                        cmc 
+mms_get_selected_data_segment_type_flag_status_end:     pop h
+                                                        ret 
+
+;mms_get_selected_data_segment_temporary_flag_status verifica se il segmento selezionato è temporaneo
+;A <- se CY = 0 restituisce $ff se temporaneo, $00 altrimenti
+;     se CY = 1 restituisce l'errore generato
+mms_get_selected_data_segment_temporary_flag_status:        push h
+                                                            lda mms_data_selected_segment_id
+                                                            ora a 
+                                                            jnz mms_get_selected_data_segment_temporary_flag_status_next 
+                                                            mvi a,mms_segment_data_not_found_error_code  
+                                                            stc 
+                                                            jmp mms_get_selected_data_segment_temporary_flag_status_end
+mms_get_selected_data_segment_temporary_flag_status_next:   lhld mms_data_selected_segment_address
+                                                            dcx h 
+                                                            dcx h 
+                                                            dcx h 
+                                                            dcx h 
+                                                            mov a,m 
+                                                            ani mms_low_memory_temporary_segment_mask
+                                                            ora a 
+                                                            jz mms_get_selected_data_segment_temporary_flag_status_tmp
+                                                            mvi a,$ff 
+                                                            stc 
+                                                            cmc 
+                                                            jmp mms_get_selected_data_segment_temporary_flag_status_end
+mms_get_selected_data_segment_temporary_flag_status_tmp:    mvi a,$00 
+                                                            stc 
+                                                            cmc 
+mms_get_selected_data_segment_temporary_flag_status_end:    pop h
+                                                            ret 
 
 
 ;mms_get_selected_data_segment_dimension restituisce la dimensione del segmento selezionato 
