@@ -54,37 +54,37 @@ mms_disk_device_not_selected                .equ mms_execution_code_mark+$0c
 ;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della fsm
 fsm_operation_ok                    .equ $ff 
 
-fsm_disk_not_inserted               .equ fsm_execution_code_mark+$20 
-fsm_disk_seek_error                 .equ fsm_execution_code_mark+$21 
-fsm_disk_write_protected            .equ fsm_execution_code_mark+$22 
-fsm_disk_data_transfer_error        .equ fsm_execution_code_mark+$23 
-fsm_disk_bad_sector                 .equ fsm_execution_code_mark+$24
-
 fsm_disk_device_sector_not_found    .equ fsm_execution_code_mark+$01
 fsm_disk_not_selected               .equ fsm_execution_code_mark+$02
-fsm_device_not_found                .equ fsm_execution_code_mark+$04
-fsm_unformatted_disk                .equ fsm_execution_code_mark+$05
+fsm_disk_not_inserted               .equ fsm_execution_code_mark+$03
+fsm_disk_seek_error                 .equ fsm_execution_code_mark+$04 
+fsm_disk_write_protected            .equ fsm_execution_code_mark+$05 
+fsm_disk_data_transfer_error        .equ fsm_execution_code_mark+$06 
+fsm_disk_bad_sector                 .equ fsm_execution_code_mark+$07
+fsm_device_not_found                .equ fsm_execution_code_mark+$08
+fsm_unformatted_disk                .equ fsm_execution_code_mark+$09
+fsm_unknown_format_type             .equ fsm_execution_code_mark+$0A
 
-fsm_not_enough_spage_left           .equ fsm_execution_code_mark+$08
+fsm_not_enough_spage_left           .equ fsm_execution_code_mark+$0B 
 
-fsm_bad_argument                    .equ fsm_execution_code_mark+$09
-fsm_formatting_fat_generation_error .equ fsm_execution_code_mark+$0A 
-fsm_list_is_empty                   .equ fsm_execution_code_mark+$0B 
-fsm_header_not_found                .equ fsm_execution_code_mark+$0C 
-fsm_header_not_selected             .equ fsm_execution_code_mark+$0D 
-fsm_end_of_disk                     .equ fsm_execution_code_mark+$0E 
-fsm_end_of_list                     .equ fsm_execution_code_mark+$0F 
-fsm_end_of_file                     .equ fsm_execution_code_mark+$10
-fsm_header_exist                    .equ fsm_execution_code_mark+$11 
-fsm_data_pointer_not_setted         .equ fsm_execution_code_mark+$12 
-fsm_destination_segment_overflow    .equ fsm_execution_code_mark+$13
-fsm_file_pointer_overflow           .equ fsm_execution_code_mark+$14
-fsm_source_segment_overflow         .equ fsm_execution_code_mark+$15
-fsm_selected_file_not_executable    .equ fsm_execution_code_mark+$16 
-fsm_program_too_big                 .equ fsm_execution_code_mark+$17 
-fsm_read_only_file                  .equ fsm_execution_code_mark+$18 
+fsm_bad_argument                    .equ fsm_execution_code_mark+$0C 
+fsm_formatting_fat_generation_error .equ fsm_execution_code_mark+$0D 
+fsm_list_is_empty                   .equ fsm_execution_code_mark+$0E 
+fsm_header_not_found                .equ fsm_execution_code_mark+$0F 
+fsm_header_not_selected             .equ fsm_execution_code_mark+$10
+fsm_end_of_disk                     .equ fsm_execution_code_mark+$11 
+fsm_end_of_list                     .equ fsm_execution_code_mark+$12
+fsm_end_of_file                     .equ fsm_execution_code_mark+$13
+fsm_header_exist                    .equ fsm_execution_code_mark+$14 
+fsm_data_pointer_not_setted         .equ fsm_execution_code_mark+$15 
+fsm_destination_segment_overflow    .equ fsm_execution_code_mark+$16
+fsm_file_pointer_overflow           .equ fsm_execution_code_mark+$17
+fsm_source_segment_overflow         .equ fsm_execution_code_mark+$18
+fsm_selected_file_not_executable    .equ fsm_execution_code_mark+$19 
+fsm_program_too_big                 .equ fsm_execution_code_mark+$1A  
+fsm_read_only_file                  .equ fsm_execution_code_mark+$1B 
 
-fsm_not_a_system_file               .equ fsm_execution_code_mark+$1B 
+fsm_not_a_system_file               .equ fsm_execution_code_mark+$1C 
 
 ;codici di esecuzione che possono essere generati durante l'esecuzione delle funzioni della MSI
 
@@ -102,21 +102,5 @@ msi_not_a_program                       .equ msi_execution_code_mark+$08
 msi_load_program_error_execution_code   .equ msi_execution_code_mark+$09 
 msi_program_start_error                 .equ msi_execution_code_mark+$0A
 msi_program_message_share_error         .equ msi_execution_code_mark+$0B
-
-;variabili e flags predefinite nella mms
-mms_low_memory_valid_segment_mask           .equ %10000000
-mms_low_memory_type_segment_mask            .equ %01000000
-mms_low_memory_temporary_segment_mask       .equ %00100000
-
-;variabili e flags predefinite nella FSM 
-fsm_disk_name_max_lenght                    .equ 20
-fsm_header_name_dimension                   .equ 20
-fsm_header_extension_dimension              .equ 5 
-fsm_header_valid_bit                        .equ %10000000
-fsm_header_deleted_bit                      .equ %01000000
-fsm_header_system_bit                       .equ %00100000
-fsm_header_program_bit                      .equ %00010000
-fsm_header_hidden_bit                       .equ %00001000
-fsm_header_readonly_bit                     .equ %00000100
 
 fsm_SFS10_format_ID                         .equ $01

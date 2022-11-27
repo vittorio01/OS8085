@@ -124,6 +124,10 @@
 .include "libraries_system_calls.8085.asm"
 .include "environment_variables.8085.asm"
 
+mms_low_memory_valid_segment_mask           .equ %10000000
+mms_low_memory_type_segment_mask            .equ %01000000
+mms_low_memory_temporary_segment_mask       .equ %00100000
+
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0020
 mms_data_low_pointer                        .equ reserved_memory_start+$0022

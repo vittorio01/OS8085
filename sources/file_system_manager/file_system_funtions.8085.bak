@@ -1,23 +1,21 @@
 ;fsm_disk_format formatta il disco e prepara il file system di base 
-; HL -> dimensione della sezione riservata al sistema (in bytes)
-
+; A -> Id della formattazione 
+;A <- esito dell'operazione 
 fsm_format_disk:                        push b 
                                         push d 
                                         push h 
-                                        lda fsm_selected_disk_loaded_page_flags
+                                        cpi fsm_SFS10_format_ID
+                                        jz fsm_format_disk_check
+                                        mvi a,fsm_unknown_format_type
+                                        jmp fsm_disk_external_generated_error 
+fsm_format_disk_check:                  lda fsm_selected_disk_loaded_page_flags
                                         ani fsm_disk_loaded_flags_selected_disk_mask
                                         jnz fsm_format_disk_next
                                         mvi a,fsm_disk_not_selected
                                         jmp fsm_disk_external_generated_error
-fsm_format_disk_next:                   ;call bios_disk_device_format_drive   
-                                        ;cpi bios_operation_ok 
-                                        ;jnz fsm_disk_external_generated_error
-                                        lda fsm_selected_disk
-                                        call bios_disk_device_select_drive
-                                        ora a 
-                                        jnz fsm_format_disk_next2
-                                        mvi a,fsm_device_not_found
-                                        jmp fsm_disk_external_generated_error
+fsm_format_disk_next:                   call bios_disk_device_format_drive   
+                                        cpi bios_operation_ok 
+                                        jnz fsm_disk_external_generated_error
 fsm_format_disk_next2:                  call bios_disk_device_get_bps
                                         sta fsm_selected_disk_bps_number
                                         mvi a,fsm_disk_loaded_flags_selected_disk_mask
@@ -51,8 +49,7 @@ fsm_format_disk_next2:                  call bios_disk_device_get_bps
                                         call unsigned_multiply_byte
                                         mov e,c 
                                         mov d,b 
-                                        pop b
-                                        push b
+                                        lxi b,SYSTEM_dimension
                                         mov a,b
                                         ora c
                                         jz fsm_format_disk_jump1
@@ -84,21 +81,28 @@ fsm_format_disk_jump1:                  inx b
                                         cpi fsm_operation_ok
                                         lxi h,0 
                                         jnz fsm_disk_external_generated_error
-                                        mvi a,$c9 
-                                        call mms_write_selected_data_segment_byte
-                                        jc fsm_disk_external_generated_error 
-                                        inx h 
-                                        inx h 
-                                        inx h 
                                         lxi d,fsm_format_marker
                                         mvi a,fsm_format_marker_lenght 
-                                        call mms_string_segment_ncopy
+                                        call fsm_string_segment_ncopy
                                         mvi a,fsm_format_marker_lenght 
                                         add l 
                                         mov l,a 
                                         mov a,h 
                                         aci 0 
                                         mov h,a 
+                                        xra a 
+                                        call mms_write_selected_data_segment_byte
+                                        jc fsm_disk_external_generated_error 
+                                        inx h 
+                                        xra a 
+                                        call mms_write_selected_data_segment_byte
+                                        jc fsm_disk_external_generated_error 
+                                        inx h 
+                                        xra a 
+                                        call mms_write_selected_data_segment_byte
+                                        jc fsm_disk_external_generated_error 
+                                        inx h 
+                                        
                                         lda fsm_selected_disk_sectors_number
                                         call mms_write_selected_data_segment_byte
                                         jc fsm_disk_external_generated_error  
@@ -202,15 +206,8 @@ fsm_format_disk_jump2:                  pop d
                                         call mms_write_selected_data_segment_byte
                                         jc fsm_disk_external_generated_error  
                                         inx h 
-                                        mvi A,0 
-                                        call mms_write_selected_data_segment_byte
-                                        jc fsm_disk_external_generated_error 
-                                        inx h 
-                                        mvi a,0 
-                                        call mms_write_selected_data_segment_byte
-                                        jc fsm_disk_external_generated_error 
                                         lxi h,0
-                                        call mms_disk_device_write_sector
+                                        call fsm_disk_device_write_sector
                                         cpi mms_operation_ok
                                         jnz fsm_disk_external_generated_error
                                         mvi a,fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
