@@ -2,7 +2,7 @@
 ;-  selezionare un dispositivo  (selezione)
 ;-  selezionare un settore      (ricerca)
 ;-  leggere un settore          (scrittura)
-;-  srivere su un settore       (lettura)
+;-  scrivere su un settore       (lettura)
 
 ;Definiamo come file l'insieme di dati di N byte di lunghezza suddivisi in due differenti sezioni:
 ;-  intestazione, che contiene le informazioni sul file (nome, estenzione, permessi, tipologia, data di creazione ecc)
@@ -31,14 +31,11 @@
 ;-  tipo        ->  un byte che identifica la tipologia di file. I bit assumono valori diversi secondo le seguenti caratteristiche:
 ;               * bit 8 -> distingue il marker EOL (0) da un intestazione valida (1)
 ;               * bit 7 -> indica se l'intestazione è stata eliminata (1) 
-;               * bit 6 -> indica se il file è di sistema (1) 
-;               * bit 5 -> indica se il file è eseguibile (1)
-;               * bit 4 -> indica se il file è nascosto (1)
-;               * bit 3 -> indica se il file è di sola lettura (1)
+;               * bit 3 -> indica se il file è di sistema (1) 
+;               * bit 2 -> indica se il file è nascosto (1)
+;               * bit 1 -> indica se il file è di sola lettura (1)
 ;               
-;-  nome        -> 20 bytes per memorizzare nome del file. La stringa prevede una dimensione massima di 20 bytes, ma può essere interrotta prima di questo limite 
-;                  tramite il carattere terminatore ($00)
-;-  estenzione  -> 5 bytes per memorizzare l'estenzione del file. La stringa prevede una dimensione massima di 5 bytes, ma può essere interrotta prima di questo limite 
+;-  nome        -> 25 bytes per memorizzare nome ed estenzione (l'estenzione viene separata da un punto) del file. La stringa prevede una dimensione massima di 20 bytes, ma può essere interrotta prima di questo limite 
 ;                  tramite il carattere terminatore ($00)
 ;-  dimensione  -> 4 bytes che indicano la dimensione del file (in bytes)
 ;-  dati        -> 2 bytes che mantengono l'indirizzo della prima pagina dei dati
@@ -108,20 +105,21 @@
 ;----- Struttura del file system ------
 ; Il disco viene scomposto nelle seguenti parti:
 ;-  Il settore di avvio (il primo settore) contiene tutte le specifiche del disco tra cui:
-;       * istruzione di salto                   (3 bytes) un istruzione di salto alla parte eseguibile del settore di avvio
 ;       * marcatore di formattazione            (6 bytes)
-;       * numero di testine del disco           (1 byte)
-;       * numero di tracce per testina          (2 bytes)
-;       * numero di settori per traccia         (1 byte)
-;       * numero di bytes per settore           (1 byte)
+;       * flags del disco                       (1 byte)
+;           bit 8 -> indica se il disco contiene una parte eseguibile nel settore di avvio
+;           bit 7 -> indica se il disco è dotato di un sistema operativo nella zona riservata
+;       * load address                          (2 bytes)
+;           indica l'indirizzo RAM dove il sistema operativo deve essere caricato 
+;       * numero totale di settori              (4 bytes)
 ;       * numero di settori per pagina          (1 byte)
-;       * numero di pagine dedicate alla fat    (1 byte)
 ;       * numero di pagine dedicate ai dati     (2 bytes)
-;       * puntatore al primo settore della fat  (4 bytes)
+;       * numero di pagine dedicate alla fat    (1 byte)
+;       * puntatore al primo settore della fat  (2 bytes)
 ;       Il resto del settore contiene le istruzioni per l'avvio del sistema operativo (se presenti)
 
 ;-  Il sistema operativo occupa una certa zona riservata del disco, oltre alla parte rimanente del settore di avvio, e può avere una dimensione massima di 64KB (dato che deve essere caricao in memoria)
-;   All'avvio, il computer carica in memoria tutto il codice de sistema operativo ed esegue l'istruzione di salto del settore di avvio
+;   All'avvio, il computer carica in memoria tutto il codice del sistema operativo ed esegue l'istruzione di salto del settore di avvio
 ;-  La File Allocation Table contiene la tabella di allocazione, la sua dimensione dipende dal numero di pagine disponibili nel disco 
 ;-  La zona dati comprende la parte restante del disco e contiene intestazioni e corpo dei files, organizzati come detto precedentemente
 ;----------------------------------------------------------------------
@@ -181,6 +179,14 @@ fsm_uncoded_page_dimension              .equ 512
 fsm_boot_sector_start_position          .equ $0020
 fsm_boot_sector_compile_address_offset  .equ low_memory_start
 
+fsm_disk_name_max_lenght                    .equ 20
+fsm_header_name_dimension                   .equ 25
+fsm_header_valid_bit                        .equ %10000000
+fsm_header_deleted_bit                      .equ %01000000
+fsm_header_system_bit                       .equ %00100000
+fsm_header_hidden_bit                       .equ %00001000
+fsm_header_readonly_bit                     .equ %00000100
+
 fsm_format_marker_lenght            .equ 6 
 
 fsm_header_dimension                .equ 32 
@@ -200,11 +206,14 @@ fsm_functions:  .org FSM
                 jmp fsm_select_file_header                          ;seleziona il file desiderato
                 jmp fsm_create_file_header                          ;crea il file desiderato        
                 jmp fsm_get_selected_file_header_name               ;restituisce il nome del file selezionato
-                jmp fsm_get_selected_file_header_extension          ;restituisce l'estenzione del file selezionato
-                jmp fsm_get_selected_file_header_flags              ;restituisce le informazioni sul tipo di file selezionato
+                jmp fsm_get_selected_file_header_system_flag_status 
+                jmp fsm_get_selected_file_header_hidden_flag_status 
+                jmp fsm_get_selected_file_header_readonly_flag_status 
                 jmp fsm_get_selected_file_header_dimension          ;restituisce la dimensione del file selezionato
-                jmp fsm_set_selected_file_header_name_and_extension ;imposta nome ed estenzione al file selezionato 
-                jmp fsm_set_selected_file_header_flags              ;imposta le informazioni sul file selezionato
+                jmp fsm_set_selected_file_header_name               ;imposta nome ed estenzione al file selezionato 
+                jmp fsm_set_selected_file_header_system_flag 
+                jmp fsm_set_selected_file_header_hidden_flag 
+                jmp fsm_set_selected_file_header_readonly_flag
                 jmp fsm_delete_selected_file_header                 ;elimina il file selezionato
                 jmp fsm_reset_file_header_scan_pointer              ;resetta il puntatore alla lista dei files diponibili  
                 jmp fsm_increment_file_header_scan_pointer          ;incrementa il puntatore alla lista dei files disponibili
@@ -218,9 +227,8 @@ fsm_functions:  .org FSM
                 jmp fsm_load_selected_program                       ;carica il programma nella memoria e lo predispone per essere avviato
                 ;informazioni sul file system 
                 jmp fsm_get_disk_format_type                        ;restituisce il tipo di formattazione del disco selezionato 
-                jmp fsm_file_name_max_dimensions                    ;ritorna le dimensioni di nome ed estenzione massimi che possono essere attribuiti ad un file
+                jmp fsm_file_name_max_dimension                     ;ritorna le dimensioni di nome ed estenzione massimi che possono essere attribuiti ad un file
                 jmp fsm_disk_name_max_dimension                     ;ritorna la dimensione massima del nome che si può attribuire al disco 
-                                    
 
 fsm_format_marker   .text "SFS1.0"
                     .b $00
@@ -265,10 +273,11 @@ fsm_select_disk_next:           sta fsm_selected_disk
                                 sta fsm_selected_disk_loaded_page_flags
                                 mvi a,fsm_device_not_found
                                 jmp fsm_select_disk_end
-fsm_select_next2:               call bios_disk_device_get_bps
-                                sta fsm_selected_disk_bps_number
+fsm_select_next2:               call fsm_disk_device_start_motor 
                                 mvi a,fsm_disk_loaded_flags_selected_disk_mask
                                 sta fsm_selected_disk_loaded_page_flags
+                                call bios_disk_device_get_bps
+                                sta fsm_selected_disk_bps_number
                                 call bios_disk_device_get_spt
                                 mov b,a 
                                 sta fsm_selected_disk_spt_number
@@ -310,26 +319,19 @@ fsm_select_next2:               call bios_disk_device_get_bps
                                 call fsm_disk_device_read_sector
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end    
-                                lxi h,3
+                                lxi h,0
                                 lxi d,fsm_format_marker
                                 mvi a,fsm_format_marker_lenght
                                 call fsm_string_segment_ncompare
+                                jc fsm_select_disk_end 
                                 ora a 
                                 jnz fsm_select_disk_formatted_disk
-                                mvi a,fsm_unformatted_disk 
+                                mvi a,fsm_unknown_format_type 
                                 jmp fsm_select_disk_end
 fsm_select_disk_formatted_disk: lda fsm_selected_disk_loaded_page_flags
                                 ori fsm_disk_loaded_flags_formatted_disk_mask
                                 sta fsm_selected_disk_loaded_page_flags
-                                lxi h,0 
-                                call mms_read_selected_data_segment_byte
-                                jc fsm_select_disk_end 
-                                cpi $c9 
-                                jnz fsm_select_disk_not_bootable
-                                lda fsm_selected_disk_loaded_page_flags 
-                                ori fsm_disk_loaded_flags_bootable_disk
-                                sta fsm_selected_disk_loaded_page_flags 
-fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7 
+fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7
                                 call mms_read_selected_data_segment_byte
                                 jc fsm_select_disk_end 
                                 sta fsm_selected_disk_spp_number
@@ -358,16 +360,17 @@ fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
                                 mvi a,fsm_operation_ok
-fsm_select_disk_end:            pop d 
+fsm_select_disk_end:            push psw 
+                                call fsm_disk_device_stop_motor
+                                pop psw 
+                                pop d 
                                 pop h 
                                 ret 
 
-
 ;fsm_file_name_max_dimensions restituisce le dimensioni massime del nome attribuibile ad un file 
-;B -> dimensione massima del nome 
-;C -> dimensione massima dell'estensione 
-fsm_file_name_max_dimensions:   mvi b,fsm_header_name_dimension
-                                mvi c,fsm_header_extension_dimension
+;A -> dimensione massima del nome 
+
+fsm_file_name_max_dimension:    mvi a,fsm_header_name_dimension
                                 ret 
 
 ;fsm_disk_name_max_dimension restituisce la dimensione massima del nome attribuibile al disco 
@@ -668,12 +671,7 @@ fsm_load_selected_program:                      push h
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_load_selected_program_end
-                                                call fsm_read_selected_data_segment_byte
-                                                jc fsm_load_selected_program_end
-                                                ani fsm_header_program_bit
-                                                jnz fsm_load_selected_program_verified
-                                                mvi a,fsm_selected_file_not_executable 
-fsm_load_selected_program_verified:             lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+fsm_load_selected_program_verified:             lxi d,fsm_header_name_dimension+1 
                                                 dad d 
                                                 call fsm_read_selected_data_segment_byte
                                                 jc fsm_load_selected_program_end
@@ -768,9 +766,9 @@ fsm_selected_file_write_bytes:              push d
                                             jnz fsm_selected_file_write_bytes_next 
                                             mvi a,fsm_data_pointer_not_setted
                                             jmp fsm_selected_file_write_bytes_end2
-fsm_selected_file_write_bytes_next:         call fsm_get_selected_file_header_flags
+fsm_selected_file_write_bytes_next:         call fsm_get_selected_file_header_readonly_flag_status
                                             jc fsm_selected_file_write_bytes_end2
-                                            ani fsm_header_readonly_bit
+                                            ora a 
                                             jz fsm_selected_file_write_bytes_next2
                                             mvi a,fsm_read_only_file
                                             jmp fsm_selected_file_write_bytes_end2
@@ -903,7 +901,7 @@ fsm_selected_file_set_data_pointer:             push h
                                                 call fsm_load_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz fsm_selected_file_set_data_pointer_end
-fsm_selected_file_set_data_pointer_next:        lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
+fsm_selected_file_set_data_pointer_next:        lxi b,fsm_header_name_dimension+1
                                                 dad b 
                                                 call fsm_read_selected_data_segment_byte
                                                 jc fsm_selected_file_set_data_pointer_end
@@ -1002,9 +1000,9 @@ fsm_selected_file_set_data_pointer_end:         pop d
 fsm_selected_file_remove_data_bytes:                push h 
                                                     push b 
                                                     push d  
-                                                    call fsm_get_selected_file_header_flags
+                                                    call fsm_get_selected_file_header_readonly_flag_status
                                                     jc fsm_selected_file_remove_data_bytes_end
-                                                    ani fsm_header_readonly_bit
+                                                    ora a 
                                                     jz fsm_selected_file_remove_data_bytes_rwfile
                                                     mvi a,fsm_read_only_file
                                                     jmp fsm_selected_file_remove_data_bytes_end
@@ -1012,7 +1010,7 @@ fsm_selected_file_remove_data_bytes_rwfile:         call fsm_load_selected_file_
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_remove_data_bytes_end
                                                     push d 
-                                                    lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    lxi d,fsm_header_name_dimension+1 
                                                     dad d 
                                                     pop d 
                                                                 
@@ -1086,7 +1084,7 @@ fsm_selected_file_remove_data_bytes_remainder1:     pop h
                                                     call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_remove_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    lxi b,fsm_header_name_dimension+1 
                                                     dad b 
                                                     call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end4
@@ -1139,7 +1137,7 @@ fsm_selected_file_remove_data_bytes_remainder2:     pop h
                                                     call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_remove_data_bytes_end
-                                                    mvi a,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                                    mvi a,fsm_header_name_dimension+5
                                                     add l 
                                                     mov l,a 
                                                     mov a,h 
@@ -1169,7 +1167,7 @@ fsm_selected_file_remove_data_bytes_loop_end:       pop d
 fsm_selected_file_remove_data_bytes_next4:          call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_remove_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                                    lxi b,fsm_header_name_dimension+1
                                                     dad b
                                                     call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_remove_data_bytes_end
@@ -1245,7 +1243,7 @@ fsm_selected_file_wipe:         push d
                                 call fsm_load_selected_file_header
                                 cpi fsm_operation_ok
                                 jnz fsm_selected_file_wipe_end
-                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+5 
+                                lxi d,fsm_header_name_dimension+5 
                                 dad d 
                                 call fsm_read_selected_data_segment_byte
                                 jc fsm_selected_file_wipe_end
@@ -1282,7 +1280,7 @@ fsm_selected_file_wipe_next2:   mov a,c
                                 call fsm_load_selected_file_header
                                 cpi fsm_operation_ok
                                 jnz fsm_selected_file_wipe_end
-                                lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+6 
+                                lxi d,fsm_header_name_dimension+6 
                                 dad d 
                                 mvi a,$ff
                                 call fsm_write_selected_data_segment_byte
@@ -1324,9 +1322,9 @@ fsm_selected_file_wipe_end:     pop b
 fsm_selected_file_append_data_bytes:                push h 
                                                     push b 
                                                     push d  
-                                                    call fsm_get_selected_file_header_flags 
+                                                    call fsm_get_selected_file_header_readonly_flag_status
                                                     jc fsm_selected_file_append_data_bytes_rwfile
-                                                    ani fsm_header_readonly_bit
+                                                    ora a 
                                                     jz fsm_selected_file_append_data_bytes_rwfile
                                                     mvi a,fsm_read_only_file
                                                     jmp fsm_selected_file_append_data_bytes_end
@@ -1334,7 +1332,7 @@ fsm_selected_file_append_data_bytes_rwfile:         call fsm_load_selected_file_
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
                                                     push d 
-                                                    lxi d,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    lxi d,fsm_header_name_dimension+1 
                                                     dad d 
                                                     pop d 
                                                                 
@@ -1402,7 +1400,7 @@ fsm_selected_file_append_data_bytes_remainder1:     pop h
                                                     call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1 
+                                                    lxi b,fsm_header_name_dimension+1 
                                                     dad b 
                                                     call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end4
@@ -1456,7 +1454,7 @@ fsm_selected_file_append_data_bytes_next2:          xchg
                                                     call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                                    lxi b,fsm_header_name_dimension+5
                                                     dad b
                                                     call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
@@ -1480,7 +1478,7 @@ fsm_selected_file_append_data_bytes_next2:          xchg
                                                     call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+5
+                                                    lxi b,fsm_header_name_dimension+5
                                                     dad b  
                                                     mov a,e 
                                                     call fsm_write_selected_data_segment_byte
@@ -1498,7 +1496,7 @@ fsm_selected_file_append_data_bytes_next3:          mov l,c
 fsm_selected_file_append_data_bytes_next4:          call fsm_load_selected_file_header
                                                     cpi fsm_operation_ok
                                                     jnz fsm_selected_file_append_data_bytes_end
-                                                    lxi b,fsm_header_name_dimension+fsm_header_extension_dimension+1
+                                                    lxi b,fsm_header_name_dimension+1
                                                     dad b
                                                     call fsm_read_selected_data_segment_byte
                                                     jc fsm_selected_file_append_data_bytes_end
@@ -1585,9 +1583,9 @@ fsm_reset_file_header_scan_pointer: push h
 fsm_delete_selected_file_header:        push h 
                                         push d 
                                         push b 
-                                        call fsm_get_selected_file_header_flags
+                                        call fsm_get_selected_file_header_readonly_flag_status
                                         jc fsm_delete_selected_file_header_end
-                                        ani fsm_header_readonly_bit
+                                        ora a 
                                         jz fsm_delete_selected_file_header_rwfile 
                                         mvi a,fsm_read_only_file
                                         jmp fsm_delete_selected_file_header_end
@@ -1717,63 +1715,167 @@ fsm_increment_file_header_scan_pointer_end:     pop b
                                                 pop h 
                                                 ret 
 
-;fsm_get_selected_file_header_flags restituisce le caratteristiche del file 
-; A <- flags 
-;PSW <- CY viene settato se la funzione restituisce un errore 
+;fsm_get_selected_file_header_system_flag_status verifica se il file selezionato è di sistema 
+;A <- se CY = 0 restituisce lo stato del file ($ff se di sistema, $00 altrimenti)
+;     se CY = 1 restituisce un codice di errore 
 
-fsm_get_selected_file_header_flags:         push h 
-                                            call fsm_load_selected_file_header
-                                            cpi fsm_operation_ok
-                                            jz fsm_get_selected_file_header_flags_next 
-                                            stc 
-                                            jmp fsm_get_selected_file_header_flags_end
-fsm_get_selected_file_header_flags_next:    call fsm_read_selected_data_segment_byte
-                                            jc fsm_get_selected_file_header_flags_end
-                                            stc 
-                                            cmc 
-fsm_get_selected_file_header_flags_end:     pop h 
-                                            ret 
-
-;fsm_set_selected_file_header_flags imposta le flags al file selezionato precedentemente
-; A <- esito dell'operazione
-fsm_set_selected_file_header_flags:         push h 
-                                            ori fsm_header_valid_bit
-                                            ani $ff-fsm_header_deleted_bit
-                                            push psw 
-fsm_set_selected_file_header_flags_next2:   call fsm_load_selected_file_header
-                                            cpi fsm_operation_ok
-                                            jnz fsm_set_selected_file_header_flags_end
-                                            xthl 
-                                            mov a,h 
-                                            xthl  
-                                            call fsm_write_selected_data_segment_byte
-                                            jc fsm_set_selected_file_header_flags_end
-                                            call fsm_writeback_page
-fsm_set_selected_file_header_flags_end:     inx sp 
-                                            inx sp 
-                                            pop h 
-                                            ret 
-
-;fsm_get_selected_file_header_first_page_address restituisce il primo indirizzo della pagina che punta al corpo del file selezionato precedentemente 
-;A <- esito dell'operazione 
-;HL <- indirizzo alla prima pagina
-fsm_get_selected_file_header_first_page_address:        push d 
+fsm_get_selected_file_header_system_flag_status:        push h 
                                                         call fsm_load_selected_file_header
                                                         cpi fsm_operation_ok
-                                                        jnz fsm_get_selected_file_header_first_page_address_end 
-                                                        lxi d,fsm_header_dimension-2 
-                                                        dad d 
-                                                        call fsm_read_selected_data_segment_byte
-                                                        jc fsm_get_selected_file_header_first_page_address_end
-                                                        mov e,a 
-                                                        inx h 
-                                                        call fsm_read_selected_data_segment_byte
-                                                        jc fsm_get_selected_file_header_first_page_address_end
-                                                        mov d,a 
-                                                        xchg 
-fsm_get_selected_file_header_first_page_address_end:    pop d  
+                                                        jz fsm_get_selected_file_header_system_flag_status_next  
+                                                        stc 
+                                                        jmp fsm_get_selected_file_header_system_flag_status_end
+fsm_get_selected_file_header_system_flag_status_next:   call fsm_read_selected_data_segment_byte
+                                                        jc fsm_get_selected_file_header_system_flag_status_end
+                                                        ani fsm_header_system_bit
+                                                        jz fsm_get_selected_file_header_system_flag_status_reset
+                                                        mvi a,$ff 
+                                                        jmp fsm_get_selected_file_header_system_flag_status_end
+fsm_get_selected_file_header_system_flag_status_reset:  stc 
+                                                        cmc 
+fsm_get_selected_file_header_system_flag_status_end:    pop h 
                                                         ret 
 
+;fsm_get_selected_file_header_hidden_flag_status verifica se il file selezionato è nascosto
+;A <- se CY = 0 restituisce lo stato del file ($ff se nascosto, $00 altrimenti)
+;     se CY = 1 restituisce un codice di errore 
+
+fsm_get_selected_file_header_hidden_flag_status:        push h 
+                                                        call fsm_load_selected_file_header
+                                                        cpi fsm_operation_ok
+                                                        jz fsm_get_selected_file_header_hidden_flag_status_next  
+                                                        stc 
+                                                        jmp fsm_get_selected_file_header_hidden_flag_status_end
+fsm_get_selected_file_header_hidden_flag_status_next:   call fsm_read_selected_data_segment_byte
+                                                        jc fsm_get_selected_file_header_hidden_flag_status_end
+                                                        ani fsm_header_hidden_bit
+                                                        jz fsm_get_selected_file_header_hidden_flag_status_reset
+                                                        mvi a,$ff 
+                                                        jmp fsm_get_selected_file_header_hidden_flag_status_end
+fsm_get_selected_file_header_hidden_flag_status_reset:  stc 
+                                                        cmc 
+fsm_get_selected_file_header_hidden_flag_status_end:    pop h 
+                                                        ret 
+
+;fsm_get_selected_file_header_readonly_flag_status verifica se il file selezionato è di sola lettura
+;A <- se CY = 0 restituisce lo stato del file ($ff se di sola lettura, $00 altrimenti)
+;     se CY = 1 restituisce un codice di errore 
+
+fsm_get_selected_file_header_readonly_flag_status:          push h 
+                                                            call fsm_load_selected_file_header
+                                                            cpi fsm_operation_ok
+                                                            jz fsm_get_selected_file_header_readonly_flag_status_next  
+                                                            stc 
+                                                            jmp fsm_get_selected_file_header_readonly_flag_status_end
+fsm_get_selected_file_header_readonly_flag_status_next:     call fsm_read_selected_data_segment_byte
+                                                            jc fsm_get_selected_file_header_readonly_flag_status_end
+                                                            ani fsm_header_readonly_bit
+                                                            jz fsm_get_selected_file_header_readonly_flag_status_reset
+                                                            mvi a,$ff 
+                                                            jmp fsm_get_selected_file_header_readonly_flag_status_end
+fsm_get_selected_file_header_readonly_flag_status_reset:    stc 
+                                                            cmc 
+fsm_get_selected_file_header_readonly_flag_status_end:      pop h 
+                                                            ret 
+
+;fsm_set_selected_file_header_system_flag imposta modifica la flag di sistema del file 
+;A -> $00 se il file non deve essere di sistema, altro se deve esserlo 
+;A <- esito dell'operazione 
+fsm_set_selected_file_header_system_flag:       push h 
+                                                push psw 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_set_selected_file_header_system_flag_end
+                                                pop psw 
+                                                ora a 
+                                                jz fsm_set_selected_file_header_system_flag_next
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_system_flag_end
+                                                ori fsm_header_system_bit
+                                                call fsm_write_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_system_flag_end
+                                                jmp fsm_set_selected_file_header_readonly_flag_ok
+fsm_set_selected_file_header_system_flag_next:  call fsm_read_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_system_flag_end
+                                                ani $ff-fsm_header_system_bit
+                                                call fsm_write_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_system_flag_end
+fsm_set_selected_file_header_system_flag_ok:    call fsm_writeback_page
+                                                cpi fsm_operation_ok
+                                                jz fsm_set_selected_file_header_system_flag_end2
+                                                mvi a,fsm_operation_ok
+                                                pop h 
+                                                ret 
+fsm_set_selected_file_header_system_flag_end:   inx sp 
+                                                inx sp 
+fsm_set_selected_file_header_system_flag_end2:  pop h 
+                                                ret 
+
+;fsm_set_selected_file_header_hidden_flag imposta modifica la flag nascosto del file 
+;A -> $00 se il file non deve essere nascosto, altro se deve esserlo 
+;A <- esito dell'operazione 
+fsm_set_selected_file_header_hidden_flag:       push h 
+                                                push psw 
+                                                call fsm_load_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz fsm_set_selected_file_header_hidden_flag_end
+                                                pop psw 
+                                                ora a 
+                                                jz fsm_set_selected_file_header_hidden_flag_next
+                                                call fsm_read_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_hidden_flag_end
+                                                ori fsm_header_hidden_bit
+                                                call fsm_write_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_hidden_flag_end
+                                                jmp fsm_set_selected_file_header_readonly_flag_ok
+fsm_set_selected_file_header_hidden_flag_next:  call fsm_read_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_hidden_flag_end
+                                                ani $ff-fsm_header_hidden_bit
+                                                call fsm_write_selected_data_segment_byte
+                                                jc fsm_set_selected_file_header_hidden_flag_end
+fsm_set_selected_file_header_hidden_flag_ok:    call fsm_writeback_page
+                                                cpi fsm_operation_ok
+                                                jz fsm_set_selected_file_header_hidden_flag_end2
+                                                mvi a,fsm_operation_ok
+                                                pop h 
+                                                ret
+fsm_set_selected_file_header_hidden_flag_end:   inx sp 
+                                                inx sp 
+fsm_set_selected_file_header_hidden_flag_end2:  pop h 
+                                                ret 
+
+;fsm_set_selected_file_header_readonly_flag imposta modifica la flag di sola lettura del file 
+;A -> $00 se il file non deve essere di sola lettura, altro se deve esserlo 
+;A <- esito dell'operazione 
+fsm_set_selected_file_header_readonly_flag:         push h 
+                                                    push psw 
+                                                    call fsm_load_selected_file_header
+                                                    cpi fsm_operation_ok
+                                                    jnz fsm_set_selected_file_header_readonly_flag_end
+                                                    pop psw 
+                                                    ora a 
+                                                    jz fsm_set_selected_file_header_readonly_flag_next
+                                                    call fsm_read_selected_data_segment_byte
+                                                    jc fsm_set_selected_file_header_readonly_flag_end
+                                                    ori fsm_header_readonly_bit
+                                                    call fsm_write_selected_data_segment_byte
+                                                    jc fsm_set_selected_file_header_readonly_flag_end
+                                                    jmp fsm_set_selected_file_header_readonly_flag_ok
+fsm_set_selected_file_header_readonly_flag_next:    call fsm_read_selected_data_segment_byte
+                                                    jc fsm_set_selected_file_header_readonly_flag_end
+                                                    ani $ff-fsm_header_readonly_bit
+                                                    call fsm_write_selected_data_segment_byte
+                                                    jc fsm_set_selected_file_header_readonly_flag_end
+fsm_set_selected_file_header_readonly_flag_ok:      call fsm_writeback_page
+                                                    cpi fsm_operation_ok
+                                                    jz fsm_set_selected_file_header_readonly_flag_end2
+                                                    mvi a,fsm_operation_ok
+                                                    pop h 
+                                                    ret
+fsm_set_selected_file_header_readonly_flag_end:     inx sp 
+                                                    inx sp 
+fsm_set_selected_file_header_readonly_flag_end2:    pop h 
+                                                    ret 
 
 ;fsm_get_selected_file_header_dimension restituisce la dimensione del file selezionato precedentemente 
 ;A <- esito dell'operazione
@@ -1804,81 +1906,30 @@ fsm_get_selected_file_header_dimension:     push h
 fsm_get_selected_file_header_dimension_end: pop h 
                                             ret 
 
-;fsm_set_selected_file_header_name_and_extension modfica il nome e l'estenzione del file desiderato
-;BC -> nome del file 
-;DE -> estensione 
+;fsm_set_selected_file_header_name modfica il nome e l'estenzione del file desiderato
+;BC -> nome completo del file 
 
 ;A <- esito dell'operazione 
-fsm_set_selected_file_header_name_and_extension:        push h 
+fsm_set_selected_file_header_name:                      push h 
                                                         push d 
                                                         push b 
                                                         call fsm_search_file_header
                                                         cpi fsm_header_not_found
-                                                        jz fsm_set_selected_file_header_name_and_extension_ndp
+                                                        jz fsm_set_selected_file_header_name_ndp
                                                         cpi fsm_operation_ok
-                                                        jnz fsm_set_selected_file_header_name_and_extension_end
+                                                        jnz fsm_set_selected_file_header_name_end
                                                         mvi a,fsm_header_exist
-                                                        jmp fsm_set_selected_file_header_name_and_extension_end
-fsm_set_selected_file_header_name_and_extension_ndp:    call fsm_load_selected_file_header
+                                                        jmp fsm_set_selected_file_header_name_end
+fsm_set_selected_file_header_name_ndp:                  call fsm_load_selected_file_header
                                                         cpi fsm_operation_ok
-                                                        jnz fsm_set_selected_file_header_name_and_extension_end
-                                                        inx h 
-                                                        push d 
-                                                        push b 
-                                                        pop d 
-                                                        pop b 
-                                                        mvi a,fsm_header_name_dimension
-                                                        call fsm_string_segment_ncompare
-                                                        lxi d,fsm_header_name_dimension
-                                                        dad d 
+                                                        jnz fsm_set_selected_file_header_name_end
                                                         mov e,c 
                                                         mov d,b 
-                                                        mov c,a 
-                                                        mvi a,fsm_header_extension_dimension
-                                                        call fsm_string_segment_ncompare
-                                                        ana c 
-                                                        jz fsm_set_selected_file_header_name_and_extension_next
-                                                        inx sp 
-                                                        inx sp 
-                                                        mvi a,fsm_operation_ok
-                                                        jmp fsm_set_selected_file_header_name_and_extension_end
-fsm_set_selected_file_header_name_and_extension_next:   xthl 
-                                                        mov c,l
-                                                        mov b,h 
-                                                        xthl 
-                                                        inx sp 
-                                                        inx sp 
-                                                        xthl 
-                                                        mov e,l 
-                                                        mov d,h 
-                                                        xthl 
-                                                        dcx sp 
-                                                        dcx sp 
-                                                        call fsm_search_file_header
-                                                        cpi fsm_header_not_found
-                                                        jz fsm_set_selected_file_header_name_and_extension_next2
-                                                        cpi fsm_operation_ok
-                                                        jnz fsm_set_selected_file_header_name_and_extension_end
-                                                        mvi a,fsm_header_exist
-                                                        jmp fsm_set_selected_file_header_name_and_extension_end
-fsm_set_selected_file_header_name_and_extension_next2:  call fsm_load_selected_file_header
-                                                        cpi fsm_operation_ok
-                                                        jnz fsm_set_selected_file_header_name_and_extension_end
-                                                        push b 
-                                                        push d 
-                                                        pop b 
-                                                        pop d 
                                                         inx h 
                                                         mvi a,fsm_header_name_dimension
                                                         call fsm_string_segment_ncopy
-                                                        lxi d,fsm_header_name_dimension
-                                                        dad d 
-                                                        mvi a,fsm_header_extension_dimension
-                                                        mov e,c 
-                                                        mov d,b  
-                                                        call fsm_string_segment_ncopy
                                                         call fsm_writeback_page
-fsm_set_selected_file_header_name_and_extension_end:    pop b 
+fsm_set_selected_file_header_name_end:                  pop b 
                                                         pop d 
                                                         pop h 
                                                         ret 
@@ -1962,84 +2013,6 @@ fsm_get_selected_file_header_name_end:                  pop b
                                                         pop h 
                                                         ret 
 
-;fsm_get_selected_file_header_extension restituisce il nome del file selezionato 
-;A <- esito dell'operazione 
-;SP <- nome del file (una stringa non limitata in lunghezza con $00 come carattere terminatore)
-
-fsm_get_selected_file_header_extension:                     push h 
-                                                            push d 
-                                                            push b 
-                                                            call fsm_load_selected_file_header 
-                                                            cpi fsm_operation_ok
-                                                            jnz fsm_get_selected_file_header_extension_end
-                                                            lxi d,fsm_header_extension_dimension+fsm_header_name_dimension
-                                                            dad d 
-                                                            mvi b,fsm_header_extension_dimension
-fsm_get_selected_file_header_extension_dimension_loop:      call fsm_read_selected_data_segment_byte
-                                                            jc fsm_get_selected_file_header_extension_end
-                                                            ora a 
-                                                            jnz fsm_get_selected_file_header_extension_dimension_loop_end
-                                                            dcx h 
-                                                            dcr b 
-                                                            jnz fsm_get_selected_file_header_extension_dimension_loop
-fsm_get_selected_file_header_extension_dimension_loop_end:  mov a,l 
-                                                            sub b 
-                                                            mov l,a 
-                                                            mov a,h 
-                                                            sbi 0 
-                                                            mov h,a 
-                                                            inx h
-                                                            mov a,b 
-                                                            cpi fsm_header_dimension
-                                                            jnc fsm_get_selected_file_header_extension_dimension_next
-                                                            inr b 
-fsm_get_selected_file_header_extension_dimension_next:      xchg 
-                                                            lxi h,0 
-                                                            dad sp 
-                                                            mov a,l 
-                                                            sub b 
-                                                            mov l,a 
-                                                            mov a,h 
-                                                            sbi 0 
-                                                            mov h,a
-                                                            mvi c,8
-                                                            dcx sp 
-fsm_get_selected_file_header_extension_stack_loop:          xthl 
-                                                            mov a,h 
-                                                            xthl 
-                                                            mov m,a 
-                                                            inx h 
-                                                            inx sp 
-                                                            dcr c 
-                                                            jnz fsm_get_selected_file_header_extension_stack_loop      
-                                                            mov a,l 
-                                                            sui 8 
-                                                            mov l,a 
-                                                            mov a,h 
-                                                            sbi 0 
-                                                            mov h,a 
-                                                            sphl 
-                                                            lxi h,8 
-                                                            dad sp 
-                                                            mov a,b 
-                                                            cpi fsm_header_dimension
-                                                            jnc fsm_get_selected_file_header_extension_stack_loop_copy
-                                                            dcr b 
-fsm_get_selected_file_header_extension_stack_loop_copy:     mov a,b                          
-                                                            call fsm_string_segment_source_ncopy
-                                                            mov a,l 
-                                                            add b 
-                                                            mov l,a 
-                                                            mov a,h 
-                                                            aci 0 
-                                                            mov h,a 
-                                                            mvi m,0 
-                                                            mvi a,fsm_operation_ok
-fsm_get_selected_file_header_extension_end:                 pop b 
-                                                            pop d 
-                                                            pop h 
-                                                            ret 
-
 ;fsm_load_selected_file_header carica nel buffer l'intestazione selezionata precedentemente e restituisce l'indirizzo in cui è situata
 
 ;A <- esito dell'operazione
@@ -2070,9 +2043,9 @@ fsm_load_selected_file_header_end:      pop b
                                         ret 
 
 ;fsm_create_file_header crea una nuova intestazione
-;A -> flags del file
-;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
-;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
+;BC -> puntatore all nome completo dell'intestazione (stringa limitata in dimensione)
+
+;A <- esito dell'operazione 
 
 fsm_create_file_header:                     push h 
                                             push d 
@@ -2173,6 +2146,9 @@ fsm_create_file_header_end:                 inx sp
 
 
 fsm_create_file_header_write_bytes:     push d 
+                                        mvi a,fsm_header_valid_bit
+                                        call mms_write_selected_data_segment_byte
+                                        jc fsm_create_file_header_end
                                         inx h 
                                         lxi d,6
                                         xchg 
@@ -2193,26 +2169,6 @@ fsm_create_file_header_write_bytes:     push d
                                         mvi a,fsm_header_name_dimension
                                         call fsm_string_segment_ncopy
                                         lxi d,fsm_header_name_dimension
-                                        dad d 
-                                        lxi d,8
-                                        xchg 
-                                        dad sp 
-                                        sphl 
-                                        xchg 
-                                        xthl 
-                                        mov c,l 
-                                        mov b,h 
-                                        xthl 
-                                        lxi d,$fff8
-                                        xchg 
-                                        dad sp 
-                                        sphl 
-                                        xchg
-                                        mov e,c 
-                                        mov d,b 
-                                        mvi a,fsm_header_extension_dimension
-                                        call fsm_string_segment_ncopy
-                                        lxi d,fsm_header_extension_dimension 
                                         dad d 
                                         mvi a,0 
                                         call fsm_write_selected_data_segment_byte
@@ -2238,32 +2194,13 @@ fsm_create_file_header_write_bytes:     push d
                                         call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h
-                                        lxi b,$ffff-fsm_header_extension_dimension-fsm_header_name_dimension-7+1
-                                        dad b 
-                                        inx sp 
-                                        inx sp 
-                                        inx sp 
-                                        inx sp 
-                                        xthl 
-                                        mov a,h 
-                                        xthl 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        dcx sp 
-                                        
-                                        call fsm_write_selected_data_segment_byte
-                                        jc fsm_create_file_header_end
-                                        lxi b,fsm_header_extension_dimension+fsm_header_name_dimension+7
-                                        dad b 
                                         pop d 
                                         lxi b,fsm_uncoded_page_dimension
                                         ret 
 
 
 ;fsm_select_file_header restituisce le coordinate dell'intestazone desiderata
-;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
-;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+;BC -> puntatore all nome completo dell'intestazione (stringa limitata in dimensione)
 ;A <- esito dell'operazione 
 
 fsm_select_file_header:                     push h 
@@ -2287,8 +2224,7 @@ fsm_select_file_header_end:                 pop b
                                             ret 
 
 ;fsm_search_file_header restituisce le coordinate dell'intestazone desiderata
-;BC -> puntatore all nome dell'intestazione (stringa limitata in dimensione)
-;DE -> puntatore all'estenzione dell'intestazione (stringa limitata in dimensione)
+;BC -> puntatore all nome completo dell'intestazione (stringa limitata in dimensione)
 
 ;A <- esito dell'operazione 
 ;BC -> puntatore alla pagina dell'intestazione 
@@ -2330,28 +2266,6 @@ fsm_search_file_header_search_loop:         call fsm_read_selected_data_segment_
                                             dcx sp 
                                             dcx sp 
                                             mvi a,fsm_header_name_dimension
-                                            call fsm_string_segment_ncompare
-                                            ora a 
-                                            jz fsm_search_file_header_search_loop_next
-                                            lxi d,fsm_header_name_dimension
-                                            dad d 
-                                            lxi d,6
-                                            xchg 
-                                            dad sp 
-                                            sphl 
-                                            xchg 
-                                            xthl 
-                                            mov c,l 
-                                            mov b,h 
-                                            xthl 
-                                            lxi d,$fffa
-                                            xchg 
-                                            dad sp 
-                                            sphl 
-                                            xchg 
-                                            mov e,c 
-                                            mov d,b 
-                                            mvi a,fsm_header_extension_dimension
                                             call fsm_string_segment_ncompare
                                             ora a 
                                             jz fsm_search_file_header_search_loop_next
@@ -2924,7 +2838,8 @@ fsm_read_fat_page:                  push b
                                     jmp fsm_read_fat_page_end
 fsm_read_fat_page_not_formatted:    mvi a,fsm_unformatted_disk
                                     jmp fsm_read_fat_page_end
-fsm_read_fat_page_next:             lda fsm_selected_disk_fat_page_number 
+fsm_read_fat_page_next:             call fsm_disk_device_start_motor
+                                    lda fsm_selected_disk_fat_page_number 
                                     mov c,a 
                                     mov a,b 
                                     sub c
@@ -3015,6 +2930,7 @@ fsm_read_fat_page_end_loop:         inx sp
 fsm_read_fat_page_end:              pop h 
                                     pop d 
                                     pop b 
+                                    call fsm_disk_device_stop_motor
                                     ret 
 
 
@@ -3037,7 +2953,8 @@ fsm_write_fat_page:                 push b
                                     jmp fsm_write_fat_page_end
 fsm_write_fat_page_not_formatted:   mvi a,fsm_unformatted_disk
                                     jmp fsm_write_fat_page_end
-fsm_write_fat_page_next:            lda fsm_selected_disk_fat_page_number 
+fsm_write_fat_page_next:            call fsm_disk_device_start_motor
+                                    lda fsm_selected_disk_fat_page_number 
                                     mov c,a 
                                     mov a,b 
                                     sub c
@@ -3120,6 +3037,7 @@ fsm_write_fat_page_end_loop:        inx sp
 fsm_write_fat_page_end:             pop h 
                                     pop d 
                                     pop b 
+                                    call fsm_disk_device_stop_motor
                                     ret 
 
 
@@ -3141,7 +3059,8 @@ fsm_read_data_page:                     push b
                                         jmp fsm_read_data_page_end
 fsm_read_data_page_not_formatted:       mvi a,fsm_unformatted_disk
                                         jmp fsm_read_data_page_end
-fsm_read_data_page_next:                xchg 
+fsm_read_data_page_next:                call fsm_disk_device_start_motor
+                                        xchg 
                                         lhld fsm_selected_disk_data_page_number 
                                         mov a,e
                                         sub l 
@@ -3257,6 +3176,7 @@ fsm_read_data_page_end_loop:            inx sp
 fsm_read_data_page_end:                 pop h 
                                         pop d 
                                         pop b 
+                                        call fsm_disk_device_stop_motor
                                         ret 
 
 ;fsm_write_data_page seleziona la pagina appartenente alla fat 
@@ -3277,7 +3197,8 @@ fsm_write_data_page:                    push b
                                         jmp fsm_write_data_page_end
 fsm_write_data_page_not_formatted:      mvi a,fsm_unformatted_disk
                                         jmp fsm_write_data_page_end
-fsm_write_data_page_next:               xchg 
+fsm_write_data_page_next:               call fsm_disk_device_start_motor
+                                        xchg 
                                         lhld fsm_selected_disk_data_page_number 
                                         mov a,e
                                         sub l 
@@ -3380,6 +3301,7 @@ fsm_write_data_page_end_loop:           inx sp
 fsm_write_data_page_end:                pop h 
                                         pop d 
                                         pop b 
+                                        call fsm_disk_device_stop_motor
                                         ret 
 
 ;fsm_seek_disk_device_sector decodifica il numero di settore in numeri di testina, traccia e settore
@@ -3453,21 +3375,21 @@ fsm_seek_disk_sector_error:                 pop h
 
 ;fsm_disk_device_start_motor avvia il motore della memoria di massa 
 ;A <- esito dell'operazione 
-fsm_disk_device_start_motor:        mvi a,$ff 
+fsm_disk_device_start_motor:        push psw 
+                                    mvi a,$ff 
                                     call bios_disk_device_set_motor 
-                                    rc 
-                                    mvi a,fsm_operation_ok
+                                    pop psw 
                                     ret 
 
 ;fsm_disk_device_stop_motor spegne il motore della memoria di massa 
 ;A <- esito dell'operazione 
-fsm_disk_device_stop_motor:         xra a 
+fsm_disk_device_stop_motor:         push psw 
+                                    xra a 
                                     call bios_disk_device_set_motor
-                                    rc 
-                                    mvi a,fsm_operation_ok
+                                    pop psw 
                                     ret 
 
-fsm_disk_transfers_attempts     .equ 3 
+fsm_disk_transfers_attempts         .equ 3 
 
 ;fsm_disk_device_read_sector legge il settore attualmente selezionato e salva i dati nel segmento a partire dall'offset desiderato
 ;HL -> offset nel segmento di memoria 
@@ -3583,18 +3505,20 @@ fsm_string_segment_ncompare_loop:   call mms_read_selected_data_segment_byte
                                     jc fsm_string_segment_ncompare_end
                                     mov c,a 
                                     ora a 
-                                    jnz fsm_string_segment_ncompare_loop2
+                                    jnz fsm_string_segment_ncompare_loop3
                                     ldax d 
                                     ora a 
                                     jnz fsm_string_segment_ncompare_neq
-                                    mvi a,$ff 
+fsm_string_segment_ncompare_eq:     mvi a,$ff 
                                     jmp fsm_string_segment_ncompare_end
-fsm_string_segment_ncompare_loop2:  ldax d 
+fsm_string_segment_ncompare_loop3:  ldax d 
                                     cmp c 
                                     jnz fsm_string_segment_ncompare_neq
                                     inx h 
                                     inx d 
-                                    jmp fsm_string_segment_ncompare_loop
+                                    dcr b 
+                                    jnz fsm_string_segment_ncompare_loop 
+                                    jmp fsm_string_segment_ncompare_eq 
 fsm_string_segment_ncompare_neq:    xra a 
 fsm_string_segment_ncompare_end:    pop b 
                                     pop d 
