@@ -360,9 +360,7 @@ fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7
                                 cpi fsm_operation_ok
                                 jnz fsm_select_disk_end
                                 mvi a,fsm_operation_ok
-fsm_select_disk_end:            push psw 
-                                call fsm_disk_device_stop_motor
-                                pop psw 
+fsm_select_disk_end:            call fsm_disk_device_stop_motor
                                 pop d 
                                 pop h 
                                 ret 
@@ -2147,7 +2145,7 @@ fsm_create_file_header_end:                 inx sp
 
 fsm_create_file_header_write_bytes:     push d 
                                         mvi a,fsm_header_valid_bit
-                                        call mms_write_selected_data_segment_byte
+                                        call fsm_write_selected_data_segment_byte
                                         jc fsm_create_file_header_end
                                         inx h 
                                         lxi d,6
@@ -2630,11 +2628,14 @@ fsm_reselect_mms_segment:           lda fsm_page_buffer_segment_id
                                     rnz  
                                     push h 
                                     lxi h,fsm_uncoded_page_dimension
-                                    mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_type_segment_mask
-
                                     call mms_create_low_memory_data_segment
                                     pop h 
-                                    rc
+                                    cpi mms_operation_ok
+                                    rnz 
+                                    mvi a,$ff 
+                                    call mms_set_selected_data_segment_type_flag
+                                    cpi mms_operation_ok
+                                    rnz 
 fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id 
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 

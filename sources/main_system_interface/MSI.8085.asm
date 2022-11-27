@@ -668,7 +668,7 @@ msi_system_call_disk_device_write_sector_perm_err:  lhld msi_DE_backup_address
                                                     stc 
                                                     jmp msi_system_call_disk_device_write_sector_end 
 msi_system_call_disk_device_write_sector_next:      call mms_get_selected_segment_ID
-                                                    ani mms_low_memory_type_segment_mask
+
                                                     jnz msi_system_call_disk_device_write_sector_perm_err
                                                     lhld msi_DE_backup_address
                                                     call mms_disk_device_write_sector
@@ -702,7 +702,7 @@ msi_system_call_disk_device_read_sector_perm_err:   lhld msi_DE_backup_address
                                                     stc 
                                                     jmp msi_system_call_disk_device_read_sector_end 
 msi_system_call_disk_device_read_sector_next:       call mms_get_selected_segment_ID
-                                                    ani mms_low_memory_type_segment_mask 
+                                                    
                                                     jnz msi_system_call_disk_device_read_sector_perm_err
                                                     lhld msi_DE_backup_address
                                                     call mms_disk_device_read_sector
@@ -779,7 +779,7 @@ msi_system_call_get_current_program_dimension:  call mms_get_low_memory_program_
 ;A <- se CY=1 restituisce l'errore generato, altrimenti restituisce id del segmento creato 
 ;DE -> dimensione del segmento da creare 
 msi_system_call_create_temporary_memory_segment:        lhld msi_DE_backup_address
-                                                        mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_temporary_segment_mask
+
                                                         call mms_create_low_memory_data_segment
                                                         jc msi_system_call_create_temporary_memory_segment_end 
                                                         mvi a,msi_operation_ok
@@ -794,8 +794,8 @@ msi_system_call_create_temporary_memory_segment_end:    lhld msi_BC_backup_addre
 ;msi_system_call_delete_temporary_memory_segment elimina il segmento in memoria selezionato 
 ;A <- esito dell'operazione 
 ;PSW <- CY viene settato ad 1 se si verifica un errore nell'esecuzione 
-msi_system_call_delete_temporary_memory_segment:        call mms_get_selected_data_segment_flags
-                                                        ani mms_low_memory_type_segment_mask
+msi_system_call_delete_temporary_memory_segment:        
+                                                        
                                                         jz msi_system_call_delete_temporary_memory_segment_next
                                                         mvi a,msi_current_program_permissions_error
                                                         stc 
@@ -828,8 +828,8 @@ msi_system_call_select_temporary_memory_segment:        lda msi_PSW_backup_addre
                                                         call mms_select_low_memory_data_segment
                                                         cpi mms_operation_ok
                                                         jnz msi_system_call_select_temporary_memory_segment_error 
-                                                        call mms_get_selected_data_segment_flags
-                                                        ani mms_low_memory_type_segment_mask
+                                                        
+                                                        
                                                         jz msi_system_call_select_temporary_memory_segment_next 
                                                         mov a,c 
                                                         call mms_select_low_memory_data_segment
@@ -855,7 +855,7 @@ msi_system_call_select_temporary_memory_segment_end:    lhld msi_BC_backup_addre
 ;A <- esito dell'operazione
 ;PSW <- CY viene settato ad 1 se si è verificato un errore 
 msi_system_call_read_temporary_segment_dimension:       call mms_get_selected_segment_ID
-                                                        ani mms_low_memory_type_segment_mask 
+                                                        
                                                         jz msi_system_call_read_temporary_segment_dimension_next 
                                                         lxi h,0 
                                                         stc 
@@ -1668,7 +1668,7 @@ msi_system_call_read_file_bytes_next:           lda msi_PSW_backup_address+1
                                                 call mms_select_low_memory_data_segment
                                                 cpi mms_operation_ok
                                                 jnz msi_system_call_read_file_bytes_error
-                                                ani mms_low_memory_type_segment_mask 
+                                                
                                                 jz msi_system_call_read_file_bytes_permerr
                                                 lda msi_PSW_backup_address+1 
                                                 lhld msi_DE_backup_address
@@ -1714,7 +1714,7 @@ msi_system_call_write_file_bytes_next:          lda msi_PSW_backup_address+1
                                                 call mms_select_low_memory_data_segment
                                                 cpi mms_operation_ok
                                                 jnz msi_system_call_write_file_bytes_error
-                                                ani mms_low_memory_type_segment_mask 
+                                                
                                                 jz msi_system_call_write_file_bytes_permerr
                                                 lda msi_PSW_backup_address+1 
                                                 lhld msi_DE_backup_address
@@ -1870,17 +1870,17 @@ msi_system_call_launch_program_with_message_next3:          lda msi_current_prog
                                                             sta msi_current_program_flags 
                                                             
                                                             lda msi_PSW_backup_address+1
-                                                            call mms_get_selected_data_segment_flags
+                                                            
                                                             cpi mms_operation_ok
                                                             jnz msi_system_call_launch_program_with_message_share_error 
-                                                            ani $ff-mms_low_memory_temporary_segment_mask
-                                                            call mms_set_selected_data_segment_flags
+
+
                                                             call mms_delete_all_temporary_segments
-                                                            call mms_get_selected_data_segment_flags
+                                                            
                                                             cpi mms_operation_ok
                                                             jnz msi_system_call_launch_program_with_message_share_error 
-                                                            ori mms_low_memory_temporary_segment_mask
-                                                            call mms_set_selected_data_segment_flags
+                                                            
+
                                                             call mms_dselect_low_memory_data_segment 
                                                             lda msi_PSW_backup_address+1
                                                             call mms_start_low_memory_loaded_program
@@ -1945,21 +1945,20 @@ file_name   .text "sono un file bello.file"
 
 
 msi_sheel_startup:                  push psw 
-                                    mvi a,$41 
-                                    call fsm_select_disk
-                                    lxi b,file_name 
-                                    call fsm_create_file_header
-                                    call fsm_select_file_header
+                                    lxi h,24 
+                                    call mms_create_low_memory_data_segment
                                     mvi a,$ff 
-                                    call fsm_set_selected_file_header_system_flag 
-                                    call fsm_set_selected_file_header_hidden_flag
+                                    call mms_set_selected_data_segment_type_flag
+                                    mvi a,$ff 
+                                    call mms_set_selected_data_segment_temporary_flag
+                                    call mms_get_selected_data_segment_type_flag_status
                                     hlt 
 
 ;msi_sheel_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
 ;A <- esito dell'operazione 
 msi_sheel_create_input_buffer:      push h 
                                     lxi h,msi_sheel_input_buffer_dimension
-                                    mvi a,mms_low_memory_valid_segment_mask+mms_low_memory_temporary_segment_mask
+
                                     call mms_create_low_memory_data_segment
                                     pop h 
                                     rc 
