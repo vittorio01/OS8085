@@ -4,7 +4,8 @@
 
 fsm_init                                            .equ FSM
 fsm_select_disk                                     .equ fsm_init +3
-fsm_wipe_disk                                       .equ fsm_select_disk +3
+fsm_deselect_disk                                   .equ fsm_select_disk+3 
+fsm_wipe_disk                                       .equ fsm_deselect_disk +3
 fsm_disk_set_name                                   .equ fsm_wipe_disk+3
 fsm_disk_get_name                                   .equ fsm_disk_set_name+3
 fsm_disk_get_free_space                             .equ fsm_disk_get_name+3

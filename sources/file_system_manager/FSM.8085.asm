@@ -197,6 +197,7 @@ fsm_functions:  .org FSM
                 ;funzioni dedicate alla gestione del disco 
                 jmp fsm_init                                        ;inizializza le risorse della fsm
                 jmp fsm_select_disk                                 ;seleziona il drive desiderato
+                jmp fsm_deselect_disk                       
                 jmp fsm_wipe_disk                                   ;elimina tutti i file nel disco (non elimina la zona riservata al sistema)
                 jmp fsm_disk_set_name                               ;imposta il nome al disco
                 jmp fsm_disk_get_name                               ;legge il nome del disco
@@ -363,6 +364,17 @@ fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7
 fsm_select_disk_end:            call fsm_disk_device_stop_motor
                                 pop d 
                                 pop h 
+                                ret 
+
+;fsm_deselect_disk deseleziona il disco attualmente selezionato 
+;A <- esito dell'operazione 
+
+fsm_deselect_disk:              call fsm_writeback_page
+                                cpi fsm_operation_ok
+                                rnz 
+                                mvi a,%00000000
+                                sta fsm_selected_disk_loaded_page_flags
+                                mvi a,fsm_operation_ok
                                 ret 
 
 ;fsm_file_name_max_dimensions restituisce le dimensioni massime del nome attribuibile ad un file 
@@ -2048,10 +2060,9 @@ fsm_load_selected_file_header_end:      pop b
 fsm_create_file_header:                     push h 
                                             push d 
                                             push b 
-                                            ori fsm_header_valid_bit
-                                            ani $ff-fsm_header_deleted_bit
                                             push psw
                                             call fsm_search_file_header
+                                            
                                             cpi fsm_header_not_found
                                             jz fsm_create_file_header_no_duplicate 
                                             cpi fsm_operation_ok
@@ -2231,7 +2242,18 @@ fsm_select_file_header_end:                 pop b
 fsm_search_file_header:                     push h 
                                             push d 
                                             push b 
-                                            lxi h,0 
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            xri $ff 
+                                            ani fsm_disk_loaded_flags_selected_disk_mask+fsm_disk_loaded_flags_formatted_disk_mask
+                                            jz fsm_search_file_header_next
+                                            lda fsm_selected_disk_loaded_page_flags
+                                            ani fsm_disk_loaded_flags_selected_disk_mask
+                                            jnz fsm_search_file_header_not_formatted
+                                            mvi a,fsm_disk_not_selected
+                                            jmp fsm_search_file_header_end
+fsm_search_file_header_not_formatted:       mvi a,fsm_unformatted_disk
+                                            jmp fsm_search_file_header_end
+fsm_search_file_header_next:                lxi h,0 
                                             call fsm_move_data_page
                                             cpi fsm_operation_ok
                                             jnz fsm_search_file_header_end
@@ -2316,7 +2338,7 @@ fsm_search_file_header_end_of_list:         mvi a,fsm_header_not_found
                                             lxi b,0                  
 fsm_search_file_header_end:                 pop b 
                                             pop d 
-                                            pop h  
+                                            pop h 
                                             ret 
 
 
@@ -2630,12 +2652,11 @@ fsm_reselect_mms_segment:           lda fsm_page_buffer_segment_id
                                     lxi h,fsm_uncoded_page_dimension
                                     call mms_create_low_memory_data_segment
                                     pop h 
-                                    cpi mms_operation_ok
-                                    rnz 
+                                    rc 
+                                    push psw 
                                     mvi a,$ff 
                                     call mms_set_selected_data_segment_type_flag
-                                    cpi mms_operation_ok
-                                    rnz 
+                                    pop psw 
 fsm_reselect_mms_segment_end:       sta fsm_page_buffer_segment_id 
 fsm_reselect_mms_segment_end2:      mvi a,fsm_operation_ok
                                     ret 
@@ -3563,7 +3584,9 @@ fsm_string_segment_source_ncopy:            push b
                                             push d 
                                             push h 
                                             mov b,a 
-fsm_string_segment_source_ncopy_loop:       call mms_read_selected_data_segment_byte
+fsm_string_segment_source_ncopy_loop:       xchg 
+                                            call mms_read_selected_data_segment_byte
+                                            xchg 
                                             jc fsm_string_segment_source_ncopy_end
                                             mov m,a 
                                             ora a 
