@@ -562,7 +562,7 @@ mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded
 
 ; HL -> dimensione del segmento da creare
 ; A  <- ID del segmento creato. Se non è stato creato correttamente assume $00
-;       in caso di errore nella creazione, per ottenere informazioni sull'errore generato si deve lanciare la funzione mms_read_data_segment_operation_error_code
+;       se CY = 1 viene restituito un errore
 
 mms_create_low_memory_data_segment:                         push d 
                                                             push h 
