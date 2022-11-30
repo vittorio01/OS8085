@@ -134,9 +134,12 @@ mms_data_low_pointer                        .equ reserved_memory_start+$0022
 mms_data_selected_segment_id                .equ reserved_memory_start+$0024
 mms_data_selected_segment_address           .equ reserved_memory_start+$0025
 mms_data_selected_segment_dimension         .equ reserved_memory_start+$0027
+mms_low_memory_end                          .equ reserved_memory_start+$0029
 
+mms_low_memory_bitstream_dimension          .equ 32 
+mms_low_memory_bitstream_start              .equ low_memory_start
 
-mms_low_memory_bitstream_start              .equ low_memory_end - 32
+mms_low_memory_RAM_start                    .equ mms_low_memory_bitstream_start+mms_low_memory_bitstream_dimension
 
 mms_functions:  .org MMS 
                 jmp mms_low_memory_initialize
@@ -171,16 +174,17 @@ mms_functions:  .org MMS
 
 mms_low_memory_initialize:      push h
                                 push psw 
-                                lxi h,low_memory_start
+                                lxi h,mms_low_memory_RAM_start
                                 shld mms_program_high_pointer
-                                lxi h,mms_low_memory_bitstream_start 
+                                call bios_avabile_ram_memory
+                                shld mms_low_memory_end
                                 shld mms_data_low_pointer 
                                 xra a 
                                 sta mms_data_selected_segment_id  
                                 lxi h,0 
                                 shld mms_data_selected_segment_address
                                 mvi a,$ff 
-                               
+                                
                                 call mms_data_bitstream_reset
                                 pop psw 
                                 pop h 
@@ -196,7 +200,7 @@ mms_free_low_ram_bytes: push d
                         mov a,e 
                         sub l 
                         mov l,a 
-                        mov e,d 
+                        mov a,d 
                         sbb h 
                         mov h,a
                         pop psw 
@@ -209,7 +213,7 @@ mms_free_low_ram_bytes: push d
 ; HL <- posizione iniziale del blocco allocato
 
 mms_load_low_memory_program:    push d  
-                                lxi d,low_memory_start 
+                                lxi d,mms_low_memory_RAM_start 
                                 dad d 
                                 xchg 
                                 lhld mms_data_low_pointer
@@ -221,7 +225,7 @@ mms_load_low_memory_program:    push d
                                 xchg
                                 shld mms_program_high_pointer
                                 mvi a,mms_operation_ok
-                                lxi h,low_memory_start
+                                lxi h,mms_low_memory_RAM_start
                                 pop d 
                                 ret 
 mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
@@ -231,7 +235,7 @@ mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
 
 ;La funzione mms_unload_low_memory_program libera la zona della ram dedicata al programma caricato precedentemente
 mms_unload_low_memory_program:  push h 
-                                lxi h,low_memory_start
+                                lxi h,mms_low_memory_RAM_start
                                 shld mms_program_high_pointer
                                 pop h 
                                 ret 
@@ -241,7 +245,7 @@ mms_unload_low_memory_program:  push h
 
 mms_get_low_memory_program_dimension:       push d 
                                             lhld mms_program_high_pointer
-                                            lxi d,low_memory_start
+                                            lxi d,mms_low_memory_RAM_start
                                             mov a,l 
                                             sub e 
                                             mov l,a 
@@ -336,7 +340,7 @@ mms_program_bytes_write_next3:  pop d
                                 push h 
                                 push d 
                                 push b 
-                                lxi b,low_memory_start 
+                                lxi b,mms_low_memory_RAM_start 
                                 dad b
                                 xchg 
                                 mov c,l 
@@ -358,7 +362,7 @@ mms_program_bytes_write_next3:  pop d
                                 mov a,d 
                                 sbb h 
                                 mov d,a 
-                                lxi h,low_memory_start
+                                lxi h,mms_low_memory_RAM_start
                                 mov a,c 
                                 sub l 
                                 mov l,a 
@@ -476,7 +480,7 @@ mms_program_bytes_read_next3:   pop d
                                 push h
                                 push d 
                                 push b 
-                                lxi b,low_memory_start 
+                                lxi b,mms_low_memory_RAM_start 
                                 xchg 
                                 dad b
                                 mov c,e
@@ -492,7 +496,7 @@ mms_program_bytes_read_next3:   pop d
                                 jnz mms_program_bytes_read_end
                                 mov c,l 
                                 mov b,h 
-                                lxi h,low_memory_start
+                                lxi h,mms_low_memory_RAM_start
                                 mov a,e 
                                 sub l 
                                 mov e,a 
@@ -538,7 +542,7 @@ mms_start_low_memory_loaded_program:        push h
                                             push d 
                                             push psw 
                                             lhld mms_program_high_pointer
-                                            lxi d,low_memory_start
+                                            lxi d,mms_low_memory_RAM_start
                                             mov a,e 
                                             sub l 
                                             mov a,d 
@@ -550,7 +554,7 @@ mms_start_low_memory_loaded_program:        push h
                                             lxi h,0 
                                             lxi d,0 
                                             lxi b,0 
-                                            jmp low_memory_start
+                                            jmp mms_low_memory_RAM_start
 mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded 
                                             inx sp 
                                             inx sp 
@@ -558,10 +562,10 @@ mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded
                                             pop h 
                                             ret     
 
-;la funzione mms_create_low_memory_user_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
+;la funzione mms_create_low_memory_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 
 ; HL -> dimensione del segmento da creare
-; A  <- ID del segmento creato. Se non è stato creato correttamente assume $00
+; A  <- ID del segmento creato.
 ;       se CY = 1 viene restituito un errore
 
 mms_create_low_memory_data_segment:                         push d 
@@ -1510,3 +1514,4 @@ mms_layer_end:
 .memory "fill", mms_layer_end, mms_dimension-mms_layer_end+MMS,$00
 .print "MMS load address ->",MMS
 .print "All functions built successfully"
+.print "Application compile address -> ",mms_low_memory_RAM_start

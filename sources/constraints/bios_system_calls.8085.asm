@@ -2,7 +2,9 @@
 ;ogni codice sorgente che utilizza le system calls del bios deve importare questo file
 
 bios_system_start                       .equ    BIOS  
-bios_select_IO_device                   .equ    bios_system_start+3
+bios_avabile_ram_memory                 .equ    bios_system_start+3
+bios_hardware_interrupt_handler         .equ    bios_avabile_ram_memory+3
+bios_select_IO_device                   .equ    bios_hardware_interrupt_handler+3
 bios_get_IO_device_informations         .equ    bios_select_IO_device+3
 bios_initialize_selected_device         .equ    bios_get_IO_device_informations+3 
 bios_get_selected_device_state          .equ    bios_initialize_selected_device+3

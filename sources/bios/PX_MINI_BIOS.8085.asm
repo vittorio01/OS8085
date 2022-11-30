@@ -32,6 +32,8 @@ bios_selected_devices_flags_sector         .equ %00100000
 
 bios_functions: .org BIOS 
                 jmp bios_system_start  
+                jmp bios_avabile_ram_memory
+                jmp bios_hardware_interrupt_handler
                 jmp bios_select_IO_device
                 jmp bios_get_IO_device_informations 
                 jmp bios_selected_IO_device_initialize_address
@@ -654,6 +656,18 @@ bios_disk_device_format_drive_end:          pop b
                                             pop h 
                                             ret  
 
+;----- system ram -----
+;Il parametro system_ram_dimension viene utilizzato dalla mms per capire quanto spazio ha a disposizione per eseguire i programmi e mantenere i segmenti di memoria attivi. 
+;Da ricordare che la zona dedicata alla RAM deve partire dal'indirizzo $0000 e una dimensione minima di 20KB 
+system_ram_dimension        .equ 32768
+
+bios_avabile_ram_memory:    lxi h,system_ram_dimension
+                            ret 
+
+;----- interrupt handlers -----
+;bios_RST55_interrupt_handler viene richiamato al verificarsi di un interrupt hardware (RST6.5 per 8085 o INT mode 1 per Z80)
+;tutti i registri utilizzati devono essere ripristinati a fine interrupt
+bios_hardware_interrupt_handler:    ret 
 
 
 ;----- data transfer ----- 
