@@ -1,39 +1,45 @@
 ;La Memory Management Unit ha il compito di gestire il flusso di dati presente nella memoria RAM. 
 
 ;La gestione della RAM
-;-----------------------------------------------------------
-;- Riservato al sistema - low ram - MSI - FDS - mms - BIOS -
-;-----------------------------------------------------------
-;                                 ^                        ^
-;                                 |        high ram        |
+;------------------------------------------------------------
+;- Interrupt di sistema - MSI - FDS - mms - BIOS - high ram -
+;------------------------------------------------------------
+;                       ^                        ^
+;                       |        low  ram        |
 
 ;La ram è organizzata in:
-; - Riservato al sistema    -> Spazio dedicato al salvataggio delle informazioni di sistema e alla gestione degli interrupt
-; - low ram                 -> Spazio dedicato al caricamento e all'esecuzione dei programmi
-; - high ram                -> Spazio dedicato al mantenimento del sistema operativo
+; - Interrupt di distema    -> Spazio dedicato alla gestione degli interrupt
+; - low ram                 -> Spazio dedicato al sistema operativo 
+; - high ram                -> Spazio dedicato al caricamento e all'esecuzione dei programmi e al mantenimento dei segmenti
 
-;* Riservato al sistema
-;Il primo spazio di memoria viene dedicato alla gestione degli interrupt di sistema e al salvataggio delle informazioni importanti tra cui:
-;- informazioni sulla memoria di massa (questa parte viene gestita dalla FSM)
-;- informazioni riguardanti la gestione della RAM
-
-;*high ram
-;La high ram è lo spazio di memoria dedicato al caricamento del sistema operativo. Viene di conseguenza suddiviso secondo i vari livelli del sistema operativo 
-;Il firmware base del computer deve, all'avvio, caricare i dati presenti nel disco di avvio il sistema operativo a partire dall'inizio della high memory
+;* Interrupt di sistema
+;Il primo spazio di memoria viene dedicato alla gestione degli interrupt di sistema 
 
 ;*low ram
-;La low ram è la parte di memoria dedicata al caricamento dei programmi e alla gestione dei dati da parte del sistema operativo. viene suddivisa in due sottosezioni di dimensione variabile
+;La low ram è lo spazio di memoria dedicato al caricamento del sistema operativo. Viene di conseguenza suddiviso secondo i vari livelli del sistema operativo 
+;Il firmware base del computer deve, all'avvio, caricare i dati presenti nel disco di avvio il sistema operativo a partire dall'inizio della memoria fino alla fine dell'high memory
 
-;-----------------------------------------
-;- Program low ram - xxxx - Data low ram -
-;-----------------------------------------
+;*high ram
+;La high ram è la parte di memoria dedicata al caricamento dei programmi e alla gestione dei dati da parte del sistema operativo. viene suddivisa in due sottosezioni di dimensione variabile
+
+;Il sistema operativo deve essere obbligatoriamente caricato all'indirizzo $0000 della RAM. 
+;Il SO può funzionare su tutte le macchine dotate di uno spazio contiguo in RAM a partire da $0000 di almeno 24K (circa). 
+
+;In alternativa, è possibile rendere lo spazio dedicato agli interrupt di sola lettura (direct ROM), ovvero i primi 18K, a patto che 
+;La high ram inizi dallo stesso indirizzo (pena mancata esecuzione delle applicazioni dato che vengono compilte tutte all'indirizzo sbagliato).
+
+;Per questo è consigliato caricare tutto il sistema direttamente in uno spazio contiguo in ram.
+
+;-------------------------------------------
+;- Program high ram - xxxx - Data high ram -
+;-------------------------------------------
 
 ;Nei vecchi processori a 8bit non è possibile gestire la ram come una memoria segmentata, dato che non esistono indirizzi virtuali. Di conseguenza un programma deve essere compilato in modo da avere un offset degli indirizzi
 ;fisso. Tuttavia, il sistema, ed eventualmente i programmi, potrebbero aver bisogno di allocare uno spazio variabile in memoria dedicato al salvataggio dei dati. 
 ;Per soddisfare questo bisogno, mantenendo comunque la possibilità di eseguire i programmi in modo semplice, è necessario dividere la low ram in due sezioni:
-;- la program low ram è uno spazio dedicato allèesecuzione dei programmi di dimensione variabile. L'inizio di questo spazio è fisso e corrisponde all'estremo sinistro della low ram, 
+;- la program high ram è uno spazio dedicato allèesecuzione dei programmi di dimensione variabile. L'inizio di questo spazio è fisso e corrisponde all'estremo sinistro della low ram, 
 ;  e di dimensione variabile, in modo da garantire flessibilità nella gestione della data low ram
-;- La data low ram è uno spazio dedicato al mantenimento dei dati. Questa sottosezione è gestita come una memoria segmentata di dimensione variabile in cu viene definita la fine, che corrisponde all'estremo destro della low ram
+;- La data high ram è uno spazio dedicato al mantenimento dei dati. Questa sottosezione è gestita come una memoria segmentata di dimensione variabile in cu viene definita la fine, che corrisponde all'estremo destro della low ram
 ;  In questa sezione è possibile quindi allocare un certo numero di blocchi di dati, che vengono impilati partendo dall'estremo alto in modo da permettere uno sviluppo verso il basso verso il basso.
 
 ;----------------------------------------------------------
@@ -41,15 +47,15 @@
 ;----------------------------------------------------------
 ;^                                                        ^
 ;|                                                        |
-;inizio della low ram                    fine della low ram 
+;inizio della high ram                    fine della high ram 
 
 ;i programmi quindi vengono caricati ed eseguiti uno alla volta, mentre è possibile allocare e deallocare più blocchi di dati in memoria
 
 ;La mms quindi tiene conto di due posizioni:
-;- la fine della program low ram
-;- l'inizio della data low ram
-;Quando viene caricato un programma, viene aggiornato il puntatore alla fine della program low ram e quando esso termina la sua esecuzione il puntatore viene settato all'inizio della low ram
-;In modo analogo, quando viene allocato o deallocato un blocco dati viene aggiornato il puntatore della data low ram.
+;- la fine della program high ram
+;- l'inizio della data high ram
+;Quando viene caricato un programma, viene aggiornato il puntatore alla fine della program high ram e quando esso termina la sua esecuzione il puntatore viene settato all'inizio della high ram
+;In modo analogo, quando viene allocato o deallocato un blocco dati viene aggiornato il puntatore della data high ram.
 ;La mms deve far in modo da non far coincidere i due puntatori in modo da non creare una sovrapposizione dei due spazi. 
 
 ;I segmenti di dati presenti nella low data ram sono dotati di un'intestazione e di un corpo. 
@@ -57,31 +63,21 @@
 ;- segment name - dimension -
 ;----------------------------
 ; L'intestazione è formata da:
-; - segment name            -> 8 bytes che contengono l'identificativo del segmento
+; - segment ID              -> 1 bytes che contengono l'identificativo del segmento
+; - flags                   -> 1 byte per indicare il tipo di segmento
 ; - dimension               -> 2 bytes che indicano la dimensione del corpo in bytes
 
-;la mms permette di inserire, eliminare, cercare un segmento, ma non può eliminarlo
+;la mms permette di inserire, eliminare, cercare un segmento
 
 ;Il corpo del segmento contiene semplicamante i dati che si vogliono memorizzare
 
 ;Uno schema completo della RAM è quindi:
-;----------------------------------------------------------------------------------
-;- Riservato al sistema - Program low ram - Data low ram - MSI - FDS - mms - BIOS -
-;----------------------------------------------------------------------------------
-;^                      ^                                ^                        ^   
-;|                      |                                |                        |
-;inizio della memoria   inizio low ram                   inizio high ram          fine della memoria
-
-
-;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-;                                Aggiornamento 2
-;::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-
-;i cambiamenti eseguiti vengono elencati di seguito:
-;- l'intestazione dei segmenti di dati viene modificata nel seguente modo:
-;   * al posto del segment name è presente un numero identificativo di 8 bit
-;   * viene aggiunto un byte con le informazioni del segmento
-;-  A seconda dell'identificativo assegnato, il segmento può essere normale o di sistema.
+;-----------------------------------------------------------------------------------
+;- Interrupts di sistema - MSI - FDS - mms - BIOS - Program low ram - Data low ram -
+;-----------------------------------------------------------------------------------
+;^                      ^                         ^                                ^   
+;|                      |                         |                                |
+;inizio della memoria   inizio low ram            inizio high ram                  fine della memoria
 
 ;- Non è necessario includere un numero identificativo per la creazione del segmento dati. 
 ;  Di conseguenza, l'identificativo del segmento creato viene restituito dalla system call dopo essere stata eseguita.
@@ -89,11 +85,10 @@
 ;- Per agire su un segmento è necessario prima selezionarlo. Quando viene creato un segmento automaticamente viene selezionato e dopo l'eliminazione di un segmento è necessario selezionarne un altro.
 
 ;- Per modificare i dati di un segmento si devono utilizzare delle funzioni read e write messe a disposizione dalla mms, che prendono in input la posizione nel segmento e restituiscono/scrivono il byte desiderato. 
-;  Le funzioni di lettura e scrittura e di creazione di un segmento utilizzano la flag CY per segnalare eventuali errori. Per ottenere informazioni sull'errore generato si deve utilizzare una funzione predisposta dalla mms
+;  Le funzioni di lettura e scrittura e di creazione di un segmento utilizzano la flag CY per segnalare eventuali errori.
 
 ;- Per aumentare la velocità di alcune operazioni, esistono alcune funzioni dedicate appositamente:
 ;- copia di dati fra due segmenti
-
 
 ;- vengono inserite delle funzioni per la manipolazione dei programmi nella memoria e per la gestione della memoria di massa. In particolare:
 ;   *   vengono inserite due funzioni per copiare i dati da un segmento nella zona riservata ai programmi e viceversa
@@ -124,9 +119,9 @@
 .include "libraries_system_calls.8085.asm"
 .include "environment_variables.8085.asm"
 
-mms_low_memory_valid_segment_mask           .equ %10000000
-mms_low_memory_type_segment_mask            .equ %01000000
-mms_low_memory_temporary_segment_mask       .equ %00100000
+mms_high_memory_valid_segment_mask           .equ %10000000
+mms_high_memory_type_segment_mask            .equ %01000000
+mms_high_memory_temporary_segment_mask       .equ %00100000
 
 ;spazio della memoria riservata dedicato alla mms
 mms_program_high_pointer                    .equ reserved_memory_start+$0020
@@ -134,23 +129,23 @@ mms_data_low_pointer                        .equ reserved_memory_start+$0022
 mms_data_selected_segment_id                .equ reserved_memory_start+$0024
 mms_data_selected_segment_address           .equ reserved_memory_start+$0025
 mms_data_selected_segment_dimension         .equ reserved_memory_start+$0027
-mms_low_memory_end                          .equ reserved_memory_start+$0029
+mms_high_memory_end                          .equ reserved_memory_start+$0029
 
-mms_low_memory_bitstream_dimension          .equ 32 
-mms_low_memory_bitstream_start              .equ low_memory_start
+mms_high_memory_bitstream_dimension          .equ 32 
+mms_high_memory_bitstream_start              .equ high_memory_start
 
-mms_low_memory_RAM_start                    .equ mms_low_memory_bitstream_start+mms_low_memory_bitstream_dimension
+mms_high_memory_RAM_start                    .equ mms_high_memory_bitstream_start+mms_high_memory_bitstream_dimension
 
 mms_functions:  .org MMS 
-                jmp mms_low_memory_initialize
-                jmp mms_free_low_ram_bytes
-                jmp mms_load_low_memory_program 
-                jmp mms_get_low_memory_program_dimension
-                jmp mms_unload_low_memory_program 
-                jmp mms_start_low_memory_loaded_program 
-                jmp mms_create_low_memory_data_segment
-                jmp mms_select_low_memory_data_segment
-                jmp mms_delete_selected_low_memory_data_segment
+                jmp mms_high_memory_initialize
+                jmp mms_free_high_ram_bytes
+                jmp mms_load_high_memory_program 
+                jmp mms_get_high_memory_program_dimension
+                jmp mms_unload_high_memory_program 
+                jmp mms_start_high_memory_loaded_program 
+                jmp mms_create_high_memory_data_segment
+                jmp mms_select_high_memory_data_segment
+                jmp mms_delete_selected_high_memory_data_segment
                 jmp mms_read_selected_data_segment_byte
                 jmp mms_write_selected_data_segment_byte
                 jmp mms_segment_data_transfer
@@ -165,19 +160,19 @@ mms_functions:  .org MMS
                 jmp mms_disk_device_read_sector
                 jmp mms_disk_device_write_sector
                 jmp mms_get_selected_segment_ID  
-                jmp mms_dselect_low_memory_data_segment 
+                jmp mms_dselect_high_memory_data_segment 
 
 
 ;Implementazioni delle system calls della mms
 
-;La funzione mms_low_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
+;La funzione mms_high_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
 
-mms_low_memory_initialize:      push h
+mms_high_memory_initialize:      push h
                                 push psw 
-                                lxi h,mms_low_memory_RAM_start
+                                lxi h,mms_high_memory_RAM_start
                                 shld mms_program_high_pointer
                                 call bios_avabile_ram_memory
-                                shld mms_low_memory_end
+                                shld mms_high_memory_end
                                 shld mms_data_low_pointer 
                                 xra a 
                                 sta mms_data_selected_segment_id  
@@ -190,9 +185,9 @@ mms_low_memory_initialize:      push h
                                 pop h 
                                 ret 
 
-;La funzione mms_free_low_ram_byte restiuisce il numero di bytes disponibili nella low ram
+;La funzione mms_free_high_ram_byte restiuisce il numero di bytes disponibili nella low ram
 ; HL <- numero di bytes della ram disponibili
-mms_free_low_ram_bytes: push d
+mms_free_high_ram_bytes: push d
                         push psw 
                         lhld mms_data_low_pointer
                         xchg 
@@ -209,13 +204,13 @@ mms_free_low_ram_bytes: push d
                         pop d 
                         ret 
 
-;la funzione mms_load_low_memory_program riceve in ingresso il numero di bytes dedicati all'allocazione del programma desiderato e controlla se il puntatore dati non entra in collisione con la low data ram
+;la funzione mms_load_high_memory_program riceve in ingresso il numero di bytes dedicati all'allocazione del programma desiderato e controlla se il puntatore dati non entra in collisione con la low data ram
 ; HL -> dimensione del blocco da allocare
 ; A  <- risultato dell'operazione
 ; HL <- posizione iniziale del blocco allocato
 
-mms_load_low_memory_program:    push d  
-                                lxi d,mms_low_memory_RAM_start 
+mms_load_high_memory_program:    push d  
+                                lxi d,mms_high_memory_RAM_start 
                                 dad d 
                                 xchg 
                                 lhld mms_data_low_pointer
@@ -227,7 +222,7 @@ mms_load_low_memory_program:    push d
                                 xchg
                                 shld mms_program_high_pointer
                                 mvi a,mms_operation_ok
-                                lxi h,mms_low_memory_RAM_start
+                                lxi h,mms_high_memory_RAM_start
                                 pop d 
                                 ret 
 mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
@@ -235,9 +230,9 @@ mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
                                 pop d 
                                 ret
 
-;La funzione mms_unload_low_memory_program libera la zona della ram dedicata al programma caricato precedentemente
-mms_unload_low_memory_program:  push h 
-                                lxi h,mms_low_memory_RAM_start
+;La funzione mms_unload_high_memory_program libera la zona della ram dedicata al programma caricato precedentemente
+mms_unload_high_memory_program:  push h 
+                                lxi h,mms_high_memory_RAM_start
                                 shld mms_program_high_pointer
                                 pop h 
                                 ret 
@@ -245,16 +240,16 @@ mms_unload_low_memory_program:  push h
 ;mms_get_low_mmory_program_dimension restituisce la dimensione della zona programma allocata
 ; HL <- dimensione dedicata all'allocazione del programma (0000 se la zona non è stata allocata)
 
-mms_get_low_memory_program_dimension:       push d 
+mms_get_high_memory_program_dimension:       push d 
                                             lhld mms_program_high_pointer
-                                            lxi d,mms_low_memory_RAM_start
+                                            lxi d,mms_high_memory_RAM_start
                                             mov a,l 
                                             sub e 
                                             mov l,a 
                                             mov a,h 
                                             sbb d 
                                             mov h,a 
-mms_get_low_memory_program_dimension_end:   pop d    
+mms_get_high_memory_program_dimension_end:   pop d    
                                             ret 
 ;mms_program_bytes_write esegue la copia dei dati da un segmento in memoria selezionato alla sezione programma 
 ;BC -> numero di bytes 
@@ -277,7 +272,7 @@ mms_program_bytes_write:        mvi a,$ff
                                 jmp mms_program_bytes_write_end
 mms_program_bytes_write_next:   dad b 
                                 xchg 
-                                call mms_get_low_memory_program_dimension
+                                call mms_get_high_memory_program_dimension
                                 mov a,e 
                                 sub l 
                                 mov e,a 
@@ -342,7 +337,7 @@ mms_program_bytes_write_next3:  pop d
                                 push h 
                                 push d 
                                 push b 
-                                lxi b,mms_low_memory_RAM_start 
+                                lxi b,mms_high_memory_RAM_start 
                                 dad b
                                 xchg 
                                 mov c,l 
@@ -364,7 +359,7 @@ mms_program_bytes_write_next3:  pop d
                                 mov a,d 
                                 sbb h 
                                 mov d,a 
-                                lxi h,mms_low_memory_RAM_start
+                                lxi h,mms_high_memory_RAM_start
                                 mov a,c 
                                 sub l 
                                 mov l,a 
@@ -417,7 +412,7 @@ mms_program_bytes_read:         mvi a,$ff
                                 jmp mms_program_bytes_read_end
 mms_program_bytes_read_next:    dad b 
                                 xchg 
-                                call mms_get_low_memory_program_dimension
+                                call mms_get_high_memory_program_dimension
                                 mov a,e 
                                 sub l 
                                 mov e,a 
@@ -482,7 +477,7 @@ mms_program_bytes_read_next3:   pop d
                                 push h
                                 push d 
                                 push b 
-                                lxi b,mms_low_memory_RAM_start 
+                                lxi b,mms_high_memory_RAM_start 
                                 xchg 
                                 dad b
                                 mov c,e
@@ -498,7 +493,7 @@ mms_program_bytes_read_next3:   pop d
                                 jnz mms_program_bytes_read_end
                                 mov c,l 
                                 mov b,h 
-                                lxi h,mms_low_memory_RAM_start
+                                lxi h,mms_high_memory_RAM_start
                                 mov a,e 
                                 sub l 
                                 mov e,a 
@@ -536,47 +531,47 @@ mms_program_bytes_read_end:     pop d
                                 inx sp 
                                 ret 
 
-;mms_start_low_memory_loaded_program esegue il programma caricato precedentemente in memoria 
-;all'avvio del programma lo stack pointer viene posizionato automaticamente alla fine della program_low_memory 
+;mms_start_high_memory_loaded_program esegue il programma caricato precedentemente in memoria 
+;all'avvio del programma lo stack pointer viene posizionato automaticamente alla fine della program_high_memory 
 ; A <- errore di esecuzione (nel caso in cui il programma non sia partito)
 
-mms_start_low_memory_loaded_program:        push h 
+mms_start_high_memory_loaded_program:        push h 
                                             push d 
                                             push psw 
                                             lhld mms_program_high_pointer
-                                            lxi d,mms_low_memory_RAM_start
+                                            lxi d,mms_high_memory_RAM_start
                                             mov a,e 
                                             sub l 
                                             mov a,d 
                                             sbb h 
-                                            jnc mms_start_low_memory_loaded_program_end
+                                            jnc mms_start_high_memory_loaded_program_end
                                             pop psw 
                                             lhld mms_program_high_pointer
                                             sphl 
                                             lxi h,0 
                                             lxi d,0 
                                             lxi b,0 
-                                            jmp mms_low_memory_RAM_start
-mms_start_low_memory_loaded_program_end:    mvi a,mms_program_not_loaded 
+                                            jmp mms_high_memory_RAM_start
+mms_start_high_memory_loaded_program_end:    mvi a,mms_program_not_loaded 
                                             inx sp 
                                             inx sp 
                                             pop d 
                                             pop h 
                                             ret     
 
-;la funzione mms_create_low_memory_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
+;la funzione mms_create_high_memory_data_segment crea un nuovo segmento. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 
 ; HL -> dimensione del segmento da creare
 ; A  <- ID del segmento creato.
 ;       se CY = 1 viene restituito un errore
 
-mms_create_low_memory_data_segment:                         push d 
+mms_create_high_memory_data_segment:                         push d 
                                                             push h 
                                                             push psw 
                                                             push h 
                                                             mov a,l 
                                                             ora h 
-                                                            jz mms_create_low_memory_data_segment_bad_argument 
+                                                            jz mms_create_high_memory_data_segment_bad_argument 
                                                             lxi d,4
                                                             dad d 
                                                             xchg 
@@ -587,7 +582,7 @@ mms_create_low_memory_data_segment:                         push d
                                                             mov a,h 
                                                             sbb d 
                                                             mov h,a 
-                                                            jc mms_create_low_memory_data_segment_not_enough_ram_error
+                                                            jc mms_create_high_memory_data_segment_not_enough_ram_error
                                                             xchg 
                                                             lhld mms_program_high_pointer
                                                             mov a,e 
@@ -595,13 +590,13 @@ mms_create_low_memory_data_segment:                         push d
                                                             mov a,d 
                                                             sbb h 
                                                             xchg 
-                                                            jc mms_create_low_memory_data_segment_not_enough_ram_error
+                                                            jc mms_create_high_memory_data_segment_not_enough_ram_error
                                                             shld mms_data_low_pointer
-                                                            mvi m,mms_low_memory_valid_segment_mask
+                                                            mvi m,mms_high_memory_valid_segment_mask
                                                             inx h 
                                                             call mms_data_bitstream_number_request 
                                                             ora a 
-                                                            jz mms_create_low_memory_data_segment_overflow_error
+                                                            jz mms_create_high_memory_data_segment_overflow_error
                                                             sta mms_data_selected_segment_id
                                                             mov m,a 
                                                             inx h 
@@ -620,19 +615,19 @@ mms_create_low_memory_data_segment:                         push d
                                                             lda mms_data_selected_segment_id
                                                             stc 
                                                             cmc 
-                                                            jmp mms_create_low_memory_data_segment_return
+                                                            jmp mms_create_high_memory_data_segment_return
 
-mms_create_low_memory_data_segment_overflow_error:          mvi a,mms_segment_number_overflow_error_code
+mms_create_high_memory_data_segment_overflow_error:          mvi a,mms_segment_number_overflow_error_code
                                                             stc 
-                                                            jmp mms_create_low_memory_data_segment_return
+                                                            jmp mms_create_high_memory_data_segment_return
 
-mms_create_low_memory_data_segment_not_enough_ram_error:    mvi a,mms_not_enough_ram_error_code
+mms_create_high_memory_data_segment_not_enough_ram_error:    mvi a,mms_not_enough_ram_error_code
                                                             stc 
-                                                            jmp mms_create_low_memory_data_segment_return
+                                                            jmp mms_create_high_memory_data_segment_return
 
-mms_create_low_memory_data_segment_bad_argument:            mvi a,mms_segment_bad_argument
+mms_create_high_memory_data_segment_bad_argument:            mvi a,mms_segment_bad_argument
                                                             stc 
-mms_create_low_memory_data_segment_return:                  inx sp 
+mms_create_high_memory_data_segment_return:                  inx sp 
                                                             inx sp 
                                                             inx sp 
                                                             inx sp 
@@ -640,15 +635,15 @@ mms_create_low_memory_data_segment_return:                  inx sp
                                                             pop d 
                                                             ret 
 
-;la funzione mms_select_low_memory_data_segment permette di selezionare un segmento utente
+;la funzione mms_select_high_memory_data_segment permette di selezionare un segmento utente
 ;A -> segmento da selezionare
 ;A <- risultato dell'operazione
 
-mms_select_low_memory_data_segment:         push h 
+mms_select_high_memory_data_segment:         push h 
                                             push psw 
                                             call mms_search_data_segment
                                             ora a 
-                                            jz mms_select_low_memory_data_segment_not_found
+                                            jz mms_select_high_memory_data_segment_not_found
                                             pop psw 
                                             sta mms_data_selected_segment_id
                                             shld mms_data_selected_segment_address
@@ -662,37 +657,37 @@ mms_select_low_memory_data_segment:         push h
                                             mvi a,mms_operation_ok
                                             ret 
 
-mms_select_low_memory_data_segment_not_found:   inx sp 
+mms_select_high_memory_data_segment_not_found:   inx sp 
                                                 inx sp 
                                                 pop h 
                                                 mvi a,mms_segment_data_not_found_error_code
                                                
                                                 ret 
 
-;mms_dselect_low_memory_data_segment deseleziona il segmento corrente (se è stato selezionato)
+;mms_dselect_high_memory_data_segment deseleziona il segmento corrente (se è stato selezionato)
 ;A <- $00
-mms_dselect_low_memory_data_segment:    xra a 
+mms_dselect_high_memory_data_segment:    xra a 
                                         sta mms_data_selected_segment_dimension
                                         sta mms_data_selected_segment_dimension+1 
                                         sta mms_data_selected_segment_id
                                         sta mms_data_selected_segment_address
                                         sta mms_data_selected_segment_address+1 
 
-;la funzione mms_delete_selected_low_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
+;la funzione mms_delete_selected_high_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
 ;verso la parte alta della RAM in modo da rimuovere frammenti di spazio vuoto
 
 ; A <- risultato dell'operazione
 
-mms_delete_selected_low_memory_data_segment:            push h
+mms_delete_selected_high_memory_data_segment:            push h
                                                         push b 
                                                         push d 
                                                         lda mms_data_selected_segment_id
                                                         ora a 
-                                                        jnz mms_delete_selected_low_memory_data_segment2
+                                                        jnz mms_delete_selected_high_memory_data_segment2
                                                         mvi a,mms_segment_data_not_found_error_code
                                                        
                                                         jmp mms_delete_data_segment_end
-mms_delete_selected_low_memory_data_segment2:           call mms_data_bitstream_reset_requested_bit
+mms_delete_selected_high_memory_data_segment2:           call mms_data_bitstream_reset_requested_bit
                                                         lhld mms_data_selected_segment_address
                                                         xchg 
                                                         lhld mms_data_low_pointer
@@ -713,7 +708,7 @@ mms_delete_selected_low_memory_data_segment2:           call mms_data_bitstream_
                                                         sbb b
                                                         ora c 
                                                         pop b 
-                                                        jnz mms_delete_selected_low_memory_data_segment3
+                                                        jnz mms_delete_selected_high_memory_data_segment3
                                                         inx h 
                                                         inx h 
                                                         inx h 
@@ -721,7 +716,7 @@ mms_delete_selected_low_memory_data_segment2:           call mms_data_bitstream_
                                                         dad d 
                                                         shld mms_data_low_pointer
                                                         jmp mms_delete_data_segment_end2
-mms_delete_selected_low_memory_data_segment3:           mov c,l 
+mms_delete_selected_high_memory_data_segment3:           mov c,l 
                                                         mov b,h 
                                                         dcx b 
                                                         dcx b 
@@ -766,7 +761,7 @@ mms_delete_data_segment_end:                            pop d
 mms_search_data_segment:                    push b 
                                             push d 
                                             push psw 
-                                            lhld mms_low_memory_end
+                                            lhld mms_high_memory_end
                                             mov c,l 
                                             mov b,h 
                                             lhld mms_data_low_pointer
@@ -811,7 +806,7 @@ mms_search_data_segment_end:                inx sp
 ;mms_bistream_reset inizializza il bitstream system e lo prepara per l'associazione degli ID dei segmenti
 mms_data_bitstream_reset:   push h 
                             push b
-                            lxi h,mms_low_memory_bitstream_start
+                            lxi h,mms_high_memory_bitstream_start
                             mvi m,%01111111
                             inx h 
                             mvi b,31 
@@ -938,11 +933,11 @@ mms_set_selected_data_segment_type_flag_next:       lhld mms_data_selected_segme
                                                     ora a 
                                                     jnz mms_set_selected_data_segment_type_flag_system 
                                                     mov a,m 
-                                                    ani $ff-mms_low_memory_type_segment_mask
+                                                    ani $ff-mms_high_memory_type_segment_mask
                                                     mov m,a 
                                                     jmp mms_set_selected_data_segment_type_flag_ok
 mms_set_selected_data_segment_type_flag_system:     mov a,m     
-                                                    ori mms_low_memory_type_segment_mask
+                                                    ori mms_high_memory_type_segment_mask
                                                     mov m,a 
 mms_set_selected_data_segment_type_flag_ok:         mvi a,mms_operation_ok
 mms_set_selected_data_segment_type_flag_end:        inx sp 
@@ -971,11 +966,11 @@ mms_set_selected_data_segment_temporary_flag_next:      lhld mms_data_selected_s
                                                         ora a 
                                                         jnz mms_set_selected_data_segment_temporary_flag_system 
                                                         mov a,m 
-                                                        ani $ff-mms_low_memory_temporary_segment_mask
+                                                        ani $ff-mms_high_memory_temporary_segment_mask
                                                         mov m,a 
                                                         jmp mms_set_selected_data_segment_temporary_flag_ok
 mms_set_selected_data_segment_temporary_flag_system:    mov a,m     
-                                                        ori mms_low_memory_temporary_segment_mask
+                                                        ori mms_high_memory_temporary_segment_mask
                                                         mov m,a 
 mms_set_selected_data_segment_temporary_flag_ok:        mvi a,mms_operation_ok
 mms_set_selected_data_segment_temporary_flag_end:       inx sp 
@@ -999,7 +994,7 @@ mms_get_selected_data_segment_type_flag_status_next:    lhld mms_data_selected_s
                                                         dcx h 
                                                         dcx h 
                                                         mov a,m 
-                                                        ani mms_low_memory_type_segment_mask
+                                                        ani mms_high_memory_type_segment_mask
                                                         ora a 
                                                         jz mms_get_selected_data_segment_type_flag_status_user
                                                         mvi a,$ff 
@@ -1028,7 +1023,7 @@ mms_get_selected_data_segment_temporary_flag_status_next:   lhld mms_data_select
                                                             dcx h 
                                                             dcx h 
                                                             mov a,m 
-                                                            ani mms_low_memory_temporary_segment_mask
+                                                            ani mms_high_memory_temporary_segment_mask
                                                             ora a 
                                                             jz mms_get_selected_data_segment_temporary_flag_status_tmp
                                                             mvi a,$ff 
@@ -1272,17 +1267,17 @@ mms_segment_data_transfer_end:      pop h
 mms_delete_all_temporary_segments:          push h 
                                             push d 
 mms_delete_all_temporary_segments_loop:     lhld mms_data_low_pointer
-                                            lxi d,mms_low_memory_bitstream_start
+                                            lxi d,mms_high_memory_bitstream_start
                                             mov a,l 
                                             sub e 
                                             mov a,h 
                                             sbb d 
                                             jnc mms_delete_all_temporary_segments_end
 mms_delete_all_temporary_segments_loop2:    mov a,m 
-                                            ani mms_low_memory_type_segment_mask
+                                            ani mms_high_memory_type_segment_mask
                                             jnz mms_delete_all_temporary_segments_loop4
                                             mov a,m 
-                                            ani mms_low_memory_temporary_segment_mask
+                                            ani mms_high_memory_temporary_segment_mask
                                             jz mms_delete_all_temporary_segments_loop4
 mms_delete_all_temporary_segments_loop3:    inx h 
                                             mov a,m 
@@ -1295,7 +1290,7 @@ mms_delete_all_temporary_segments_loop3:    inx h
                                             shld mms_data_selected_segment_address
                                             xchg 
                                             shld mms_data_selected_segment_dimension   
-                                            call mms_delete_selected_low_memory_data_segment
+                                            call mms_delete_selected_high_memory_data_segment
                                             cpi mms_operation_ok
                                             jz mms_delete_all_temporary_segments_loop 
                                             jmp mms_delete_all_temporary_segments_end2
@@ -1306,7 +1301,7 @@ mms_delete_all_temporary_segments_loop4:    inx h
                                             mov d,m 
                                             inx h 
                                             dad d 
-                                            lxi d,mms_low_memory_bitstream_start
+                                            lxi d,mms_high_memory_bitstream_start
                                             mov a,l 
                                             sub e 
                                             mov a,h 
@@ -1450,7 +1445,7 @@ mms_disk_device_write_sector_end:   pop b
 
 mms_data_bitstream_number_request:              push h 
                                                 push b 
-                                                lxi h,mms_low_memory_bitstream_start
+                                                lxi h,mms_high_memory_bitstream_start
                                                 mvi b,0
                                                 mov a,m 
 mms_data_bitstream_number_request_search_bit:   add a 
@@ -1494,7 +1489,7 @@ mms_data_bitstream_reset_requested_bit:             ora a
                                                     rz 
                                                     push h 
                                                     push b 
-                                                    lxi h,mms_low_memory_bitstream_start
+                                                    lxi h,mms_high_memory_bitstream_start
 mms_data_bitstream_reset_requested_bit_search:      cpi 8 
                                                     jc mms_data_bitstream_reset_requested_bit_posfound
                                                     sui 8
@@ -1518,4 +1513,4 @@ mms_layer_end:
 .memory "fill", mms_layer_end, mms_dimension-mms_layer_end+MMS,$00
 .print "MMS load address ->",MMS
 .print "All functions built successfully"
-.print "Application compile address -> ",mms_low_memory_RAM_start
+.print "Application compile address -> ",mms_high_memory_RAM_start

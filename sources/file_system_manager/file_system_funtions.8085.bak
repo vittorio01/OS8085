@@ -395,7 +395,7 @@ fsm_selected_disk_set_boot_section_next:            call fsm_writeback_page
                                                     xthl 
                                                     mov a,h 
                                                     xthl 
-                                                    call mms_select_low_memory_data_segment
+                                                    call mms_select_high_memory_data_segment
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_boot_section_end
                                                     mov l,e 
@@ -986,7 +986,7 @@ fsm_selected_disk_set_system_loop:                  inx sp
                                                     dcx sp 
                                                     dcx sp 
                                                     dcx sp 
-                                                    call mms_select_low_memory_data_segment
+                                                    call mms_select_high_memory_data_segment
                                                     cpi mms_operation_ok
                                                     jnz fsm_selected_disk_set_system_loop_end
                                                     lda fsm_page_buffer_segment_id

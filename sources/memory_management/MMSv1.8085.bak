@@ -131,10 +131,10 @@ mms_data_segment_generated_error_code       .equ reserved_memory_start+$004F
 
 
 ;flags utilizzate nelle intestazioni dei segmenti e nella gestione della ram
-mms_low_memory_user_segment_flags           .equ %10000000
-mms_low_memory_system_segment_flags         .equ %11000000
-mms_low_memory_system_bitstream_start       .equ low_memory_end - 32
-mms_low_memory_user_bitstream_start         .equ mms_low_memory_system_bitstream_start - 32
+mms_high_memory_user_segment_flags           .equ %10000000
+mms_high_memory_system_segment_flags         .equ %11000000
+mms_high_memory_system_bitstream_start       .equ high_memory_end - 32
+mms_high_memory_user_bitstream_start         .equ mms_high_memory_system_bitstream_start - 32
 ;codici di esecuzione che possono essere sollevati durante l'esecuzione delle funzioni
 mms_not_enough_ram_error_code               .equ $11
 mms_segment_data_not_found_error_code       .equ $12
@@ -143,17 +143,17 @@ mms_segment_number_overflow_error_code      .equ $14
 mms_operation_ok                            .equ $ff
 
 mms_functions:  .org MMS 
-                jmp mms_low_memory_initialize
-                jmp mms_free_low_ram_bytes
-                jmp mms_load_low_memory_program 
-                jmp mms_unload_low_memory_program 
-                jmp mms_create_low_memory_user_data_segment 
-                jmp mms_create_low_memory_system_data_segment 
-                jmp mms_select_low_memory_user_data_segment
-                jmp mms_select_low_memory_system_data_segment
-                jmp mms_delete_selected_low_memory_user_data_segment 
-                jmp mms_delete_selected_low_memory_system_data_segment
-                ;jmp mms_delete_all_low_memory_user_data_segment 
+                jmp mms_high_memory_initialize
+                jmp mms_free_high_ram_bytes
+                jmp mms_load_high_memory_program 
+                jmp mms_unload_high_memory_program 
+                jmp mms_create_high_memory_user_data_segment 
+                jmp mms_create_high_memory_system_data_segment 
+                jmp mms_select_high_memory_user_data_segment
+                jmp mms_select_high_memory_system_data_segment
+                jmp mms_delete_selected_high_memory_user_data_segment 
+                jmp mms_delete_selected_high_memory_system_data_segment
+                ;jmp mms_delete_all_high_memory_user_data_segment 
                 jmp mms_read_selected_system_segment_data_address
                 jmp mms_read_selected_user_segment_data_address
                 jmp mms_read_selected_system_segment_byte 
@@ -167,12 +167,12 @@ mms_functions:  .org MMS
 
 ;Implementazioni delle system calls della mms
 
-;La funzione mms_low_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
-mms_low_memory_initialize:      push h
+;La funzione mms_high_memory_initialize inizializza i puntatori della low ram in modo da rendere disponibile il caricamento dei dati
+mms_high_memory_initialize:      push h
                                 push psw 
-                                lxi h,low_memory_start
+                                lxi h,high_memory_start
                                 shld mms_program_high_pointer
-                                lxi h,mms_low_memory_user_bitstream_start 
+                                lxi h,mms_high_memory_user_bitstream_start 
                                 shld mms_data_low_pointer 
                                 xra a 
                                 sta mms_system_data_selected_segment_id
@@ -188,9 +188,9 @@ mms_low_memory_initialize:      push h
                                 pop h 
                                 ret 
 
-;La funzione mms_free_low_ram_byte restiuisce il numero di bytes disponibili nella low ram
+;La funzione mms_free_high_ram_byte restiuisce il numero di bytes disponibili nella low ram
 ; HL <- numero di bytes della ram disponibili
-mms_free_low_ram_bytes: push d
+mms_free_high_ram_bytes: push d
                         push psw 
                         lhld mms_data_low_pointer
                         xchg 
@@ -205,13 +205,13 @@ mms_free_low_ram_bytes: push d
                         pop d 
                         ret 
 
-;la funzione mms_load_low_memory_program riceve in ingresso il numero di bytes dedicati all'allocazione del programma desiderato e controlla se il puntatore dati non entra in collisione con la low data ram
+;la funzione mms_load_high_memory_program riceve in ingresso il numero di bytes dedicati all'allocazione del programma desiderato e controlla se il puntatore dati non entra in collisione con la low data ram
 ; HL -> dimensione del blocco da allocare
 ; A  <- risultato dell'operazione
 ; HL <- posizione iniziale del blocco allocato
 
-mms_load_low_memory_program:    push d  
-                                lxi d,low_memory_start 
+mms_load_high_memory_program:    push d  
+                                lxi d,high_memory_start 
                                 dad d 
                                 xchg 
                                 lhld mms_data_low_pointer
@@ -223,7 +223,7 @@ mms_load_low_memory_program:    push d
                                 xchg
                                 shld mms_program_high_pointer
                                 mvi a,mms_operation_ok
-                                lxi h,low_memory_start
+                                lxi h,high_memory_start
                                 pop d 
                                 ret 
 mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
@@ -231,19 +231,19 @@ mms_program_not_enough_ram:     mvi a,mms_not_enough_ram_error_code
                                 pop d 
                                 ret
 
-;La funzione mms_unload_low_memory_program libera la zona della ram dedicata al programma caricato precedentemente
-mms_unload_low_memory_program:  push h 
-                                lxi h,low_memory_start
+;La funzione mms_unload_high_memory_program libera la zona della ram dedicata al programma caricato precedentemente
+mms_unload_high_memory_program:  push h 
+                                lxi h,high_memory_start
                                 shld mms_program_high_pointer
                                 pop h 
                                 ret 
 
-;la funzione mms_create_low_memory_user_data_segment crea un nuovo segmento di tipo user nella low data memory. Prima della creazione viene verificato se lo spazio nella ram è disponibile
+;la funzione mms_create_high_memory_user_data_segment crea un nuovo segmento di tipo user nella low data memory. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 ; HL -> dimensione del segmento da creare
 ; A  <- ID del segmento creato. Se non è stato creato correttamente assume $00
 ;       in caso di errore nella creazione, per ottenere informazioni sull'errore generato si deve lanciare la funzione mms_read_data_segment_operation_error_code
 
-mms_create_low_memory_user_data_segment:    push d 
+mms_create_high_memory_user_data_segment:    push d 
                                             push h 
                                             push h 
                                             xchg 
@@ -268,7 +268,7 @@ mms_create_low_memory_user_data_segment:    push d
                                             xchg  
                                             jc mms_create_user_segment_not_enough_ram_error
                                             shld mms_data_low_pointer
-                                            mvi m,mms_low_memory_user_segment_flags
+                                            mvi m,mms_high_memory_user_segment_flags
                                             inx h 
                                             call mms_user_bitstream_number_request 
                                             ora a 
@@ -318,12 +318,12 @@ mms_create_user_data_segment_return:    inx sp
 
 
 
-;la funzione mms_create_low_memory_user_system_segment crea un nuovo segmento di sistema nella low data memory. Prima della creazione viene verificato se lo spazio nella ram è disponibile
+;la funzione mms_create_high_memory_user_system_segment crea un nuovo segmento di sistema nella low data memory. Prima della creazione viene verificato se lo spazio nella ram è disponibile
 ; HL -> dimensione del segmento da creare
 ; A  <- ID del segmento creato. Se non è stato creato correttamente assume $00
 ;       in caso di errore nella creazione, per ottenere informazioni sull'errore generato si deve lanciare la funzione mms_read_data_segment_operation_error_code
 
-mms_create_low_memory_system_data_segment:  push d 
+mms_create_high_memory_system_data_segment:  push d 
                                             push h 
                                             push h 
                                             xchg 
@@ -348,7 +348,7 @@ mms_create_low_memory_system_data_segment:  push d
                                             xchg 
                                             jc mms_create_system_segment_not_enough_ram_error
                                             shld mms_data_low_pointer
-                                            mvi m,mms_low_memory_system_segment_flags
+                                            mvi m,mms_high_memory_system_segment_flags
                                             inx h 
                                             call mms_system_bitstream_number_request
                                             ora a 
@@ -429,15 +429,15 @@ mms_read_selected_user_data_address_segment_not_found:  mvi a,mms_segment_data_n
                                                         ret 
 
 
-;la funzione mms_select_low_memory_system_data_segment permette di selezionare un segmento di sistema
+;la funzione mms_select_high_memory_system_data_segment permette di selezionare un segmento di sistema
 ;A -> segmento da selezionare
 ;A <- risultato dell'operazione
 
-mms_select_low_memory_system_data_segment:  push h 
+mms_select_high_memory_system_data_segment:  push h 
                                             push psw 
                                             call mms_search_system_data_segment
                                             ora a 
-                                            jz mms_select_low_memory_system_segment_not_found
+                                            jz mms_select_high_memory_system_segment_not_found
                                             pop psw 
                                             sta mms_system_data_selected_segment_id
                                             shld mms_system_data_selected_segment_address
@@ -452,7 +452,7 @@ mms_select_low_memory_system_data_segment:  push h
                                             sta mms_data_segment_generated_error_code
                                             ret 
 
-mms_select_low_memory_system_segment_not_found: pop psw 
+mms_select_high_memory_system_segment_not_found: pop psw 
                                                 pop h 
                                                 xra a 
                                                 sta mms_system_data_selected_segment_dimension
@@ -463,15 +463,15 @@ mms_select_low_memory_system_segment_not_found: pop psw
                                                 sta mms_data_segment_generated_error_code
                                                 ret 
 
-;la funzione mms_select_low_memory_user_data_segment permette di selezionare un segmento utente
+;la funzione mms_select_high_memory_user_data_segment permette di selezionare un segmento utente
 ;A -> segmento da selezionare
 ;A <- risultato dell'operazione
 
-mms_select_low_memory_user_data_segment:    push h 
+mms_select_high_memory_user_data_segment:    push h 
                                             push psw 
                                             call mms_search_user_data_segment
                                             ora a 
-                                            jz mms_select_low_memory_user_segment_not_found
+                                            jz mms_select_high_memory_user_segment_not_found
                                             pop psw 
                                             sta mms_user_data_selected_segment_id
                                             shld mms_user_data_selected_segment_address
@@ -486,7 +486,7 @@ mms_select_low_memory_user_data_segment:    push h
                                             sta mms_data_segment_generated_error_code
                                             ret 
 
-mms_select_low_memory_user_segment_not_found:   pop psw 
+mms_select_high_memory_user_segment_not_found:   pop psw 
                                                 pop h 
                                                 xra a 
                                                 sta mms_user_data_selected_segment_dimension
@@ -498,19 +498,19 @@ mms_select_low_memory_user_segment_not_found:   pop psw
                                                 ret 
 
 
-;la funzione mms_delete_selected_low_memory_system_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
+;la funzione mms_delete_selected_high_memory_system_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
 ;verso la parte alta della RAM in modo da rimuovere frammenti di spazio vuoto
 
 ; A <- risultato dell'operazione
 
-mms_delete_selected_low_memory_system_data_segment:     push h
+mms_delete_selected_high_memory_system_data_segment:     push h
                                                         push b 
                                                         push d 
                                                         lda mms_system_data_selected_segment_id
                                                         ora a 
                                                         jz mms_delete_system_data_segment_not_found
                                                         call mms_system_bitstream_reset_requested_bit
-mms_delete_selected_low_memory_system_data_segment2:    lhld mms_system_data_selected_segment_address
+mms_delete_selected_high_memory_system_data_segment2:    lhld mms_system_data_selected_segment_address
                                                         dcx h 
                                                         mov d,m 
                                                         dcx h 
@@ -560,19 +560,19 @@ mms_delete_system_data_segment_not_found:   mvi a,mms_segment_data_not_found_err
                                             pop h 
                                             ret 
 
-;la funzione mms_delete_selected_low_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
+;la funzione mms_delete_selected_high_memory_user_data_segment elimina il segmento precedentemente selezionato. La funzione procede allo scorrimento dei segmenti 
 ;verso la parte alta della RAM in modo da rimuovere frammenti di spazio vuoto
 
 ; A <- risultato dell'operazione
 
-mms_delete_selected_low_memory_user_data_segment:       push h
+mms_delete_selected_high_memory_user_data_segment:       push h
                                                         push b 
                                                         push d 
                                                         lda mms_user_data_selected_segment_id
                                                         ora a 
                                                         jz mms_delete_user_data_segment_not_found
                                                         call mms_user_bitstream_reset_requested_bit
-mms_delete_selected_low_memory_user_data_segment2:      lhld mms_user_data_selected_segment_address
+mms_delete_selected_high_memory_user_data_segment2:      lhld mms_user_data_selected_segment_address
                                                         dcx h 
                                                         mov d,m 
                                                         dcx h 
@@ -848,7 +848,7 @@ mms_read_selected_user_dimension_segment_not_found:     mvi a,mms_segment_data_n
 ;mms_bistream_reset inizializza il bitstream system e lo prepara per l'associazione degli ID dei segmenti
 mms_system_bitstream_reset: push h 
                             push b
-                            lxi h,mms_low_memory_system_bitstream_start
+                            lxi h,mms_high_memory_system_bitstream_start
                             mvi m,%01111111
                             inx h 
                             mvi b,31 
@@ -864,7 +864,7 @@ mms_system_bitstream_loop:  mvi m,$ff
 
 mms_system_bitstream_number_request:            push h 
                                                 push b 
-                                                lxi h,mms_low_memory_system_bitstream_start
+                                                lxi h,mms_high_memory_system_bitstream_start
                                                 mvi b,0
                                                 mov a,m 
 mms_system_bitstream_number_request_search_bit: add a 
@@ -908,7 +908,7 @@ mms_system_bitstream_reset_requested_bit:               ora a
                                                         rz 
                                                         push h 
                                                         push b 
-                                                        lxi h,mms_low_memory_system_bitstream_start
+                                                        lxi h,mms_high_memory_system_bitstream_start
 mms_system_bitstream_reset_requested_bit_search:        cpi 8 
                                                         jc mms_system_bitstream_reset_requested_bit_posfound
                                                         sui 8
@@ -930,7 +930,7 @@ mms_system_bitstream_reset_requested_bit_shift_end:     ora m
 ;mms_bistream_reset inizializza il bitstream system e lo prepara per l'associazione degli ID dei segmenti
 mms_user_bitstream_reset:   push h 
                             push b
-                            lxi h,mms_low_memory_user_bitstream_start
+                            lxi h,mms_high_memory_user_bitstream_start
                             mvi m,%01111111
                             inx h 
                             mvi b,31 
@@ -946,7 +946,7 @@ mms_user_bitstream_loop:    mvi m,$ff
 
 mms_user_bitstream_number_request:              push h 
                                                 push b 
-                                                lxi h,mms_low_memory_user_bitstream_start
+                                                lxi h,mms_high_memory_user_bitstream_start
                                                 mvi b,0
                                                 mov a,m 
 mms_user_bitstream_number_request_search_bit:   add a 
@@ -990,7 +990,7 @@ mms_user_bitstream_reset_requested_bit:             ora a
                                                     rz 
                                                     push h 
                                                     push b 
-                                                    lxi h,mms_low_memory_user_bitstream_start
+                                                    lxi h,mms_high_memory_user_bitstream_start
 mms_user_bitstream_reset_requested_bit_search:      cpi 8 
                                                     jc mms_user_bitstream_reset_requested_bit_posfound
                                                     sui 8
@@ -1014,16 +1014,16 @@ mms_user_bitstream_reset_requested_bit_shift_end:   ora m
 mms_search_user_data_segment:       push b 
                                     push d 
                                     push psw 
-                                    lxi b,mms_low_memory_user_bitstream_start
+                                    lxi b,mms_high_memory_user_bitstream_start
                                     lhld mms_data_low_pointer
                                     mov a,l  
                                     sub c
                                     mov a,h
                                     sbb b
                                     jnc mms_user_segment_not_found
-                                    lxi b,mms_low_memory_user_bitstream_start
+                                    lxi b,mms_high_memory_user_bitstream_start
 mms_user_data_segment_search_loop:  mov a,m 
-                                    cpi mms_low_memory_user_segment_flags
+                                    cpi mms_high_memory_user_segment_flags
                                     inx h 
                                 
                                     jnz mms_user_data_segment_search_skip
@@ -1065,16 +1065,16 @@ mms_user_segment_found:     inx sp
 mms_search_system_data_segment:             push b 
                                             push d 
                                             push psw 
-                                            lxi b,mms_low_memory_user_bitstream_start
+                                            lxi b,mms_high_memory_user_bitstream_start
                                             lhld mms_data_low_pointer
                                             mov a,l  
                                             sub c
                                             mov a,h
                                             sbb b
                                             jnc mms_system_segment_not_found
-                                            lxi b,mms_low_memory_user_bitstream_start
+                                            lxi b,mms_high_memory_user_bitstream_start
 mms_system_data_segment_search_loop:        mov a,m 
-                                            cpi mms_low_memory_system_segment_flags
+                                            cpi mms_high_memory_system_segment_flags
                                             inx h 
                                             jnz mms_system_data_segment_search_loop_skip
 mms_system_data_segment_search_loop_ver:    mov a,m 

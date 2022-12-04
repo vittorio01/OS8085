@@ -5,9 +5,11 @@ mms_execution_code_mark                 .equ %01000000
 fsm_execution_code_mark                 .equ %10000000
 msi_execution_code_mark                 .equ %11000000
 
+;informazioni generali
+SFS10_format_ID                         .equ $01
+
 ;codici di esecuzione che possono essere generati dalle funzioni del bios
 bios_operation_ok                       .equ $ff 
-
 
 bios_IO_device_not_found                        .equ bios_execution_code_mark+$01 
 bios_IO_device_not_selected                     .equ bios_execution_code_mark+$02 
@@ -93,8 +95,6 @@ msi_string_empty                        .equ msi_execution_code_mark+$05
 msi_name_too_long                       .equ msi_execution_code_mark+$06 
 msi_extension_too_long                  .equ msi_execution_code_mark+$07
 msi_not_a_program                       .equ msi_execution_code_mark+$08
-msi_sheel_load_program_error            .equ msi_execution_code_mark+$09
-msi_sheel_start_program_error           .equ msi_execution_code_mark+$0A 
-mms_sheel_IO_console_device_not_found   .equ msi_execution_code_mark+$0B
-
-SFS10_format_ID                         .equ $01
+msi_shell_load_program_error            .equ msi_execution_code_mark+$09
+msi_shell_start_program_error           .equ msi_execution_code_mark+$0A 
+msi_shell_IO_console_device_not_found   .equ msi_execution_code_mark+$0B

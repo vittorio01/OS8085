@@ -1,8 +1,8 @@
 ;questo file contiene tutte le informazioni generali sul sistema operativo (dimensione della ram, dimensione del sistema operativo ecc...).
-;è possibile modificare alcune informazioni per adattare il sistema ad un computer specifico
 
-current_system_version      .equ    $10
+current_system_version      .equ    $10     ;indica la versione corrente del sistema operativo
 
+;le seguenti informazioni si riveriscono alle proprietà hardware del processore (non toccare) 
 rst0_address                .equ    $0000
 rst1_address                .equ    $0008
 rst2_address                .equ    $0010 
@@ -28,22 +28,27 @@ LIBRARIES_dimension     .equ    1536
 SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
 ;queste informazioni riguardano la divisione degli spazi all'interno della ram
+
+;----- LOW RAM -----
+;zona dedicata alla gestione dello spazio nel sistema operativo (da non modificare se non in fase di sviluppo del sistema)
 MSI                 .equ system_interrupt_space_end
 FSM                 .equ MSI+MSI_dimension
 MMS                 .equ FSM+FSM_dimension
 BIOS                .equ MMS+MMS_dimension
 LIBRARIES           .equ BIOS+BIOS_dimension
-SYSTEM_memory_end   .equ LIBRARIES+LIBRARIES_dimension
+SYSTEM_memory_end   .equ LIBRARIES+LIBRARIES_dimension                              
 
-reserved_memory_dimension   .equ $0070
+;memoria dedicata alla gestione delle informazioni basilari nei layer del sistema (non toccare)
+reserved_memory_dimension   .equ $0070                                              
 reserved_memory_start       .equ SYSTEM_memory_end
 reserved_memory_end         .equ reserved_memory_start+reserved_memory_dimension
 
-max_system_stack_dimension  .equ 128
+;memoria dedicata alla gestione dello stack (si può ottimizare per rispariare RAM ma non è consigliato)
+max_system_stack_dimension  .equ 128                                                
 stack_memory_start          .equ reserved_memory_end+max_system_stack_dimension
 
-low_memory_start         .equ stack_memory_start        
-
-
+;----- HIGH RAM -----
+high_memory_start         .equ stack_memory_start        
+;tutte le applicazioni devono essere compilate a partire da questo indirizzo
 
 

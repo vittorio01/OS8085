@@ -1,10 +1,12 @@
 ;Il BIOS prevede l'implementazione di una serie di funzioni a basso livello che devono adattarsi alle varie specifiche della macchina fisica. 
 ;Tra le funzioni disponibili troviamo:
-;-  funzioni di avvio del sistema
+;-  funzione di avvio del sistema
 ;-  funzioni per la gestione dei dispositivi I/O tra cui la console, che serve per la gestione dei dispositivi base per l'interazione con l'utente (lettura di caratteri e stampa su schermo)
 ;-  funzioni per la gestione delle memorie di massa, tra cui sono presenti alcune dedicate alla selezione di tracce, settori e testine e altre alla gestione del flusso dei dati, tra cui lettura
 ;   scrittura di una traccia e formattazione del disco
 ;-  funzioni per la gestione dei trasferimenti DMA memory-to-memory.
+;-  handler per gli interrupt hardware 
+;-  una funzione per la richiesta delle informazioni
 
 ;la prima parte del bios viene sedicara all'implementazione del sistema di mantenimento dei dispositivi. I dispositivi possono essere modificati nella sezione successiva. 
 

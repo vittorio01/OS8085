@@ -177,7 +177,7 @@ fsm_selected_file_data_pointer_offset       .equ reserved_memory_start + $0050
 fsm_coded_page_dimension                .equ 4
 fsm_uncoded_page_dimension              .equ 512
 fsm_boot_sector_start_position          .equ $0020
-fsm_boot_sector_compile_address_offset  .equ low_memory_start
+fsm_boot_sector_compile_address_offset  .equ high_memory_start
 
 fsm_disk_name_max_lenght                    .equ 20
 fsm_header_name_dimension                   .equ 25
@@ -711,7 +711,7 @@ fsm_load_selected_program_verified:             lxi d,fsm_header_name_dimension+
 fsm_load_selected_program_dimension_check:      mov c,e 
                                                 mov b,d 
                                                 xchg 
-                                                call mms_free_low_ram_bytes
+                                                call mms_free_high_ram_bytes
                                                 mov a,l 
                                                 sub c 
                                                 mov a,h 
@@ -721,7 +721,7 @@ fsm_load_selected_program_dimension_check:      mov c,e
                                                 jmp fsm_load_selected_program_end
 fsm_load_selected_program_dimension_ok:         mov l,c 
                                                 mov h,b 
-                                                call mms_load_low_memory_program
+                                                call mms_load_high_memory_program
                                                 cpi mms_operation_ok
                                                 jnz fsm_load_selected_program_end
                                                 xchg 
@@ -798,7 +798,7 @@ fsm_Selected_file_write_bytes_loop:         inx sp
                                             xthl 
                                             dcx sp 
                                             dcx sp 
-                                            call mms_select_low_memory_data_segment
+                                            call mms_select_high_memory_data_segment
                                             cpi mms_operation_ok
                                             jnz fsm_selected_file_write_bytes_end
                                             lda fsm_page_buffer_segment_id
@@ -2645,14 +2645,14 @@ fsm_set_page_link_end:              pop d
 ;fsm_reselect_mms_segment riseleziona il segmento di buffer (nel caso in cui non esiste viene creato)
 
 fsm_reselect_mms_segment:           lda fsm_page_buffer_segment_id
-                                    call mms_select_low_memory_data_segment
+                                    call mms_select_high_memory_data_segment
                                     cpi mms_operation_ok
                                     jz fsm_reselect_mms_segment_end2
                                     cpi mms_segment_data_not_found_error_code
                                     rnz  
                                     push h 
                                     lxi h,fsm_uncoded_page_dimension
-                                    call mms_create_low_memory_data_segment
+                                    call mms_create_high_memory_data_segment
                                     pop h 
                                     rc 
                                     push psw 
