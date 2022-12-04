@@ -203,6 +203,8 @@ mms_free_low_ram_bytes: push d
                         mov a,d 
                         sbb h 
                         mov h,a
+                        lxi d,$ffff-4+1 
+                        dad d 
                         pop psw 
                         pop d 
                         ret 
@@ -592,7 +594,7 @@ mms_create_low_memory_data_segment:                         push d
                                                             sub l 
                                                             mov a,d 
                                                             sbb h 
-                                                            xchg  
+                                                            xchg 
                                                             jc mms_create_low_memory_data_segment_not_enough_ram_error
                                                             shld mms_data_low_pointer
                                                             mvi m,mms_low_memory_valid_segment_mask
@@ -764,7 +766,9 @@ mms_delete_data_segment_end:                            pop d
 mms_search_data_segment:                    push b 
                                             push d 
                                             push psw 
-                                            lxi b,mms_low_memory_bitstream_start
+                                            lhld mms_low_memory_end
+                                            mov c,l 
+                                            mov b,h 
                                             lhld mms_data_low_pointer
                                             mov a,l  
                                             sub c

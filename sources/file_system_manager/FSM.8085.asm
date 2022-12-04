@@ -267,6 +267,7 @@ fsm_select_disk_bad_argument:   mvi a,fsm_bad_argument
 fsm_select_disk_next:           sta fsm_selected_disk 
                                 push h
                                 push d 
+                                push b 
                                 call bios_disk_device_select_drive
                                 cpi bios_operation_ok  
                                 jz fsm_select_next2
@@ -362,6 +363,7 @@ fsm_select_disk_not_bootable:   lxi h,fsm_format_marker_lenght+7
                                 jnz fsm_select_disk_end
                                 mvi a,fsm_operation_ok
 fsm_select_disk_end:            call fsm_disk_device_stop_motor
+                                pop b 
                                 pop d 
                                 pop h 
                                 ret 
@@ -666,7 +668,7 @@ fsm_get_disk_format_type:                       lda fsm_selected_disk_loaded_pag
 fsm_get_disk_format_type_not_formatted:         mvi a,fsm_unformatted_disk
                                                 stc 
                                                 ret 
-fsm_get_disk_format_type_next:                  mvi a,fsm_SFS10_format_ID 
+fsm_get_disk_format_type_next:                  mvi a,SFS10_format_ID 
                                                 stc 
                                                 cmc 
                                                 ret 

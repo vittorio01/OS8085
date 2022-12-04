@@ -21,10 +21,6 @@ bios_IO_console_connected_mask       .equ %10000000  ;per indicare se il disposi
 bios_IO_console_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
 bios_IO_console_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
 
-;flags del byte inviato dalla funzione bios_disk_device_set_state 
-bios_disk_device_motor_control_bit_mask                 .equ %10000000      ;se il bit è settato a 1 il motore del disco selezionato deve essere avviato
-bios_disk_device_head_align_control_bit_mask            .equ %01000000      ;se il bit è settato a 1 il disk device deve riallineare la testina nel disco 
-
 ;flags del byte di stato ricevuto dalla funzione bios_disk_device_get_state 
 bios_disk_device_disk_inserted_status_bit_mask          .equ %10000000      ;questo bit deve essere settato a 1 se il disco è stato inserito nel drive 
 bios_disk_device_controller_ready_status_bit_mask       .equ %01000000      ;questo bit deve essere settato a 1 quando il disk device è pronto per il trasferimento dei dati 
@@ -96,11 +92,9 @@ msi_invalid_character_in_string         .equ msi_execution_code_mark+$04
 msi_string_empty                        .equ msi_execution_code_mark+$05 
 msi_name_too_long                       .equ msi_execution_code_mark+$06 
 msi_extension_too_long                  .equ msi_execution_code_mark+$07
+msi_not_a_program                       .equ msi_execution_code_mark+$08
+msi_sheel_load_program_error            .equ msi_execution_code_mark+$09
+msi_sheel_start_program_error           .equ msi_execution_code_mark+$0A 
+mms_sheel_IO_console_device_not_found   .equ msi_execution_code_mark+$0B
 
-msi_not_a_program                       .equ msi_execution_code_mark+$08 
-
-msi_load_program_error_execution_code   .equ msi_execution_code_mark+$09 
-msi_program_start_error                 .equ msi_execution_code_mark+$0A
-msi_program_message_share_error         .equ msi_execution_code_mark+$0B
-
-fsm_SFS10_format_ID                         .equ $01
+SFS10_format_ID                         .equ $01

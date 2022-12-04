@@ -61,7 +61,7 @@
 
 ;Nel caso in cui si richiama l'interrupt rst0, tutti i layers devono essere inizializzati nuovamente (il BIOS deve eseguire questa volta un warm boot)
 
-;una volta avviato, il sistema lancia automaticamente la sheel integrata nella MSI, che permetterà all'utente di accedere ad un'interfaccia basilare a linea di comando
+;una volta avviato, il sistema lancia automaticamente la shell integrata nella MSI, che permetterà all'utente di accedere ad un'interfaccia basilare a linea di comando
 
 ;----- sistema a passaggio di messaggi -----
 ;Ogni appicazione al suo avvio ha i registri azzerati e lo stack pointer preimostato alla fine del program space (vedi mms). 
@@ -70,8 +70,8 @@
 ;-  se A == $00 l'applicazione viene chiamata normalmente 
 ;-  se A != $00 l'applicazione viene richiamata con un messaggio 
 
-;alla chiusura dell'applicazione, tutti i segmenti utente non permanenti vengono chiusi e viene avviata la sheel di sistema di default, che a sua volta può essere richiamata tramite un messaggio.
-;Quando la sheel termina a sua esecuzione, il sistema attende lo spegnimento stampando in output il messaggio di chiusura del sistema.
+;alla chiusura dell'applicazione, tutti i segmenti utente non permanenti vengono chiusi e viene avviata la shell di sistema di default, che a sua volta può essere richiamata tramite un messaggio.
+;Quando la shell termina a sua esecuzione, il sistema attende lo spegnimento stampando in output il messaggio di chiusura del sistema.
 ;un messaggio è solitamente un segmento di memoria permanente di tipo utente che contiene:
 ;-  un intestazione che contiene il nome dell'applicazione che l'ha creato 
 ;-  un corpo che varia a seconda del destinatario del messaggio. 
@@ -213,8 +213,8 @@ msi_system_calls_id_table:      .org MSI
 
 msi_system_calls_id_table_end:  
 
-msi_sheel_program_extension                 .text ".run"
-msi_sheel_program_extension_dimension       .equ 4 
+msi_shell_program_extension                 .text ".run"
+msi_shell_program_extension_dimension       .equ 4 
 
 ;msi_system_start si occupa di eseguire il warm reset
 msi_system_start:                   lxi sp,stack_memory_start
@@ -223,7 +223,7 @@ msi_system_start:                   lxi sp,stack_memory_start
                                     call fsm_init 
                                     mvi a,0 
                                     sta msi_current_program_flags
-                                    jmp msi_sheel_startup 
+                                    jmp msi_shell_startup 
                                      
 
 ;msi_main_system_calls_handler si occupa di gestire tutte le system calls principali  
@@ -1657,7 +1657,7 @@ msi_system_call_set_data_pointer_end:       lhld msi_BC_backup_address
 ;msi_system_call_launch_program sostituisce il programma attualmente caricato con quello selezionato precedentemente. 
 
 ;A <- errore generato (se si verifica un errore nell'input il programma riprende la sua esecuzione)
-;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la sheel di default con un errore specificato (exit program)
+;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la shell di default con un errore specificato (exit program)
 
 msi_system_call_launch_program:                 call fsm_get_selected_file_header_system_flag_status
                                                 cpi $ff 
@@ -1679,8 +1679,8 @@ msi_system_call_launch_program_next:            call fsm_get_selected_file_heade
                                                 jnz msi_system_call_launch_program_end
                                                 lxi h,0 
                                                 dad sp 
-                                                lxi d,msi_sheel_program_extension 
-                                                mvi b,msi_sheel_program_extension_dimension
+                                                lxi d,msi_shell_program_extension 
+                                                mvi b,msi_shell_program_extension_dimension
 msi_system_call_launch_program_verify_loop:     mov a,m 
                                                 ora a 
                                                 jz msi_system_call_launch_program_verify_error
@@ -1704,16 +1704,16 @@ msi_system_call_launch_program_verify_next:     ldax d
                                                 cpi fsm_operation_ok
                                                 jnz msi_system_call_launch_program_load_error
                                                 call mms_start_low_memory_loaded_program
-                                                mvi a,msi_sheel_start_program_error
-                                                jmp msi_sheel_startup 
-msi_system_call_launch_program_load_error:      mvi a,msi_sheel_load_program_error
-                                                jmp msi_sheel_startup
+                                                mvi a,msi_shell_start_program_error
+                                                jmp msi_shell_startup 
+msi_system_call_launch_program_load_error:      mvi a,msi_shell_load_program_error
+                                                jmp msi_shell_startup
 
 ;esegue la stessa funzione di msi_system_call_launch_program inviando il messaggio creato precedentemente. Se il messaggio non è stato creato l'applicazione viene lanciata normalmente
 ;A <- id del segmento da inviare 
 ;DE -> nome completo del programma 
 ;A <- errore generato (se si verifica un errore nell'input il programma riprende la sua esecuzione)
-;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la sheel di default con un errore specificato (exit program)
+;il programma viene eseguito subito dopo il suo caricamento. In caso di errore nel caricamento, viene richiamata la shell di default con un errore specificato (exit program)
 
 msi_system_call_launch_program_with_message:                call fsm_get_selected_file_header_system_flag_status
                                                             cpi $ff 
@@ -1735,8 +1735,8 @@ msi_system_call_launch_program_with_message_next:           call fsm_get_selecte
                                                             jnz msi_system_call_launch_program_with_message_end
                                                             lxi h,0 
                                                             dad sp 
-                                                            lxi d,msi_sheel_program_extension 
-                                                            mvi b,msi_sheel_program_extension_dimension
+                                                            lxi d,msi_shell_program_extension 
+                                                            mvi b,msi_shell_program_extension_dimension
 msi_system_call_launch_program_with_message_verify_loop:    mov a,m 
                                                             ora a 
                                                             jz msi_system_call_launch_program_with_message_verify_error
@@ -1779,19 +1779,19 @@ msi_system_call_launch_program_with_message_next4:          call mms_unload_low_
                                                             cpi fsm_operation_ok
                                                             jnz msi_system_call_launch_program_with_message_load_error
                                                             call mms_start_low_memory_loaded_program
-                                                            mvi a,msi_sheel_start_program_error
-                                                            jmp msi_sheel_startup 
-msi_system_call_launch_program_with_message_load_error:     mvi a,msi_sheel_load_program_error
-                                                            jmp msi_sheel_startup      
+                                                            mvi a,msi_shell_start_program_error
+                                                            jmp msi_shell_startup 
+msi_system_call_launch_program_with_message_load_error:     mvi a,msi_shell_load_program_error
+                                                            jmp msi_shell_startup      
 
 
-;msi_system_call_exit_program chiude il programma attualmente in esecuzione e ritorna alla sheel del sistema restituiendo un codice di esecuzione 
+;msi_system_call_exit_program chiude il programma attualmente in esecuzione e ritorna alla shell del sistema restituiendo un codice di esecuzione 
 ;A -> codice di esecuzione 
 
 msi_system_call_exit_program:           call mms_unload_low_memory_program
                                         call mms_delete_all_temporary_segments
                                         lda msi_PSW_backup_address+1 
-                                        jmp msi_sheel_startup
+                                        jmp msi_shell_startup
 
 ;msi_system_call_get_os_version restituisce la versione corrente del sistema operativo 
 ;A <- versione del sistema codificata 
@@ -1806,8 +1806,8 @@ msi_system_call_get_os_version:     mvi a,current_system_version
                                     lhld msi_HL_backup_address  
                                     jmp msi_system_calls_return
 
-;------ Sheel di sistema ------
-;La sheel di sistema è la parte interattiva del sistema operativo. è basata su un sistema a linea di comando, dove l'utente può inserire i camoandi che il sistema deve eseguire. 
+;------ shell di sistema ------
+;La shell di sistema è la parte interattiva del sistema operativo. è basata su un sistema a linea di comando, dove l'utente può inserire i camoandi che il sistema deve eseguire. 
 ;L'interfaccia prevede una serie di comandi tra cui:
 ;-  CP "sorgente" "destinazione"  -> copia il file desiderato 
 ;-  DEL "file" -> elimina il file desiderato
@@ -1821,203 +1821,203 @@ msi_system_call_get_os_version:     mvi a,current_system_version
 ;-  DEV -> stampa la lista dei dispositivi IO disponibili 
 ;-  CON -> cambia il dispositivo IO della console 
 
-msi_sheel_default_disk              .equ    reserved_memory_start+$005f 
-msi_sheel_input_buffer_id           .equ    reserved_memory_start+$0060 
-msi_sheel_input_buffer_head         .equ    reserved_memory_start+$0061
-msi_sheel_console_ID                .equ    reserved_memory_start+$0062 
+msi_shell_default_disk              .equ    reserved_memory_start+$005f 
+msi_shell_input_buffer_id           .equ    reserved_memory_start+$0060 
+msi_shell_input_buffer_head         .equ    reserved_memory_start+$0061
+msi_shell_console_ID                .equ    reserved_memory_start+$0062 
 
-msi_sheel_input_buffer_full         .equ    msi_execution_code_mark+20
-msi_sheel_input_buffer_dimension    .equ    64     ;(max 256)
+msi_shell_input_buffer_full         .equ    msi_execution_code_mark+20
+msi_shell_input_buffer_dimension    .equ    64     ;(max 256)
 
-msi_sheel_unknown_disk_character    .equ $3F
-msi_sheel_first_disk_id             .equ $41 
-msi_sheel_last_disk_id              .equ $5b 
+msi_shell_unknown_disk_character    .equ $3F
+msi_shell_first_disk_id             .equ $41 
+msi_shell_last_disk_id              .equ $5b 
 msi_shell_send_command_character    .equ $0d 
 msi_shell_backspace_character       .equ $08
-msi_sheel_space_character           .equ $20 
+msi_shell_space_character           .equ $20 
 
 msi_input_buffer_overflow                   .equ msi_execution_code_mark+$20 
 
-msi_sheel_load_program_error_message        .text "Failed to load program: "
+msi_shell_load_program_error_message        .text "Failed to load program: "
                                             .b 0
-msi_sheel_program_load_dimension_message    .text "program too large"
+msi_shell_program_load_dimension_message    .text "program too large"
                                             .b $0d, 0
 
-msi_sheel_error_code_received_message       .text "Program exited with abnormal code: "
+msi_shell_error_code_received_message       .text "Program exited with abnormal code: "
                                             .b 0
-msi_sheel_arrow:                            .text ":/> "
+msi_shell_arrow:                            .text ":/> "
                                             .b 0
-msi_sheel_command_not_found_message         .text "Command not found"
+msi_shell_command_not_found_message         .text "Command not found"
                                             .b $0d, 0
 
-msi_sheel_basic_console_IO_type             .text "BTTY"
+msi_shell_basic_console_IO_type             .text "BTTY"
 
 
 
-msi_sheel_command_list_start    .text "CP"
+msi_shell_command_list_start    .text "CP"
                                 .b $00
-                                .word   msi_sheel_cp_command 
+                                .word   msi_shell_cp_command 
                                 .text "DEL"
                                 .b 0 
-                                .word   msi_sheel_del_command
+                                .word   msi_shell_del_command
                                 .text "RM"
                                 .b 0 
-                                .word   msi_sheel_rm_command
+                                .word   msi_shell_rm_command
                                 .text "MEM"
                                 .b 0 
-                                .word   msi_sheel_mem_command
+                                .word   msi_shell_mem_command
                                 .text "LS"
                                 .b 0 
-                                .word   msi_sheel_ls_command
+                                .word   msi_shell_ls_command
                                 .text "DISK"
                                 .b 0 
-                                .word   msi_sheel_disk_command
+                                .word   msi_shell_disk_command
                                 .text "VER"
                                 .b 0 
-                                .word   msi_sheel_ver_command
+                                .word   msi_shell_ver_command
                                 .text "ECHO"
                                 .b 0 
-                                .word   msi_sheel_echo_command
+                                .word   msi_shell_echo_command
                                 .text "CD"
                                 .b 0 
-                                .word   msi_sheel_cd_command
+                                .word   msi_shell_cd_command
                                 .text "DEV"
                                 .b 0 
-                                .word   msi_sheel_dev_command
+                                .word   msi_shell_dev_command
                                 .text "CON"
                                 .b 0 
-                                .word   msi_sheel_con_command
-msi_sheel_command_list_end:
+                                .word   msi_shell_con_command
+msi_shell_command_list_end:
 
-msi_sheel_startup:                                      push psw 
+msi_shell_startup:                                      push psw 
                                                         call msi_shell_initialize_all_console_devices
-msi_sheel_startup_device_wait:                          call msi_shell_bind_console_device
+msi_shell_startup_device_wait:                          call msi_shell_bind_console_device
                                                         cpi msi_operation_ok
-                                                        jnz msi_sheel_startup_device_wait
+                                                        jnz msi_shell_startup_device_wait
                                                         pop psw 
                                                         ora a 
-                                                        jz msi_sheel_disk_device_search
-                                                        cpi msi_sheel_load_program_error
-                                                        jnz msi_sheel_abnormal_code
-                                                        lxi h,msi_sheel_load_program_error_message
-                                                        call msi_sheel_send_string_console
-                                                        jmp msi_sheel_disk_device_search
-msi_sheel_abnormal_code:                                cpi msi_sheel_start_program_error
-                                                        jnz msi_sheel_abnormal_code_unknown_error
+                                                        jz msi_shell_disk_device_search
+                                                        cpi msi_shell_load_program_error
+                                                        jnz msi_shell_abnormal_code
+                                                        lxi h,msi_shell_load_program_error_message
+                                                        call msi_shell_send_string_console
+                                                        jmp msi_shell_disk_device_search
+msi_shell_abnormal_code:                                cpi msi_shell_start_program_error
+                                                        jnz msi_shell_abnormal_code_unknown_error
                                                         mov b,a
-                                                        lxi h,msi_sheel_load_program_error_message
-                                                        call msi_sheel_send_string_console
+                                                        lxi h,msi_shell_load_program_error_message
+                                                        call msi_shell_send_string_console
                                                         mov a,b 
-                                                        call msi_sheel_send_console_byte_number 
-                                                        jmp msi_sheel_disk_device_search
-msi_sheel_abnormal_code_unknown_error:                  mov b,a 
-                                                        lxi h,msi_sheel_error_code_received_message
-                                                        call msi_sheel_send_string_console
+                                                        call msi_shell_send_console_byte_number 
+                                                        jmp msi_shell_disk_device_search
+msi_shell_abnormal_code_unknown_error:                  mov b,a 
+                                                        lxi h,msi_shell_error_code_received_message
+                                                        call msi_shell_send_string_console
                                                         mov a,b 
-                                                        call msi_sheel_send_console_byte_number 
-msi_sheel_disk_device_search:                           mvi a,msi_shell_send_command_character 
-                                                        call msi_sheel_send_console_byte
-                                                        call msi_sheel_create_input_buffer
-                                                        mvi b,msi_sheel_first_disk_id
-msi_sheel_disk_device_search_loop:                      mov a,b 
+                                                        call msi_shell_send_console_byte_number 
+msi_shell_disk_device_search:                           mvi a,msi_shell_send_command_character 
+                                                        call msi_shell_send_console_byte
+                                                        call msi_shell_create_input_buffer
+                                                        mvi b,msi_shell_first_disk_id
+msi_shell_disk_device_search_loop:                      mov a,b 
                                                         call fsm_select_disk
                                                         cpi fsm_operation_ok
-                                                        jz msi_sheel_disk_device_search_loop_end 
+                                                        jz msi_shell_disk_device_search_loop_end 
                                                         cpi fsm_device_not_found
-                                                        jz msi_sheel_disk_device_not_found             
-msi_sheel_disk_device_search_loop2:                     inr b 
+                                                        jz msi_shell_disk_device_not_found             
+msi_shell_disk_device_search_loop2:                     inr b 
                                                         mov a,b 
-                                                        cpi msi_sheel_last_disk_id
-                                                        jc msi_sheel_disk_device_search_loop
-msi_sheel_disk_device_not_found:                        mvi b,0 
-msi_sheel_disk_device_search_loop_end:                  mov a,b 
-                                                        sta msi_sheel_default_disk 
-msi_sheel_command_prompt_initialize:                    lxi sp,stack_memory_start 
+                                                        cpi msi_shell_last_disk_id
+                                                        jc msi_shell_disk_device_search_loop
+msi_shell_disk_device_not_found:                        mvi b,0 
+msi_shell_disk_device_search_loop_end:                  mov a,b 
+                                                        sta msi_shell_default_disk 
+msi_shell_command_prompt_initialize:                    lxi sp,stack_memory_start 
                                                         xra a 
                                                         sta msi_current_program_flags 
-                                                        lda msi_sheel_default_disk 
+                                                        lda msi_shell_default_disk 
                                                         ora a 
-                                                        jnz msi_sheel_command_prompt_print_arrow 
-                                                        mvi b,msi_sheel_unknown_disk_character
-msi_sheel_command_prompt_print_arrow:                   call msi_sheel_select_console_IO_device
-                                                        call msi_sheel_select_input_buffer 
+                                                        jnz msi_shell_command_prompt_print_arrow 
+                                                        mvi b,msi_shell_unknown_disk_character
+msi_shell_command_prompt_print_arrow:                   call msi_shell_select_console_IO_device
+                                                        call msi_shell_select_input_buffer 
                                                         mov a,b 
-                                                        call msi_sheel_send_console_byte
-                                                        lxi h, msi_sheel_arrow
-                                                        call msi_sheel_send_string_console
-                                                        call msi_sheel_clear_input_buffer
-msi_sheel_command_prompt_get_command:                   call msi_sheel_read_console_byte
-                                                        call msi_sheel_ascii_character
-                                                        jc msi_sheel_command_prompt_character_not_printable
+                                                        call msi_shell_send_console_byte
+                                                        lxi h, msi_shell_arrow
+                                                        call msi_shell_send_string_console
+                                                        call msi_shell_clear_input_buffer
+msi_shell_command_prompt_get_command:                   call msi_shell_read_console_byte
+                                                        call msi_shell_ascii_character
+                                                        jc msi_shell_command_prompt_character_not_printable
                                                         mov b,a 
-                                                        call msi_sheel_send_console_byte
+                                                        call msi_shell_send_console_byte
                                                         mov a,b 
-                                                        call msi_sheel_push_input_buffer_byte
-                                                        jmp msi_sheel_command_prompt_get_command
-msi_sheel_command_prompt_character_not_printable:       cpi msi_shell_send_command_character 
-                                                        jz msi_sheel_process_command
+                                                        call msi_shell_push_input_buffer_byte
+                                                        jmp msi_shell_command_prompt_get_command
+msi_shell_command_prompt_character_not_printable:       cpi msi_shell_send_command_character 
+                                                        jz msi_shell_process_command
                                                         cpi msi_shell_backspace_character 
-                                                        jnz msi_sheel_command_prompt_get_command
-                                                        call msi_sheel_remove_input_buffer_byte
+                                                        jnz msi_shell_command_prompt_get_command
+                                                        call msi_shell_remove_input_buffer_byte
                                                         cpi msi_input_buffer_overflow
-                                                        jz msi_sheel_command_prompt_get_command
+                                                        jz msi_shell_command_prompt_get_command
                                                         mvi a,msi_shell_backspace_character 
-                                                        call msi_sheel_send_console_byte
-                                                        jmp msi_sheel_command_prompt_get_command
-msi_sheel_process_command:                              call msi_sheel_send_console_byte
-                                                        lxi d,msi_sheel_command_list_start 
-                                                        lxi b,msi_sheel_command_list_end 
-msi_sheel_process_command_verify_loop:                  lxi h,0 
+                                                        call msi_shell_send_console_byte
+                                                        jmp msi_shell_command_prompt_get_command
+msi_shell_process_command:                              call msi_shell_send_console_byte
+                                                        lxi d,msi_shell_command_list_start 
+                                                        lxi b,msi_shell_command_list_end 
+msi_shell_process_command_verify_loop:                  lxi h,0 
                                                         mov a,e 
                                                         sub c 
                                                         mov a,d 
                                                         sbb b 
-                                                        jnc msi_sheel_process_command_not_found 
-msi_sheel_process_command_verify_loop2:                 ldax d 
+                                                        jnc msi_shell_process_command_not_found 
+msi_shell_process_command_verify_loop2:                 ldax d 
                                                         ora a 
-                                                        jnz msi_sheel_process_command_verify_loop3
+                                                        jnz msi_shell_process_command_verify_loop3
                                                         call mms_read_selected_data_segment_byte
-                                                        cpi msi_sheel_space_character 
-                                                        jz msi_sheel_process_command_verify_loop4
+                                                        cpi msi_shell_space_character 
+                                                        jz msi_shell_process_command_verify_loop4
                                                         ora a 
-                                                        jnz msi_sheel_process_command_verify_jump
-msi_sheel_process_command_verify_loop4:                 xchg 
+                                                        jnz msi_shell_process_command_verify_jump
+msi_shell_process_command_verify_loop4:                 xchg 
                                                         inx h 
                                                         mov e,m  
                                                         inx h 
                                                         mov d,m 
                                                         xchg 
                                                         pchl  
-msi_sheel_process_command_verify_loop3:                 call mms_read_selected_data_segment_byte
-                                                        call msi_sheel_ascii_upper_case
+msi_shell_process_command_verify_loop3:                 call mms_read_selected_data_segment_byte
+                                                        call msi_shell_ascii_upper_case
                                                         xchg 
                                                         cmp m 
                                                         xchg 
-                                                        jnz msi_sheel_process_command_verify_jump
+                                                        jnz msi_shell_process_command_verify_jump
                                                         inx h 
                                                         inx d 
-                                                        jmp msi_sheel_process_command_verify_loop2
-msi_sheel_process_command_verify_jump:                  ldax d 
+                                                        jmp msi_shell_process_command_verify_loop2
+msi_shell_process_command_verify_jump:                  ldax d 
                                                         inx d 
                                                         ora a 
-                                                        jnz msi_sheel_process_command_verify_jump    
+                                                        jnz msi_shell_process_command_verify_jump    
                                                         inx d 
                                                         inx d 
-                                                        jmp msi_sheel_process_command_verify_loop
-msi_sheel_process_command_not_found:                    lxi h,0 
+                                                        jmp msi_shell_process_command_verify_loop
+msi_shell_process_command_not_found:                    lxi h,0 
                                                         mvi b,0 
-msi_sheel_process_command_stack_count:                  inr b 
+msi_shell_process_command_stack_count:                  inr b 
                                                         call mms_read_selected_data_segment_byte
                                                         inx h 
-                                                        jc msi_sheel_process_command_stack_count_end
+                                                        jc msi_shell_process_command_stack_count_end
                                                         cpi $2E
-                                                        jz msi_sheel_process_command_stack_count_end
+                                                        jz msi_shell_process_command_stack_count_end
                                                         ora a 
-                                                        jnz msi_sheel_process_command_stack_count                                            
-msi_sheel_process_command_stack_count_end:              mov a,b 
-                                                        adi msi_sheel_program_extension_dimension 
+                                                        jnz msi_shell_process_command_stack_count                                            
+msi_shell_process_command_stack_count_end:              mov a,b 
+                                                        adi msi_shell_program_extension_dimension 
                                                         mov c,a 
-msi_sheel_process_command_stack_count_end2:             lxi h,0 
+msi_shell_process_command_stack_count_end2:             lxi h,0 
                                                         dad sp 
                                                         mov a,l 
                                                         sub c 
@@ -2028,68 +2028,68 @@ msi_sheel_process_command_stack_count_end2:             lxi h,0
                                                         sphl 
                                                         xchg 
                                                         lxi h,0 
-msi_sheel_process_command_stack_copy:                   call mms_read_selected_data_segment_byte
+msi_shell_process_command_stack_copy:                   call mms_read_selected_data_segment_byte
                                                         dcr b 
-                                                        jz msi_sheel_process_command_stack_copy2
+                                                        jz msi_shell_process_command_stack_copy2
                                                         stax d 
                                                         inx d 
                                                         inx h 
-                                                        jmp msi_sheel_process_command_stack_copy   
-msi_sheel_process_command_stack_copy2:                  mvi b,msi_sheel_program_extension_dimension
-                                                        lxi h,msi_sheel_program_extension
-msi_sheel_process_command_stack_copy3:                  mov a,m 
+                                                        jmp msi_shell_process_command_stack_copy   
+msi_shell_process_command_stack_copy2:                  mvi b,msi_shell_program_extension_dimension
+                                                        lxi h,msi_shell_program_extension
+msi_shell_process_command_stack_copy3:                  mov a,m 
                                                         stax d 
                                                         inx d 
                                                         inx h 
                                                         dcr b 
-                                                        jnz msi_sheel_process_command_stack_copy3                                                
-msi_sheel_process_command_stack_copy_end:               xra a
+                                                        jnz msi_shell_process_command_stack_copy3                                                
+msi_shell_process_command_stack_copy_end:               xra a
                                                         stax d  
                                                         lxi h,0 
                                                         dad sp 
                                                         mov c,l 
                                                         mov b,h 
-                                                        lda msi_sheel_default_disk   
+                                                        lda msi_shell_default_disk   
                                                         ora a 
-                                                        jz msi_sheel_process_command_program_not_found
+                                                        jz msi_shell_process_command_program_not_found
                                                         call fsm_select_disk
                                                         cpi fsm_operation_ok
-                                                        jnz msi_sheel_process_command_program_not_found
+                                                        jnz msi_shell_process_command_program_not_found
                                                         call fsm_select_file_header
                                                         cpi fsm_operation_ok
-                                                        jnz msi_sheel_process_command_program_not_found  
+                                                        jnz msi_shell_process_command_program_not_found  
                                                         call fsm_load_selected_program
                                                         cpi fsm_operation_ok
-                                                        jnz msi_sheel_process_command_program_load_error
+                                                        jnz msi_shell_process_command_program_load_error
                                                         call fsm_get_selected_file_header_system_flag_status
-                                                        jc msi_sheel_process_command_program_load_error2
+                                                        jc msi_shell_process_command_program_load_error2
                                                         ani msi_current_program_permissions
                                                         ori msi_current_program_loaded
                                                         sta msi_current_program_flags
-                                                        call msi_sheel_select_input_buffer
+                                                        call msi_shell_select_input_buffer
                                                         cpi mms_operation_ok
-                                                        jnz msi_sheel_process_command_program_load_error2
+                                                        jnz msi_shell_process_command_program_load_error2
                                                         call mms_start_low_memory_loaded_program
-                                                        mvi a,msi_sheel_start_program_error
-                                                        jmp msi_sheel_startup
-msi_sheel_process_command_program_load_error:           cpi fsm_program_too_big
-                                                        jnz msi_sheel_process_command_program_load_error2
-                                                        lxi h,msi_sheel_load_program_error_message
-                                                        call msi_sheel_send_string_console
-                                                        lxi h,msi_sheel_program_load_dimension_message
-                                                        call msi_sheel_send_string_console
-                                                        jmp msi_sheel_command_prompt_initialize
-msi_sheel_process_command_program_load_error2:          mov b,a 
-                                                        lxi h,msi_sheel_load_program_error_message 
-                                                        call msi_sheel_send_string_console
+                                                        mvi a,msi_shell_start_program_error
+                                                        jmp msi_shell_startup
+msi_shell_process_command_program_load_error:           cpi fsm_program_too_big
+                                                        jnz msi_shell_process_command_program_load_error2
+                                                        lxi h,msi_shell_load_program_error_message
+                                                        call msi_shell_send_string_console
+                                                        lxi h,msi_shell_program_load_dimension_message
+                                                        call msi_shell_send_string_console
+                                                        jmp msi_shell_command_prompt_initialize
+msi_shell_process_command_program_load_error2:          mov b,a 
+                                                        lxi h,msi_shell_load_program_error_message 
+                                                        call msi_shell_send_string_console
                                                         mov a,b 
-                                                        call msi_sheel_send_console_byte_number
+                                                        call msi_shell_send_console_byte_number
                                                         mvi a,$0d 
-                                                        call msi_sheel_send_console_byte
-                                                        jmp msi_sheel_command_prompt_initialize
-msi_sheel_process_command_program_not_found:            lxi h,msi_sheel_command_not_found_message 
-                                                        call msi_sheel_send_string_console 
-                                                        jmp msi_sheel_command_prompt_initialize
+                                                        call msi_shell_send_console_byte
+                                                        jmp msi_shell_command_prompt_initialize
+msi_shell_process_command_program_not_found:            lxi h,msi_shell_command_not_found_message 
+                                                        call msi_shell_send_string_console 
+                                                        jmp msi_shell_command_prompt_initialize
 
 ;msi_shell_bind_console_device identifica automaticamente il dispositivo IO da utilizzare per la gestione della console. 
 ;Se il dispositivo è connesso viene selezionato automaticamente
@@ -2103,7 +2103,7 @@ msi_shell_bind_console_device_loop:             mov a,b
                                                 jz msi_shell_bind_console_device_loop_not_found
                                                 lxi h,0 
                                                 dad sp 
-                                                lxi d,msi_sheel_basic_console_IO_type
+                                                lxi d,msi_shell_basic_console_IO_type
                                                 mvi c,4 
 msi_shell_bind_console_device_loop_verify:      ldax d 
                                                 cmp m 
@@ -2121,7 +2121,7 @@ msi_shell_bind_console_device_loop_next2:       inr b
                                                 mov a,b 
                                                 ora a 
                                                 jnz msi_shell_bind_console_device_loop
-msi_shell_bind_console_device_loop_not_found:   mvi a,mms_sheel_IO_console_device_not_found 
+msi_shell_bind_console_device_loop_not_found:   mvi a,mms_shell_IO_console_device_not_found 
                                                 jmp msi_shell_bind_console_device_end
 msi_shell_bind_console_device_loop_end:         mov a,b 
                                                 call bios_select_IO_device
@@ -2129,7 +2129,7 @@ msi_shell_bind_console_device_loop_end:         mov a,b
                                                 ani bios_IO_console_connected_mask
                                                 jz msi_shell_bind_console_device_loop_next2
                                                 mov a,b 
-                                                sta msi_sheel_console_ID
+                                                sta msi_shell_console_ID
                                                 mvi a,msi_operation_ok
 msi_shell_bind_console_device_end:              pop b 
                                                 ret 
@@ -2144,7 +2144,7 @@ msi_shell_initialize_all_console_devices_loop:              mov a,b
                                                             jz msi_shell_initialize_all_console_devices_end
                                                             lxi h,0 
                                                             dad sp 
-                                                            lxi d,msi_sheel_basic_console_IO_type
+                                                            lxi d,msi_shell_basic_console_IO_type
                                                             mvi c,4 
 msi_shell_initialize_all_console_devices_loop_verify:       ldax d 
                                                             cmp m 
@@ -2165,292 +2165,292 @@ msi_shell_initialize_all_console_devices_loop_next2:        inr b
 msi_shell_initialize_all_console_devices_end:               pop b 
                                                             ret 
 
-;msi_sheel_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
+;msi_shell_create_input_buffer crea il buffer che verrà utilizzato per memorizzare temporaneamente l'input da console 
 ;A <- esito dell'operazione 
-msi_sheel_create_input_buffer:          push h 
-                                        lxi h,msi_sheel_input_buffer_dimension
+msi_shell_create_input_buffer:          push h 
+                                        lxi h,msi_shell_input_buffer_dimension
                                         call mms_create_low_memory_data_segment
                                         pop h 
                                         rc 
-                                        sta msi_sheel_input_buffer_id
+                                        sta msi_shell_input_buffer_id
                                         mvi a,$ff 
                                         call mms_set_selected_data_segment_temporary_flag
                                         mvi a,msi_operation_ok
                                         ret 
 
-;msi_sheel_select_input_buffer seleziona il puffer di input 
+;msi_shell_select_input_buffer seleziona il puffer di input 
 ;A <- esito dell'operazione 
-msi_sheel_select_input_buffer:      lda msi_sheel_input_buffer_id 
+msi_shell_select_input_buffer:      lda msi_shell_input_buffer_id 
                                     call mms_select_low_memory_data_segment
                                     ret 
 
-;msi_sheel_select_console_IO_device seleziona il dispositivo IO utilizzato dalla console 
+;msi_shell_select_console_IO_device seleziona il dispositivo IO utilizzato dalla console 
 ;A <- esito dell'operazione 
-msi_sheel_select_console_IO_device:     lda msi_sheel_console_ID
+msi_shell_select_console_IO_device:     lda msi_shell_console_ID
                                         call bios_select_IO_device
                                         cpi bios_operation_ok
                                         rnz 
                                         mvi a,msi_operation_ok
                                         ret 
                                         
-;msi_sheel_send_console_byte invia un byte alla console 
+;msi_shell_send_console_byte invia un byte alla console 
 ;A -> byte da inviare 
 ;A <- esito dell'operazione
-msi_sheel_send_console_byte:                    push psw 
-msi_sheel_send_console_byte_connection_verify:  call bios_get_selected_device_state
+msi_shell_send_console_byte:                    push psw 
+msi_shell_send_console_byte_connection_verify:  call bios_get_selected_device_state
                                                 ani bios_IO_console_connected_mask
-                                                jnz msi_sheel_send_console_byte_wait
-msi_sheel_send_console_byte_reconnect:          call msi_shell_bind_console_device
+                                                jnz msi_shell_send_console_byte_wait
+msi_shell_send_console_byte_reconnect:          call msi_shell_bind_console_device
                                                 cpi msi_operation_ok
-                                                jnz msi_sheel_send_console_byte_reconnect
-msi_sheel_send_console_byte_wait:               call bios_get_selected_device_state
+                                                jnz msi_shell_send_console_byte_reconnect
+msi_shell_send_console_byte_wait:               call bios_get_selected_device_state
                                                 ani bios_IO_console_output_byte_ready
-                                                jz msi_sheel_send_console_byte_wait
+                                                jz msi_shell_send_console_byte_wait
                                                 pop psw 
                                                 call bios_write_selected_device_byte
                                                 rc 
                                                 mvi a,msi_operation_ok
                                                 ret 
 
-;msi_sheel_send_console_byte_number converte il byte in BCD e lo invia alla console 
+;msi_shell_send_console_byte_number converte il byte in BCD e lo invia alla console 
 ;A -> numero da inviare
 ;A <- esito dell'operazione 
-msi_sheel_send_console_byte_number:         push b 
+msi_shell_send_console_byte_number:         push b 
                                             call unsigned_convert_hex_bcd_byte
                                             mov a,b 
                                             ani $0f 
-                                            jz msi_sheel_send_console_byte_number_next 
+                                            jz msi_shell_send_console_byte_number_next 
                                             adi $30 
-                                            call msi_sheel_send_console_byte
+                                            call msi_shell_send_console_byte
                                             cpi msi_operation_ok 
-                                            jnz msi_sheel_send_console_byte_number_end
-msi_sheel_send_console_byte_number_next:    mov a,c
+                                            jnz msi_shell_send_console_byte_number_end
+msi_shell_send_console_byte_number_next:    mov a,c
                                             rar 
                                             rar 
                                             rar 
                                             rar 
                                             ani $0f 
                                             ora a 
-                                            jz msi_sheel_send_console_byte_number_next2
+                                            jz msi_shell_send_console_byte_number_next2
                                             adi $30 
-                                            call msi_sheel_send_console_byte
+                                            call msi_shell_send_console_byte
                                             cpi msi_operation_ok 
-                                            jnz msi_sheel_send_console_byte_number_end
-msi_sheel_send_console_byte_number_next2:   mov a,c 
+                                            jnz msi_shell_send_console_byte_number_end
+msi_shell_send_console_byte_number_next2:   mov a,c 
                                             ani $0f 
                                             adi $30 
-                                            call msi_sheel_send_console_byte
+                                            call msi_shell_send_console_byte
                                             cpi msi_operation_ok 
-                                            jnz msi_sheel_send_console_byte_number_end
-msi_sheel_send_console_byte_number_end:     pop b 
+                                            jnz msi_shell_send_console_byte_number_end
+msi_shell_send_console_byte_number_end:     pop b 
                                             ret 
 
-;msi_sheel_send_string_console stampa la stringa desiderata
+;msi_shell_send_string_console stampa la stringa desiderata
 ;HL -> puntatore alla stringa 
-msi_sheel_send_string_console:          push h 
-msi_sheel_send_string_console_loop:     mov a,m
+msi_shell_send_string_console:          push h 
+msi_shell_send_string_console_loop:     mov a,m
                                         inx h 
                                         ora a 
-                                        jz msi_sheel_send_string_console_loop_end                            
-                                        call msi_sheel_send_console_byte 
+                                        jz msi_shell_send_string_console_loop_end                            
+                                        call msi_shell_send_console_byte 
                                         cpi msi_operation_ok
-                                        jnz msi_sheel_send_string_console_end
-                                        jmp msi_sheel_send_string_console_loop
-msi_sheel_send_string_console_loop_end: mvi a,msi_operation_ok
-msi_sheel_send_string_console_end:      pop h 
+                                        jnz msi_shell_send_string_console_end
+                                        jmp msi_shell_send_string_console_loop
+msi_shell_send_string_console_loop_end: mvi a,msi_operation_ok
+msi_shell_send_string_console_end:      pop h 
                                         ret 
 
-;msi_sheel_read_console_byte legge un byte dalla console 
+;msi_shell_read_console_byte legge un byte dalla console 
 ;A <- byte letto (se CY=1 restituisce un errore)
-msi_sheel_read_console_byte:            call bios_get_selected_device_state
+msi_shell_read_console_byte:            call bios_get_selected_device_state
                                         ani bios_IO_console_connected_mask
-                                        jnz msi_sheel_read_console_byte_wait
-msi_sheel_read_console_byte_reconnect:  call msi_shell_bind_console_device
+                                        jnz msi_shell_read_console_byte_wait
+msi_shell_read_console_byte_reconnect:  call msi_shell_bind_console_device
                                         cpi msi_operation_ok
-                                        jnz msi_sheel_read_console_byte_reconnect
-msi_sheel_read_console_byte_wait:       call bios_get_selected_device_state 
+                                        jnz msi_shell_read_console_byte_reconnect
+msi_shell_read_console_byte_wait:       call bios_get_selected_device_state 
                                         ani bios_IO_console_input_byte_ready
-                                        jz msi_sheel_read_console_byte_wait 
+                                        jz msi_shell_read_console_byte_wait 
                                         call bios_read_selected_device_byte
                                         ret 
 
 ;msi_push_input_buffer_byte inserisce in testa il carattere 
 ;A -> carattere da inserire 
 ;A <- esito dell'operazione
-msi_sheel_push_input_buffer_byte:           push h 
+msi_shell_push_input_buffer_byte:           push h 
                                             push psw 
-                                            lda msi_sheel_input_buffer_head
-                                            cpi msi_sheel_input_buffer_dimension
-                                            jc msi_sheel_input_buffer_byte_next
+                                            lda msi_shell_input_buffer_head
+                                            cpi msi_shell_input_buffer_dimension
+                                            jc msi_shell_input_buffer_byte_next
                                             inx sp 
                                             inx sp 
-                                            mvi a,msi_sheel_input_buffer_full
-                                            jmp msi_sheel_push_input_buffer_byte_end
-msi_sheel_input_buffer_byte_next:           mov l,a 
+                                            mvi a,msi_shell_input_buffer_full
+                                            jmp msi_shell_push_input_buffer_byte_end
+msi_shell_input_buffer_byte_next:           mov l,a 
                                             mvi h,0 
                                             pop psw 
                                             call mms_write_selected_data_segment_byte
                                             inx h 
                                             mov a,l 
-                                            sta msi_sheel_input_buffer_head
+                                            sta msi_shell_input_buffer_head
                                             mvi a,msi_operation_ok
-msi_sheel_push_input_buffer_byte_end:       pop h 
+msi_shell_push_input_buffer_byte_end:       pop h 
                                             ret 
 
-;msi_sheel_remove_input_buffer_byte rimuove un byte dalla testa del buffer
-msi_sheel_remove_input_buffer_byte:         push h 
-                                            lda msi_sheel_input_buffer_head 
+;msi_shell_remove_input_buffer_byte rimuove un byte dalla testa del buffer
+msi_shell_remove_input_buffer_byte:         push h 
+                                            lda msi_shell_input_buffer_head 
                                             dcr a 
                                             cpi $ff 
-                                            jnz msi_sheel_remove_input_buffer_byte_next
+                                            jnz msi_shell_remove_input_buffer_byte_next
                                             mvi a,msi_input_buffer_overflow
-                                            jmp msi_sheel_remove_input_buffer_byte_end
-msi_sheel_remove_input_buffer_byte_next:    sta msi_sheel_input_buffer_head
+                                            jmp msi_shell_remove_input_buffer_byte_end
+msi_shell_remove_input_buffer_byte_next:    sta msi_shell_input_buffer_head
                                             mov l,a 
                                             mvi h,0 
                                             xra a 
                                             call mms_write_selected_data_segment_byte
                                             mvi a,msi_operation_ok
-msi_sheel_remove_input_buffer_byte_end:     pop h 
+msi_shell_remove_input_buffer_byte_end:     pop h 
                                             ret 
 
-;msi_sheel_clear_input_buffer pulisce il buffer in ingresso 
+;msi_shell_clear_input_buffer pulisce il buffer in ingresso 
 ;A <- esito dell'operazione 
-msi_sheel_clear_input_buffer:               push h 
+msi_shell_clear_input_buffer:               push h 
                                             lxi h,0 
-msi_sheel_clear_buffer_loop:                xra a 
+msi_shell_clear_buffer_loop:                xra a 
                                             call mms_write_selected_data_segment_byte
                                             inx h 
-                                            jnc msi_sheel_clear_buffer_loop
+                                            jnc msi_shell_clear_buffer_loop
                                             xra a 
-                                            sta msi_sheel_input_buffer_head
+                                            sta msi_shell_input_buffer_head
                                             mvi a,msi_operation_ok
-msi_sheel_clear_input_buffer_end:           pop h 
+msi_shell_clear_input_buffer_end:           pop h 
                                             ret 
 
-;msi_sheel_ascii_character verifica se il carattere è stampabile 
+;msi_shell_ascii_character verifica se il carattere è stampabile 
 ;A -> carattere da verificare 
 ;PSW <- se è stampabile CY=0, C=1 altrimenti
 
-msi_sheel_ascii_character:          cpi $20 
+msi_shell_ascii_character:          cpi $20 
                                     rc 
                                     cpi $7e 
                                     cmc 
                                     ret                  
 
-;msi_sheel_ascii_upper_case converte le lettere da minuscolo a maiuscolo 
+;msi_shell_ascii_upper_case converte le lettere da minuscolo a maiuscolo 
 ;A -> carattere ascii 
 ;A <- carattere convertito 
-msi_sheel_ascii_upper_case:         cpi $61 
+msi_shell_ascii_upper_case:         cpi $61 
                                     rc 
                                     cpi $7b 
                                     rnc 
                                     ani %11011111
                                     ret 
 
-;----- sheel commands -----
+;----- shell commands -----
 ;A -> se $00 il comando non ha nessun argomento 
 ;     se $20 il comando ha almeno un argomento
 
 msi_system_version_message                  .text "EDOS VER "
                                             .b 0 
 
-msi_sheel_dev_header_string                 .text "port"
+msi_shell_dev_header_string                 .text "port"
                                             .b 9
                                             .text "device"
                                             .b $0d, 0 
 
-msi_sheel_dev_argument_error                .text "argument format error"
+msi_shell_dev_argument_error                .text "argument format error"
                                             .b 0
 
-msi_sheel_cp_command:
+msi_shell_cp_command:
 
-msi_sheel_del_command:
+msi_shell_del_command:
 
-msi_sheel_rm_command:
+msi_shell_rm_command:
 
-msi_sheel_mem_command:
+msi_shell_mem_command:
 
-msi_sheel_ls_command:
+msi_shell_ls_command:
  
-msi_sheel_disk_command:
+msi_shell_disk_command:
 
-msi_sheel_ver_command:      lxi h,msi_system_version_message 
-                            call msi_sheel_send_string_console
+msi_shell_ver_command:      lxi h,msi_system_version_message 
+                            call msi_shell_send_string_console
                             mvi a,current_system_version
                             rar 
                             rar 
                             rar 
                             rar 
                             ani $0f 
-                            call msi_sheel_send_console_byte_number
+                            call msi_shell_send_console_byte_number
                             mvi a,$2E 
-                            call msi_sheel_send_console_byte 
+                            call msi_shell_send_console_byte 
                             mvi a,current_system_version
                             ani $0f 
-                            call msi_sheel_send_console_byte_number
+                            call msi_shell_send_console_byte_number
                             mvi a,$0d 
-                            call msi_sheel_send_console_byte
-                            jmp msi_sheel_command_prompt_initialize
+                            call msi_shell_send_console_byte
+                            jmp msi_shell_command_prompt_initialize
                             
 
-msi_sheel_echo_command:         ora a
-                                jz msi_sheel_echo_command_end
+msi_shell_echo_command:         ora a
+                                jz msi_shell_echo_command_end
                                 lxi h,0 
-msi_sheel_echo_command_read:    call mms_read_selected_data_segment_byte
-                                jc msi_sheel_echo_command_align
+msi_shell_echo_command_read:    call mms_read_selected_data_segment_byte
+                                jc msi_shell_echo_command_align
                                 inx h 
                                 cpi $20 
-                                jz msi_sheel_echo_command_align
+                                jz msi_shell_echo_command_align
                                 inx h 
-                                jnz msi_sheel_echo_command_read
-msi_sheel_echo_command_align:   call mms_read_selected_data_segment_byte
+                                jnz msi_shell_echo_command_read
+msi_shell_echo_command_align:   call mms_read_selected_data_segment_byte
                                 cpi $20 
-                                jnz msi_sheel_echo_command_print
+                                jnz msi_shell_echo_command_print
                                 inx h 
-                                jmp msi_sheel_echo_command_align
-msi_sheel_echo_command_print:   call mms_read_selected_data_segment_byte
-                                jc msi_sheel_echo_command_end
+                                jmp msi_shell_echo_command_align
+msi_shell_echo_command_print:   call mms_read_selected_data_segment_byte
+                                jc msi_shell_echo_command_end
                                 ora a 
-                                jz msi_sheel_echo_command_end
-                                call msi_sheel_send_console_byte
+                                jz msi_shell_echo_command_end
+                                call msi_shell_send_console_byte
                                 inx h 
-                                jmp msi_sheel_echo_command_print
-msi_sheel_echo_command_end:     mvi a,$0d 
-                                call msi_sheel_send_console_byte
-                                jmp msi_sheel_command_prompt_initialize
+                                jmp msi_shell_echo_command_print
+msi_shell_echo_command_end:     mvi a,$0d 
+                                call msi_shell_send_console_byte
+                                jmp msi_shell_command_prompt_initialize
 
-msi_sheel_cd_command:           
+msi_shell_cd_command:           
 
-msi_sheel_dev_command:          ora a 
-                                ;jnz msi_sheel_dev_command_specific
-                                lxi h,msi_sheel_dev_header_string
-                                call msi_sheel_send_string_console
+msi_shell_dev_command:          ora a 
+                                ;jnz msi_shell_dev_command_specific
+                                lxi h,msi_shell_dev_header_string
+                                call msi_shell_send_string_console
                                 mvi b,0 
-msi_sheel_dev_command_loop:     mov a,b 
+msi_shell_dev_command_loop:     mov a,b 
                                 call bios_get_IO_device_informations
                                 cpi bios_IO_device_not_found
-                                jz msi_sheel_dev_command_end
+                                jz msi_shell_dev_command_end
                                 lxi h,0 
                                 dad sp 
                                 mvi c,4 
-msi_sheel_dev_command_println:  mov a,b 
-                                call msi_sheel_send_console_byte_number
+msi_shell_dev_command_println:  mov a,b 
+                                call msi_shell_send_console_byte_number
                                 mvi a,$09 
-                                call msi_sheel_send_console_byte 
-msi_sheel_dev_command_println2: mov a,m 
-                                call msi_sheel_send_console_byte
+                                call msi_shell_send_console_byte 
+msi_shell_dev_command_println2: mov a,m 
+                                call msi_shell_send_console_byte
                                 inx h 
                                 dcr c 
-                                jnz msi_sheel_dev_command_println2
+                                jnz msi_shell_dev_command_println2
                                 mvi a,$0d 
-                                call msi_sheel_send_console_byte
+                                call msi_shell_send_console_byte
                                 inr b 
-                                jmp msi_sheel_dev_command_loop 
-msi_sheel_dev_command_end:      mvi a,$0d 
-                                call msi_sheel_send_console_byte
-                                jmp msi_sheel_command_prompt_initialize
-msi_sheel_con_command:
+                                jmp msi_shell_dev_command_loop 
+msi_shell_dev_command_end:      mvi a,$0d 
+                                call msi_shell_send_console_byte
+                                jmp msi_shell_command_prompt_initialize
+msi_shell_con_command:
 
 MSI_layer_end:
 .print "Space left in MSI layer ->",MSI_dimension-MSI_layer_end+MSI 

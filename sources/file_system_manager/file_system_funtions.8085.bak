@@ -4,7 +4,7 @@
 fsm_format_disk:                        push b 
                                         push d 
                                         push h 
-                                        cpi fsm_SFS10_format_ID
+                                        cpi SFS10_format_ID
                                         jz fsm_format_disk_check
                                         mvi a,fsm_unknown_format_type
                                         jmp fsm_disk_external_generated_error 

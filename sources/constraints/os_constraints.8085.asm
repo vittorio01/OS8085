@@ -1,6 +1,8 @@
 ;questo file contiene tutte le informazioni generali sul sistema operativo (dimensione della ram, dimensione del sistema operativo ecc...).
 ;è possibile modificare alcune informazioni per adattare il sistema ad un computer specifico
 
+current_system_version      .equ    $10
+
 rst0_address                .equ    $0000
 rst1_address                .equ    $0008
 rst2_address                .equ    $0010 
@@ -18,11 +20,11 @@ Z80_int_address             .equ    $0038
 system_interrupt_space_end  .equ    $0040
 
 ;queste informazioni riguardano la gestione dello spazio nelle varie componenti del sistema (da non modificare se non in fase di sviluppo del sistema)
-MSI_dimension           .equ    4096-system_interrupt_space_end
-FSM_dimension           .equ    8192
+MSI_dimension           .equ    5632-system_interrupt_space_end
+FSM_dimension           .equ    6144
 MMS_dimension           .equ    2048
-BIOS_dimension          .equ    2048+512 
-LIBRARIES_dimension     .equ    2048+512
+BIOS_dimension          .equ    3072 
+LIBRARIES_dimension     .equ    1536
 SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
 ;queste informazioni riguardano la divisione degli spazi all'interno della ram

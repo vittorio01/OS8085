@@ -7,10 +7,7 @@ unsigned_multiply_long          .equ unsigned_multiply_word+3
 unsigned_divide_byte            .equ unsigned_multiply_long+3 
 unsigned_divide_word            .equ unsigned_divide_byte+3 
 unsigned_divide_long            .equ unsigned_divide_word+3 
-string_compare                  .equ unsigned_divide_long+3 
-string_ncompare                 .equ string_compare+3 
-string_copy                     .equ string_ncompare+3
-string_ncopy                    .equ string_copy+3 
-unsigned_convert_hex_bcd_byte   .equ string_ncopy+3 
+
+unsigned_convert_hex_bcd_byte   .equ unsigned_divide_long+3 
 unsigned_convert_hex_bcd_word   .equ unsigned_convert_hex_bcd_byte+3 
 unsigned_convert_hex_bcd_long   .equ unsigned_convert_hex_bcd_word+3 

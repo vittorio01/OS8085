@@ -119,6 +119,11 @@ bios_select_IO_device:              push b
                                     call bios_search_IO_device
                                     jc bios_select_IO_device_error
                                     mvi a,bios_device_IO_device_record_name_dimension
+                                    add l 
+                                    mov l,a 
+                                    mov a,h 
+                                    aci 0 
+                                    mov h,a 
                                     mov a,m 
                                     sta bios_selected_IO_device_initialize_address+1 
                                     inx h 
