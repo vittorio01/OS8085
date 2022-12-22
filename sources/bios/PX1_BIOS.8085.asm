@@ -1,21 +1,823 @@
-;variabili predefinite della RAM
-interrupt_address				.equ 	$0034
+;Il BIOS prevede l'implementazione di una serie di funzioni a basso livello che devono adattarsi alle varie specifiche della macchina fisica. 
+;Tra le funzioni disponibili troviamo:
+;-  funzione di avvio del sistema
+;-  funzioni per la gestione dei dispositivi I/O tra cui la console, che serve per la gestione dei dispositivi base per l'interazione con l'utente (lettura di caratteri e stampa su schermo)
+;-  funzioni per la gestione delle memorie di massa, tra cui sono presenti alcune dedicate alla selezione di tracce, settori e testine e altre alla gestione del flusso dei dati, tra cui lettura
+;   scrittura di una traccia e formattazione del disco
+;-  funzioni per la gestione dei trasferimenti DMA memory-to-memory.
+;-  handler per gli interrupt hardware 
+;-  una funzione per la richiesta delle informazioni
 
-program_status_byte				.equ 	$7ff4
-floppy_drive_select				.equ	$7ff5
-floppy_track_number				.equ 	$7ff6
-floppy_head_number				.equ 	$7ff7
-floppy_sector_number			.equ	$7ff8
-floppy_sector_size				.equ 	$7ff9
-dma_initial_address				.equ 	$0080
-fdc_send_bytes					.equ	$0082
-fdc_read_bytes					.equ 	$0082
-display_pointer_address     	.equ    $7ffc
-display_pointer_addition		.equ 	$7ffe
-display_character_backup		.equ 	$7fff
-rom_memory_offset           	.equ    $8000
-stack_pointer					.equ 	$7fdf
-;variabili predefinite delle funzioni del BIOS
+;la prima parte del bios viene sedicara all'implementazione del sistema di mantenimento dei dispositivi. I dispositivi possono essere modificati nella sezione successiva. 
+
+.include "os_constraints.8085.asm"
+.include "libraries_system_calls.8085.asm"
+.include "environment_variables.8085.asm"
+
+bios_selected_IO_device_initialize_address  .equ reserved_memory_start+$0000
+bios_selected_IO_device_get_state_address   .equ reserved_memory_start+$0003
+bios_selected_IO_device_set_state_address   .equ reserved_memory_start+$0006 
+bios_selected_IO_device_write_byte_address  .equ reserved_memory_start+$0009 
+bios_selected_IO_device_read_byte_address   .equ reserved_memory_start+$000C 
+bios_selected_devices_flags                 .equ reserved_memory_start+$000F
+
+bios_disk_device_selected_sector            .equ reserved_memory_start+$0010  
+bios_disk_device_selected_track             .equ reserved_memory_start+$0011 
+bios_disk_device_selected_head              .equ reserved_memory_start+$0013 
+bios_disk_device_vector_address             .equ reserved_memory_start+$0014
+
+bios_selected_devices_flags_IO_selected     .equ %00001000
+
+bios_selected_devices_flags_head           .equ %10000000
+bios_selected_devices_flags_track          .equ %01000000
+bios_selected_devices_flags_sector         .equ %00100000
+
+bios_functions: .org BIOS 
+                jmp bios_system_start  
+                jmp bios_avabile_ram_memory
+                jmp bios_hardware_interrupt_handler 
+                jmp bios_select_IO_device
+                jmp bios_get_IO_device_informations 
+                jmp bios_selected_IO_device_initialize_address
+                jmp bios_selected_IO_device_get_state_address
+                jmp bios_selected_IO_device_set_state_address 
+                jmp bios_selected_IO_device_read_byte_address
+                jmp bios_selected_IO_device_write_byte_address 
+                jmp bios_disk_device_select_drive 
+                jmp bios_disk_device_select_sector 
+                jmp bios_disk_device_select_track 
+                jmp bios_disk_device_select_head 
+                jmp bios_disk_device_status
+                jmp bios_disk_device_set_motor
+                jmp bios_disk_device_get_bps
+                jmp bios_disk_device_get_spt
+                jmp bios_disk_device_get_tph 
+                jmp bios_disk_device_get_head_number 
+                jmp bios_disk_device_write_sector 
+                jmp bios_disk_device_read_sector  
+                jmp bios_disk_device_format_drive 
+                jmp bios_memory_transfer
+                jmp bios_memory_transfer_reverse 
+
+ 
+;bios_system_start esegue un test e un reset della memoria ram e inizializza i dispositivi per la gestione della memoria di massa.
+
+bios_system_start:      call bios_IO_device_system_initialize
+                        call bios_disk_device_system_initialize
+                        call dma_reset
+                        ret 
+
+;funzioni relative alla gestione della bios_device_IO_table 
+
+bios_IO_device_system_initialize:   lxi h,bios_IO_default_handler
+                                    mvi a,$c3 
+                                    sta bios_selected_IO_device_initialize_address
+                                    sta bios_selected_IO_device_get_state_address
+                                    sta bios_selected_IO_device_set_state_address
+                                    sta bios_selected_IO_device_write_byte_address
+                                    sta bios_selected_IO_device_read_byte_address
+                                    shld bios_selected_IO_device_initialize_address+1
+                                    shld bios_selected_IO_device_get_state_address+1 
+                                    shld bios_selected_IO_device_set_state_address+1
+                                    shld bios_selected_IO_device_write_byte_address+1 
+                                    shld bios_selected_IO_device_read_byte_address+1 
+                                    lda bios_selected_devices_flags
+                                    ani $ff-bios_selected_devices_flags_IO_selected 
+                                    sta bios_selected_devices_flags
+                                    ret 
+
+
+bios_IO_default_handler:            mvi a,bios_IO_device_not_selected
+                                    stc 
+                                    ret 
+
+bios_device_ID_record_dimension                 .equ 14
+bios_device_IO_device_record_name_dimension     .equ 4 
+
+bios_search_IO_device:              lxi d,bios_device_IO_table_end
+                                    lxi h,bios_device_IO_table
+                                    mov b,a 
+                                    mvi c,bios_device_ID_record_dimension
+                                    call unsigned_multiply_byte 
+                                    dad b 
+                                    mov a,l 
+                                    sub e 
+                                    mov a,h 
+                                    sbb d 
+                                    cmc 
+                                    ret
+
+;bios_select_IO_device viene utilizzata per selezionare il dispositivo desiderato ($00 seleziona la console)
+;A -> Id del dispositivo 
+;A <- esito dell'operazione 
+
+bios_select_IO_device:              push b 
+                                    push d  
+                                    push h 
+                                    call bios_search_IO_device
+                                    jc bios_select_IO_device_error
+                                    mvi a,bios_device_IO_device_record_name_dimension
+                                    add l 
+                                    mov l,a 
+                                    mov a,h 
+                                    aci 0 
+                                    mov h,a 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_initialize_address+1 
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_initialize_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_get_state_address+1
+                                    inx h  
+                                    mov a,m 
+                                    sta bios_selected_IO_device_get_state_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_set_state_address+1
+                                    inx h  
+                                    mov a,m 
+                                    sta bios_selected_IO_device_set_state_address+2
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_read_byte_address+1 
+                                    inx h 
+                                    mov a,m 
+                                    sta bios_selected_IO_device_read_byte_address+2 
+                                    inx h 
+                                    mov a,m  
+                                    sta bios_selected_IO_device_write_byte_address+1 
+                                    inx h 
+                                    mov a,m  
+                                    sta bios_selected_IO_device_write_byte_address+2
+                                    mvi a,bios_selected_devices_flags_IO_selected
+                                    sta bios_selected_devices_flags
+                                    mvi a,bios_operation_ok
+                                    jmp bios_select_IO_device_end
+bios_select_IO_device_error:        mvi a,bios_IO_device_not_found 
+bios_select_IO_device_end:          pop h 
+                                    pop d 
+                                    pop b 
+                                    ret 
+
+
+;bios_get_IO_device_informations restituisce le informazioni sul dispositivo specificato. 
+
+;A -> id del dispositivo 
+;PSW <- se il dispositivo non è stato trovato assume 1
+;A <- se CY = 1 restituisce un errore
+;SP <- se CY = 0 restituisce i bytes che identificano il dispositivo (4 bytes)
+
+bios_get_IO_device_informations:            push b 
+                                            push d 
+                                            push h 
+                                            call bios_search_IO_device
+                                            jnc bios_get_IO_device_informations_next 
+                                            mvi a,bios_IO_device_not_found 
+                                            jmp bios_get_IO_device_informations_end
+bios_get_IO_device_informations_next:       push h 
+                                            lxi h,0 
+                                            dad sp 
+                                            xchg 
+                                            lxi h,$ffff-bios_device_IO_device_record_name_dimension+1 
+                                            dad sp
+                                            sphl  
+                                            xchg 
+                                            mvi b,10 
+bios_get_IO_device_informations_sp_shift:   mov a,m 
+                                            stax d 
+                                            inx d 
+                                            inx h 
+                                            dcr b 
+                                            jnz bios_get_IO_device_informations_sp_shift
+                                            pop h 
+                                            mvi b,bios_device_IO_device_record_name_dimension
+bios_get_IO_device_informations_write_info: mov a,m 
+                                            stax d 
+                                            inx d 
+                                            inx h 
+                                            dcr b 
+                                            jnz bios_get_IO_device_informations_write_info
+                                            stc 
+                                            cmc 
+                                            mvi a,bios_operation_ok
+bios_get_IO_device_informations_end:        pop h 
+                                            pop d 
+                                            pop b 
+                                            ret 
+
+bios_disk_device_device_record_dimension                .equ 17
+
+bios_disk_device_device_record_initialize_position      .equ 0 
+bios_disk_device_device_record_read_sector_position     .equ 2
+bios_disk_device_device_record_write_sector_position    .equ 4
+bios_disk_device_device_record_get_state_position       .equ 6
+bios_disk_device_device_record_set_motor_position       .equ 8 
+bios_disk_device_device_record_format_position          .equ 10
+bios_disk_device_device_record_hnum_position            .equ 12
+bios_disk_device_device_record_tph_position             .equ 13
+bios_disk_device_device_record_spt_position             .equ 15
+bios_disk_device_device_record_bps_position             .equ 16 
+
+bios_disk_device_system_initialize:             lda bios_selected_devices_flags
+                                                ani $ff-bios_selected_devices_flags_head-bios_selected_devices_flags_sector-bios_selected_devices_flags_track
+                                                sta bios_selected_devices_flags
+                                                xra a
+                                                sta bios_disk_device_vector_address
+                                                sta bios_disk_device_vector_address+1 
+                                                lxi b,bios_device_disk_table
+                                                lxi d,bios_device_disk_table_end 
+bios_disk_device_system_initialize_disks:       mov a,c 
+                                                sub e 
+                                                mov a,b 
+                                                sbb d 
+                                                jnc bios_disk_device_system_initialize_end
+                                                ldax b 
+                                                mov l,a 
+                                                inx b 
+                                                ldax b 
+                                                mov h,a 
+                                                inx b 
+                                                push b 
+                                                push d  
+                                                lxi b,bios_disk_device_system_initialize_disk_next
+                                                push b 
+                                                pchl 
+bios_disk_device_system_initialize_disk_next:   pop d 
+                                                pop b 
+                                                mvi a,bios_disk_device_device_record_dimension-2 
+                                                add c 
+                                                mov c,a 
+                                                mov a,b 
+                                                aci 0 
+                                                mov b,a 
+                                                jmp bios_disk_device_system_initialize_disks
+bios_disk_device_system_initialize_end:         ret 
+
+bios_disk_device_select_drive:              push h 
+                                            push d 
+                                            push b 
+                                            cpi $41 
+                                            jnc bios_disk_device_select_drive_next 
+bios_disk_device_Select_drive_error:        mvi a,bios_bad_argument 
+                                            jmp bios_disk_device_select_drive_end
+bios_disk_device_select_drive_next:         cpi $5b 
+                                            jnc bios_disk_device_select_drive_error 
+                                            sui $41
+                                            mov b,a 
+                                            mvi c,bios_disk_device_device_record_dimension
+                                            lxi h,bios_device_disk_table
+                                            lxi d,bios_device_disk_table_end 
+                                            call unsigned_multiply_byte
+                                            dad b 
+                                            mov a,l 
+                                            sub e 
+                                            mov a,h 
+                                            sbb d 
+                                            jc bios_disk_device_select_drive_next2
+                                            mvi a,bios_disk_device_device_not_found
+                                            jmp bios_disk_device_select_drive_end
+bios_disk_device_select_drive_next2:        shld bios_disk_device_vector_address
+                                            lda bios_selected_devices_flags
+                                            ani $ff-bios_selected_devices_flags_head-bios_selected_devices_flags_sector-bios_selected_devices_flags_track
+                                            sta bios_selected_devices_flags
+                                            mvi a,bios_operation_ok
+bios_disk_device_select_drive_end:          pop b 
+                                            pop d 
+                                            pop h 
+                                            ret 
+
+;bios_disk_device_get_bps restituisce il numero di bytes per settore 
+
+;A <- bytes per settore (codificato in multipli di 128 bytes) 
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
+
+bios_disk_device_get_bps:       push h 
+                                push d 
+                                lhld bios_disk_device_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_disk_device_get_bps_next 
+                                mvi a,bios_disk_device_device_not_selected 
+                                stc 
+                                jmp bios_disk_device_get_bps_end    
+bios_disk_device_get_bps_next:  lxi d,bios_disk_device_device_record_bps_position
+                                dad d 
+                                mov a,m 
+                                stc 
+                                cmc 
+bios_disk_device_get_bps_end:   pop d 
+                                pop h             
+                                ret 
+
+;bios_disk_device_get_spt restituisce il numero di settori per traccia (00 se il disco non è stato selezionato)
+;A <- numero di settori per traccia
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
+bios_disk_device_get_spt:       push h 
+                                push d 
+                                lhld bios_disk_device_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_disk_device_get_spt_next 
+                                mvi a,bios_disk_device_device_not_selected 
+                                stc 
+                                jmp bios_disk_device_get_spt_end    
+bios_disk_device_get_spt_next:  lxi d,bios_disk_device_device_record_spt_position
+                                dad d 
+                                mov a,m 
+                                stc 
+                                cmc 
+bios_disk_device_get_spt_end:   pop d 
+                                pop h             
+                                ret 
+
+;bios_disk_device_get_tph restituisce il numero di tracce per testina 
+;HL <- numero di settori per traccia (0000 se il disco non è stato selezionato)
+;A <- ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
+bios_disk_device_get_tph:       push d 
+                                lhld bios_disk_device_vector_address
+                                mov a,l 
+                                ora h 
+                                jnz bios_disk_device_get_tph_next 
+                                mvi a,bios_disk_device_device_not_selected 
+                                lxi h,0 
+                                stc 
+                                jmp bios_disk_device_get_tph_end    
+bios_disk_device_get_tph_next:  lxi d,bios_disk_device_device_record_tph_position
+                                dad d 
+                                mov e,m 
+                                inx h 
+                                mov d,m 
+                                xchg 
+                                stc 
+                                cmc 
+bios_disk_device_get_tph_end:   pop d             
+                                ret 
+
+;bios_disk_device_get_head_number restituisce il numero di testine del disco (00 se il disco non è stato selezionato)
+;A <- numero di testine
+;     ritorna il codice dell'errore se non è stato selezionato un dispositivo
+;PSW <- CY assume 1 se si è verificato un errore 
+bios_disk_device_get_head_number:       push h 
+                                        push d 
+                                        lhld bios_disk_device_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_disk_device_get_head_number_next 
+                                        mvi a,bios_disk_device_device_not_selected 
+                                        stc 
+                                        jmp bios_disk_device_get_head_number_end    
+bios_disk_device_get_head_number_next:  lxi d,bios_disk_device_device_record_hnum_position
+                                        dad d 
+                                        mov a,m 
+                                        stc 
+                                        cmc 
+bios_disk_device_get_head_number_end:   pop d 
+                                        pop h             
+                                        ret 
+
+;bios_disk_device_select_sector
+; A -> settore da selezionare 
+; A <- esito dell'operazione
+bios_disk_device_select_sector:         push h
+                                        push d
+                                        mov e,a 
+                                        lhld bios_disk_device_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_disk_device_select_sector_next 
+                                        mvi a,bios_disk_device_device_not_selected
+                                        jmp bios_disk_device_select_sector_end
+bios_disk_device_select_sector_next:    mvi a,bios_disk_device_device_record_spt_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        cmp m 
+                                        jc bios_disk_device_select_sector_ok 
+                                        mvi a,bios_disk_device_number_overflow 
+                                        jmp bios_disk_device_select_sector_end 
+bios_disk_device_select_sector_ok:      sta bios_disk_device_selected_sector
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_sector 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_disk_device_select_sector_end:     pop d 
+                                        pop h 
+                                        ret 
+
+;bios_disk_device_select_track
+; HL -> traccia da selezionare
+; A <- esito dell'operazione
+bios_disk_device_select_track:          push h
+                                        push d
+                                        xchg 
+                                        lhld bios_disk_device_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_disk_device_select_track_next 
+                                        mvi a,bios_disk_device_device_not_selected
+                                        jmp bios_disk_device_select_track_end
+bios_disk_device_select_track_next:     mvi a,bios_disk_device_device_record_tph_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        sub l 
+                                        mov a,d 
+                                        sbb h 
+                                        jc bios_disk_device_select_track_ok 
+                                        mvi a,bios_disk_device_number_overflow 
+                                        jmp bios_disk_device_select_track_end 
+bios_disk_device_select_track_ok:       xchg 
+                                        shld bios_disk_device_selected_track
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_track 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_disk_device_select_track_end:      pop d 
+                                        pop h 
+                                        ret  
+
+;bios_disk_device_select_head
+; A -> testina da selezionare
+; A <- esito dell'operazione
+bios_disk_device_select_head:           push h
+                                        push d
+                                        mov e,a 
+                                        lhld bios_disk_device_vector_address
+                                        mov a,l 
+                                        ora h 
+                                        jnz bios_disk_device_select_head_next 
+                                        mvi a,bios_disk_device_device_not_selected
+                                        jmp bios_disk_device_select_head_end
+bios_disk_device_select_head_next:      mvi a,bios_disk_device_device_record_hnum_position
+                                        add l 
+                                        mov l,a 
+                                        mov a,h 
+                                        adi 0 
+                                        mov h,a 
+                                        mov a,e 
+                                        cmp m 
+                                        jc bios_disk_device_select_head_ok 
+                                        mvi a,bios_disk_device_number_overflow 
+                                        jmp bios_disk_device_select_head_end 
+bios_disk_device_select_head_ok:        sta bios_disk_device_selected_head 
+                                        lda bios_selected_devices_flags
+                                        ori bios_selected_devices_flags_head 
+                                        sta bios_selected_devices_flags
+                                        mvi a,bios_operation_ok
+bios_disk_device_select_head_end:       pop d 
+                                        pop h 
+                                        ret 
+
+
+;bios_disk_device_status restituisce lo stato della memoria di massa
+;PSW <- CY viene settato a 1 se si è verificto un errore 
+; A <- se CY=1 restituisce l'errore, altrimenti restituisce lo stato del dispositivo 
+bios_disk_device_status:            push h 
+                                    push d 
+                                    push b 
+                                    lhld bios_disk_device_vector_address
+                                    mov a,l 
+                                    ora h 
+                                    jnz bios_disk_device_status_next 
+                                    mvi a,bios_disk_device_device_not_selected
+                                    stc 
+                                    jmp bios_disk_device_status_end
+bios_disk_device_status_next:       lxi d,bios_disk_device_device_record_get_state_position
+                                    dad d
+                                    mov e,m 
+                                    inx h 
+                                    mov d,m 
+                                    xchg 
+                                    lxi d,bios_disk_device_status_ok
+                                    push d 
+                                    pchl  
+bios_disk_device_status_ok:         stc 
+                                    cmc 
+bios_disk_device_status_end:        pop b 
+                                    pop d 
+                                    pop h 
+                                    ret 
+
+;bios_disk_device_set_motor avvia o disattiva il motore della memoria di massa 
+;A -> $00 se si vuole disattivare il motore, altro per attivarlo
+
+
+
+bios_disk_device_set_motor:         push h 
+                                    push d 
+                                    push b 
+                                    lhld bios_disk_device_vector_address
+                                    mov a,l 
+                                    ora h 
+                                    jnz bios_disk_device_set_motor_next 
+                                    mvi a,bios_disk_device_device_not_selected
+                                    jmp bios_disk_device_set_motor_end
+bios_disk_device_set_motor_next:    lxi d,bios_disk_device_device_record_set_motor_position
+                                    dad d
+                                    mov e,m 
+                                    inx h 
+                                    mov d,m 
+                                    xchg 
+                                    lxi d,bios_disk_device_set_motor_ok
+                                    push d 
+                                    pchl  
+bios_disk_device_set_motor_ok:      mvi a,bios_operation_ok
+bios_disk_device_set_motor_end:     pop b 
+                                    pop d 
+                                    pop h 
+                                    ret           
+
+;Le seguenti funzioni servono per interagire con il lettore selezionato nella memoria di massa.
+;-  bios_disk_device_write_sector scrive i dati nel settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo in memoria dei dati da scrivere
+;-  bios_disk_device_read_sector legge i dati dal settore selezionato e restituisce l'esito dell'operazione. Gli viene passato un indirizzo della ram per indicare dove scrivere i dati ricevuti
+;-  bios_disk_device_format_drive formatta l'intero disco sovrascrivendo tutti i dati e restituisce l'esito dell'operazione
+
+;bios_disk_device_write_sector
+; HL -> indirizzo in memoria 
+; A <- esito dell'operazione
+; HL <- indirizzo di memoria dopo l'esecuzione
+
+bios_disk_device_write_sector:              push b 
+                                            push d 
+                                            push h 
+                                            lhld bios_disk_device_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_disk_device_write_sector_next 
+                                            mvi a,bios_disk_device_device_not_selected
+                                            pop h 
+                                            jmp bios_disk_device_write_sector_end
+bios_disk_device_write_sector_next:         lda bios_selected_devices_flags              
+                                            xri $ff 
+                                            ani bios_selected_devices_flags_head+bios_selected_devices_flags_sector+bios_selected_devices_flags_track
+                                            ora a 
+                                            jz bios_disk_device_write_sector_next2 
+                                            mvi a,bios_disk_device_values_not_setted 
+                                            pop h 
+                                            jmp bios_disk_device_write_sector_end
+bios_disk_device_write_sector_next2:        lxi d,bios_disk_device_device_record_write_sector_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_disk_device_write_sector_ok
+                                            pop psw  
+                                            push d 
+                                            push psw 
+                                            lda bios_disk_device_selected_head 
+                                            mov b,a 
+                                            lda bios_disk_device_selected_sector
+                                            mov c,a
+                                            lda bios_disk_device_selected_track
+                                            mov e,a 
+                                            lda bios_disk_device_selected_track+1 
+                                            mov d,a  
+                                            xthl 
+                                            ret  
+bios_disk_device_write_sector_ok:           mvi a,bios_operation_ok
+bios_disk_device_write_sector_end:          pop d  
+                                            pop b 
+                                            ret 
+
+; bios_disk_device_read_sector
+; HL -> indirizzo in memoria
+; A <- esito dell'operazione
+; HL <- indirizzo di memoria dopo l'esecuzione
+bios_disk_device_read_sector:               push b 
+                                            push d 
+                                            push h 
+                                            lhld bios_disk_device_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_disk_device_read_sector_next 
+                                            mvi a,bios_disk_device_device_not_selected
+                                            pop h 
+                                            jmp bios_disk_device_read_sector_end
+bios_disk_device_read_sector_next:          lda bios_selected_devices_flags                        
+                                            xri $ff 
+                                            ani bios_selected_devices_flags_head+bios_selected_devices_flags_sector+bios_selected_devices_flags_track
+                                            ora a 
+                                            jz bios_disk_device_read_sector_next2 
+                                            mvi a,bios_disk_device_values_not_setted 
+                                            pop h 
+                                            jmp bios_disk_device_read_sector_end
+bios_disk_device_read_sector_next2:         lxi d,bios_disk_device_device_record_read_sector_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_disk_device_read_sector_ok
+                                            pop psw  
+                                            push d 
+                                            push psw  
+                                            lda bios_disk_device_selected_head 
+                                            mov b,a 
+                                            lda bios_disk_device_selected_sector
+                                            mov c,a
+                                            lda bios_disk_device_selected_track
+                                            mov e,a 
+                                            lda bios_disk_device_selected_track+1 
+                                            xthl 
+                                            ret 
+bios_disk_device_read_sector_ok:            mvi a,bios_operation_ok
+bios_disk_device_read_sector_end:           pop d  
+                                            pop b 
+                                            ret 
+
+;bios_disk_device_format_drive
+; A <- esito dell'operazione
+bios_disk_device_format_drive:              push h 
+                                            push d 
+                                            push b 
+                                            lhld bios_disk_device_vector_address
+                                            mov a,l 
+                                            ora h 
+                                            jnz bios_disk_device_format_drive_next 
+                                            mvi a,bios_disk_device_device_not_selected
+                                            jmp bios_disk_device_format_drive_end
+bios_disk_device_format_drive_next:         lxi d,bios_disk_device_device_record_format_position
+                                            dad d
+                                            mov e,m 
+                                            inx h 
+                                            mov d,m 
+                                            xchg 
+                                            lxi d,bios_disk_device_format_drive_ok
+                                            push d 
+                                            pchl 
+bios_disk_device_format_drive_ok:           mvi a,bios_operation_ok
+bios_disk_device_format_drive_end:          pop b 
+                                            pop d 
+                                            pop h 
+                                            ret  
+
+;----- system ram -----
+;Il parametro system_ram_dimension viene utilizzato dalla mms per capire quanto spazio ha a disposizione per eseguire i programmi e mantenere i segmenti di memoria attivi. 
+;Da ricordare che la zona dedicata alla RAM deve partire dal'indirizzo $0000 e una dimensione minima di 20KB 
+system_ram_dimension        .equ 32768-16
+bios_reserved_memory        .equ system_ram_dimension 
+
+bios_avabile_ram_memory:    lxi h,system_ram_dimension
+                            ret 
+                            
+;----- interrupt handlers -----
+;bios_RST55_interrupt_handler viene richiamato al verificarsi di un interrupt hardware (RST6.5 per 8085 o INT mode 1 per Z80)
+;tutti i registri utilizzati devono essere ripristinati a fine interrupt
+bios_hardware_interrupt_handler:    ret 
+
+;----- data transfer ----- 
+;opzionalmente può essere inserito un dispositivo DMA per gestire il flusso dati CPU/IO in modo più efficente. Il dispositivo DMa può essere inizializzato nelle funzioni cold_boot e warm_boot e i trasferimenti
+;possono essere avviati e gestiti tramite le funzioni bios_disk_device_write_sector e bios_disk_device_read_sector.
+
+dma_status_register		    .equ $08
+dma_command_register	    .equ $08
+dma_request_register	    .equ $09
+dma_single_mask_register	.equ $0a
+dma_mode_register		    .equ $0b
+dma_ff_clear		        .equ $0c
+dma_temporary_register	    .equ $0d
+dma_master_clear		    .equ $0d
+dma_clear_mask_register	    .equ $0e
+dma_all_mask_register	    .equ $0f
+dma_address_register	    .equ $04
+dma_word_count_register     .equ $05
+
+dma_reset:	out dma_master_clear
+			mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
+			out dma_command_register
+			mvi a,%00001011			;set dma channels 0,1,3 mask bit
+			out dma_all_mask_register
+			ret
+
+;bios_memory_transfer viene utilizzata per la copia di grandi quantità di dati all'interno della memoria. Dato che alcuni dispositivi DMA possono gestire il trasferimento mem-to-mem si preferisce mantenere 
+;questa funzione nel bios. Nel caso non sia presente un dispositivo DMA o non sia disponibile la funzionalità, è possibile implementare una copoa software dei dati
+; BC -> numero di bytes da trasferire 
+; DE -> indirizzo sorgente
+; HL -> indirizzo destinazione
+
+; A <- esito dell'operazione 
+; BC <- $0000
+; DE <- indirizzo sorgente dopo l'esecuzione
+; HL <- indirizzo destinazione dopo l'esecuzione 
+
+bios_memory_transfer:       mov a,b     
+                            ora c 
+                            jz bios_memory_transfer_end
+                            ldax d 
+                            mov m,a 
+                            dcx b 
+                            inx h 
+                            inx d 
+                            jmp bios_memory_transfer
+bios_memory_transfer_end:   mvi a,bios_operation_ok 
+                            ret 
+
+;bios_memory_transfer_reverse ha la funzione analoga di bios_memory_transfer ma trasferisce i dati decrementando a partire dall'indirizzo fornito
+; BC -> numero di bytes da trasferire 
+; DE -> indirizzo sorgente
+; HL -> indirizzo destinazione
+
+; A <- esito dell'operazione 
+; BC <- $0000
+; DE <- indirizzo sorgente dopo l'esecuzione
+; HL <- indirizzo destinazione dopo l'esecuzione 
+
+bios_memory_transfer_reverse:       mov a,b     
+                                    ora c 
+                                    jz bios_memory_transfer_reverse_end
+                                    ldax d 
+                                    mov m,a 
+                                    dcx b 
+                                    dcx h 
+                                    dcx d 
+                                    jmp bios_memory_transfer_reverse
+bios_memory_transfer_reverse_end:   mvi a,bios_operation_ok 
+                                    ret 
+
+
+;----- device drivers ----- 
+
+;----- dispositivi I/O -----
+;I dispositivi I/O hanno un identificativo formato da un byte che può assumere un numero da $00 a $ff.
+;l'id $00 viene sempre assegnato alla console base, che è sempre bidirezionale e viene utilizzato come dispositivo basilare di input/output dalla shell del sistema. 
+
+;Ad ogni Id vengono assegnte le seguenti funzioni:
+;- la funzione bios_get_selected_device_state restituisce le informazioni sulla disponibilità di lettura o scrittura di un byte sul dispositivo tramite un byte che contiene delle flags
+;- la funzione bios_get_IO_device_informations restituisce le informazioni sulla tipologia del dispositivo sempre tramite un byte contenente delle flags
+;- la funzione bios_read_selected_device_byte riceve un byte al dispositivo
+;- la funzione bios_write_selected_device_byte invia un byte al dispositivo
+;- la funzione bios_initialize_selected_device reinizializza il dispositivo 
+;- la funzione bios_set_selected_device_state modifica le impostazioni del dispositivo 
+
+;per avere una velocità computazionale migliore nel scegliere i dispositivi viene utilizzata una tabella dati in cui ogni record contiene:
+
+;-  quattro bytes ASCII che identificano il tipo di dispositivo
+;-  due bytes che contengono l'indirizzo della funzione bios_device_initialize_relativo
+;   questa funzione inizializza il dispositivo I/O. I registri che vengono utilizzati devono essere ripristinati. 
+;   La funzione non riceve in ingresso nessun parametro.
+
+;-  due bytes che contengono l'indirizzo della funzione bios_get_selected_device_state relativa 
+;   La funzione restituisce un byte in cui ogni bit contiene un'informazione sul dispositivo. Ad esempio, nel caso di una console di base:
+    ;bios_IO_device_connected_mask       .equ %10000000  ;per indicare se il dispositivo è collegato o scollegato (caso ad esempio di un dispositivo seriale)
+    ;bios_IO_device_input_byte_ready     .equ %01000000  ;per indicare se il dispositivo è pronto per inviare un byte al sistema 
+    ;bios_IO_device_output_byte_ready    .equ %00100000  ;per indicare se il dispositivo è pronto per ricevere un byte dal sistema 
+    ;quindi la funzione restituisce 
+    ;A <- bios_IO_device_connected_mask (dato che deve essere sempre collegata) + bios_IO_device_input_byte_ready (se è stato letto un dato dalla tastiera) + bios_IO_device_output_byte_ready (se è possibile scrivere un byte sullo schermo) 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_set_selected_device_state relativa 
+;   La funzione invia al dispositivo un byte in cui ogni bit del dispositivo contiene un'impostazione specifica.
+;   A -> impostazioni 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_read_selected_device_byte
+;   La funzione legge un dato dal dispositivo. Per esempio, nel caso della console di base il byte letto è un carattere ASCII inserito dalla tastiera
+;   A <- dato letto 
+;   CY <- '0'
+
+;-  due bytes che contengono l'indirizzo della funzione bios_write_selected_device_byte
+;   La funzione invia un dato al dispositivo. Per esempio, nel caso della console di base, il byte da inviare è un carattere ASCII che verrà stampato sullo schermo. 
+;   A -> dato da inviare 
+;   CY <- '0'
+
+;Al termine dell'esecuzione, tutte le funzioni devono impostare CY a '0' per indicare l'esecuzione completa. 
+
+;Nella tabella deve essere sempre registrato almeno un dispositivo di tipo "BTTY", che identifica la console basilare del sistema. 
+
+;per aggiungere un dispositivo basta inserire un campo tramite la macro .text "tipo" e i relativi indirizzi alle funzioni 
+bios_device_IO_table:       .text "BTTY"
+                            .word display_reset
+                            .word bios_console_get_state
+                            .word bios_console_set_state 
+                            .word keyboard_char_in
+                            .word display_char_out
+
+                            ;inserisci qui il vettore 
+bios_device_IO_table_end:                                                                                               
+
+usart_cmd 	                    .equ $27
+usart_data      	            .equ $26
+usart_set	                    .equ $4d
+display_low_port		        .equ $20			
+display_high_port		        .equ $21			
+display_data_port		        .equ $22			
+display_status_port 	        .equ $20			
+keyboard_input_port		        .equ $21		
+
+display_pointer_address     	.equ    bios_reserved_memory
+display_pointer_addition		.equ 	bios_reserved_memory+2
 
 display_character_number		.equ 	512
 display_character_x_number 		.equ 	32
@@ -31,59 +833,7 @@ display_line_feed_verify        .equ    %00000001
 keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
 delay_millis_value				.equ 	78
-
-keyboard_pointer_delay			.equ 	500
 keyboard_insert_delay			.equ 	200
-
-
-;porte dei dispositivi BIOS
-usart_cmd 	                .equ $27
-usart_data      	        .equ $26
-usart_set	                .equ $4d
-display_low_port		    .equ $20			
-display_high_port		    .equ $21			
-display_data_port		    .equ $22			
-display_status_port 	    .equ $20			
-keyboard_input_port		    .equ $21			
-dma_status_register		    .equ $08
-dma_command_register	    .equ $08
-dma_request_register	    .equ $09
-dma_single_mask_register	.equ $0a
-dma_mode_register		    .equ $0b
-dma_ff_clear		        .equ $0c
-dma_temporary_register	    .equ $0d
-dma_master_clear		    .equ $0d
-dma_clear_mask_register	    .equ $0e
-dma_all_mask_register	    .equ $0f
-dma_address_register	    .equ $04
-dma_word_count_register     .equ $05
-fdc_drive_control_register	.equ $12
-fdc_data_rate_register		.equ $17
-fdc_disk_changed_register	.equ $17
-fdc_main_status_register	.equ $14
-fdc_data_register			.equ $15
-
-
-;shortcuts
-cold_start:     .org rom_memory_offset
-bios_entries:   jmp	bios_start
-                jmp display_char_out
-                jmp display_char_in
-				jmp set_display_pointer
-				jmp get_display_pointer
-;                jmp display_pixel_out
-;                jmp display_pixel_in
-                jmp display_reset
-                jmp keyboard_in_ver
-                jmp keyboard_in_data
-                jmp dma_set_read_address
-				jmp dma_set_write_address
-				jmp delay_millis
-
-ascii_hex_conv: 	.org rom_memory_offset+$30					
-					.b $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $41, $42, $43, $44, $45, $46
-
-;funzioni del BIOS
 
 display_reset:      push psw
                     push h
@@ -92,7 +842,6 @@ display_reset:      push psw
 					shld display_pointer_address
 					xra a
 					sta display_pointer_addition
-
                     lxi d,display_memory_dimension
                     shld display_pointer_address
 display_reset_loop: mvi a,display_background_character
@@ -105,7 +854,27 @@ display_reset_loop: mvi a,display_background_character
 display_reset_end:  pop d
                     pop h
                     pop psw
+                    stc 
+                    cmc 
                     ret
+
+
+keyboard_char_in:               in keyboard_input_port
+                                ani keyboard_data_mask
+                                cma 
+                                push b 
+                                mov c,a 
+                                mvi b,keyboard_insert_delay
+keyboard_char_in_delay_loop1:   mvi a,delay_millis_value	
+keyboard_char_in_delay_loop2:	dcr a						
+                                jnz keyboard_char_in_delay_loop2	
+                                dcr b 
+                                jnz keyboard_char_in_delay_loop1
+                                mov a,c 
+                                pop b 
+                                stc 
+                                cmc 					
+                                ret		
 
 display_char_out:			push h
 							lhld display_pointer_address
@@ -156,7 +925,6 @@ display_char_out_next:		pop d
 							cpi $08
 							jz display_backspace
 							jmp display_character_send_end
-
 display_new_line:			mvi a,display_character_x_number
 							add l
 							mov l,a
@@ -164,18 +932,15 @@ display_new_line:			mvi a,display_character_x_number
 							aci 0
 							mov h,a
 							jmp display_character_send_end
-
 display_carriage_return:	xra a
 							sui display_character_x_number
 							ana l
 							mov l,a
 							jmp display_character_send_end
-
 display_backspace:			mvi a, display_background_character
 							call display_out
 							dcx h
 							jmp display_character_send_end
-
 display_character_print:	cpi $61
 							jc display_character_out
 							cpi $7B
@@ -186,59 +951,9 @@ display_character_out:		call display_out
 display_character_send_end:	shld display_pointer_address
 							pop psw
 							pop h
+                            stc
+                            cmc 
 							ret
-
-display_char_in:	push h
-					lhld display_pointer_address
-					call display_in
-					pop h
-					ret
-
-set_display_pointer:	shld display_pointer_address
-						ret
-
-get_display_pointer:	lhld display_pointer_address
-						ret
-
-dma_set_write_address:	mvi a,%01000110
-						jmp dma_set_next
-dma_set_read_address:	mvi a,%01001010
-dma_set_next:			out dma_mode_register
-						out dma_ff_clear
-						mov a,l
-						out dma_address_register
-						mov a,h
-						out dma_address_register
-						out dma_ff_clear
-						mvi a,$0ff
-						out dma_word_count_register
-						out dma_word_count_register
-						ret
-
-keyboard_in_ver:	in keyboard_input_port
-					ani keyboard_input_mask
-					jnz keyb_in_ver2
-					mvi a,$ff 
-					ret
-keyb_in_ver2:		xra a
-					ret
-
-keyboard_in_data:	in keyboard_input_port
-					cma
-					ani keyboard_data_mask
-					ret
-
-												;call delay_millis 		;17 cicli
-delay_millis:		push psw					;11 cicli
-					mvi a,delay_millis_value	;7 cicli
-delay_millis_loop:	dcr a						;5 cicli
-					jnz delay_millis_loop		;10 cicli
-					pop psw						;11 cicli
-					ret							;10 cicli
-
-;funzioni del BIOS secondarie
-
-
 
 display_out_nv:     push psw
                     jmp display_out_send
@@ -264,8 +979,6 @@ display_in_nv:	    mov a,l
 		            in display_data_port
  		            ret
 
-
-						
 display_out_ad_nv:		push h
 						push psw
 						jmp display_out_addr_send
@@ -286,693 +999,195 @@ display_out_addr_send:	lhld display_pointer_address
 						pop h
 						ret
 
-fdc_reset:		push b
-				push h
-				lxi h,program_status_byte
-				mvi b,07
-				mvi a,%00000000
-				out fdc_drive_control_register
-				mvi a,%00001111			;device on, dma pins on, select drive 3
-				out fdc_drive_control_register
-				mvi a,%00000010			;250kb/s default speed
-				out fdc_data_rate_register
-				lxi h,specify_command
-				call fdc_command_send
-				lxi h,mode_command
-				call fdc_command_send
-				pop h
-				pop b
-				ret
-
-dma_reset:	push h
-			lxi h,0
-			shld dma_initial_address
-			pop h
-			out dma_master_clear
-			mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
-			out dma_command_register
-			mvi a,%00001011			;set dma channels 0,1,3 mask bit
-			out dma_all_mask_register
-			ret
-
-select_drive0:		mvi a,0
-					sta floppy_drive_select
-					mvi a,%00011100
-					out fdc_drive_control_register
-					ret
-
-select_drive1:		mvi a,1
-					sta floppy_drive_select
-					mvi a,%00101101
-					out fdc_drive_control_register
-					ret
-
-deselect_drive:		mvi a,%00001111
-					out fdc_drive_control_register
-					ret
-
-fdc_command_send:	push d
-					push h
-					lxi d,fdc_interrupt_request
-					lxi h,interrupt_address
-					mvi m,$c3
-					inx h
-					mov m,e
-					inx h
-					mov m,d
-					pop h
-					pop d
-					push b
-					mov b,l
-					ei
-fdc_command_loop:	in fdc_main_status_register
-					cpi %10000000
-					jc fdc_command_loop
-					ani %01110000
-					cpi %01000000
-					jnc fdc_abnormal_command_read
-					cpi %00100000
-					jnc fdc_abnormal_ndma_status
-					cpi %00010000
-					jc send_command_verify
-fdc_command_loop_1:	mov a,m
-					inx h
-					out fdc_data_register
-					jmp fdc_command_loop
-
-fdc_abnormal_command_read:	lda program_status_byte
-							ori %00000010
-							sta program_status_byte
-							jmp fdc_command_read
-
-fdc_abnormal_ndma_status:	lda program_status_byte
-							ori %00000100
-							sta program_status_byte
-fdc_abnormal_ndma_loop:		in fdc_main_status_register
-							ani %00100000
-							jnz fdc_abnormal_ndma_loop
-							jmp fdc_command_read
-
-send_command_verify:	mov a,l
-						cmp b
-						jz fdc_command_loop_1
-seek_command_loop:	in fdc_main_status_register
-					ani $0f
-					jnz seek_command_loop
-fdc_command_end:	pop b
-					lda program_status_byte
-					ori %00000001
-					sta program_status_byte
-					ret
-
-fdc_interrupt_request:	pop h
-						in fdc_main_status_register
-						ani %00110000
-						cpi %00100000
-						jnc fdc_abnormal_ndma_status
-						cpi %00010000
-						jnz fdc_sense_interrupt_request
-fdc_command_read:		lxi h,fdc_read_bytes
-fdc_command_read_1:		in fdc_main_status_register
-						cpi %10000000
-						jc fdc_command_read_1
-						ani %00010000
-						jz fdc_command_end
-						in fdc_main_status_register
-						ani %01000000
-						jz fdc_abnormal_command_request
-						in fdc_data_register
-						mov m,a
-						inx h
-						jmp fdc_command_read_1
-
-fdc_sense_interrupt_request:	lda program_status_byte
-								ori %00001000
-								sta program_status_byte
-								push h
-								lxi h,sense_interrupt_command
-								call fdc_command_loop
-								jmp fdc_command_end
-
-fdc_abnormal_command_request:	lda program_status_byte
-								ori %00010000
-								sta program_status_byte
-								jmp fdc_command_end
-
-sense_interrupt_command		.b %00001000
-specify_command				.b %00000011, %00001111, %11111110
-mode_command				.b %00000001, %00100110, %00000000, %11001111, %00000000
-
-;firmware di base
-bios_start:     		lxi sp,stack_pointer
-						call display_reset
-						
-						lxi h,start_graphic
-						call graphic_out
-						lxi h,start_string
-						call string_out
-
-						lxi h,5000
-bios_wait_loop:			call delay_millis
-						dcx h
-						mov a,l
-						ora h
-						jnz bios_wait_loop
-
-						;call fdc_reset
-						;call dma_reset
+;bios_console_output_ready
+; A <- stato della console
+bios_console_get_state:                 in keyboard_input_port
+					                    ani keyboard_input_mask
+                                        jnz bios_console_get_state2
+                                        mvi a,bios_IO_console_connected_mask+bios_IO_console_input_byte_ready+bios_IO_console_output_byte_ready
+                                        jmp bios_console_get_state_end
+bios_console_get_state2:		        mvi a,bios_IO_console_connected_mask+bios_IO_console_output_byte_ready
+bios_console_get_state_end:             stc 
+                                        cmc 
+                                        ret 
 
 
-						lxi h,0080
-hex_editor_return: 		call display_reset
-						push h
-						mov a,l
-						ani %11111000
-						mov l,a
-						mvi b,15
-						call hex_editor_println
-hex_editor_fprint:		mvi a,$0a
-						call display_char_out
-						mvi a,$0d
-						call display_char_out
-						call hex_editor_println
-						dcr b
-						jnz hex_editor_fprint
-						pop h
-						mov a,l
-						ani %00000111
-						mov b,a
-						call hex_memory_address_fix
-hex_editor_action:		call keyboard_char_in
-						ani %11011111
-						cpi 'S'
-						jz hex_editor_selectdw
-						cpi 'A'
-						jz hex_editor_selectlf
-						cpi 'D' 
-						jz hex_editor_selectrt
-						cpi 'W'
-						jz hex_editor_selectup
-						cpi 'E'
-						jz hex_editor_write
-						cpi 'J'
-						jz hex_editor_search
-						cpi 'L'
-						jz program_launch
-						
-						jmp hex_editor_action
-hex_editor_selectrt:	mvi e,1
-						mvi d,0
-						jmp hex_editor_select
-hex_editor_selectdw:	mvi e,$08
-						mvi d,0
-						jmp hex_editor_select
-hex_editor_selectup:	mvi e,0
-						mvi d,$08
-						jmp hex_editor_select
-hex_editor_selectlf:	mvi e,0
-						mvi d,1
-hex_editor_select:		call hex_editor_fprocess
-						jmp hex_editor_action
+;bios_console_set_state (funzione che non ha bisogno di essere implementata)
+bios_console_set_state:                 stc 
+                                        cmc 
+                                        ret 
 
-hex_editor_fprocess:	mov a,d
-						ora a
-						jnz hex_editor_dcr_byte
-						ora e
-						jz hex_editor_pointerset
-hex_editor_inrbyte:		mov a,b
-						cpi 127
-						jz hex_editor_addline
-						inr b
-						inx h
-						dcr e
-						jnz hex_editor_inrbyte
-						jmp hex_editor_pointerset
-hex_editor_dcr_byte:	mov a,b
-						ora a
-						jz hex_editor_subline
-						dcr b
-						dcx h
-						dcr d
-						jnz hex_editor_dcr_byte
-hex_editor_pointerset:	call hex_memory_address_fix
-						ret
-			
-hex_editor_addline:		sui $08
-						mov b,a
-						push h
-						lxi h,$200
-						shld display_pointer_address
-						pop h
-						push h
-						inx h
-						call hex_editor_println
-						pop h
-						jmp hex_editor_fprocess
-hex_editor_subline:		mvi b,$08
-						call display_shift_down
-						push h
-						dcx h
-						mov a,l
-						ani %11111000
-						mov l,a
-						call hex_editor_println
-						pop h
-						jmp hex_editor_fprocess
-			
-				
-hex_editor_write:		call keyboard_char_in
-						cpi 'Q'
-						jz hex_editor_action
-						cpi 'q'
-						jz hex_editor_action
-						cpi ' '
-						jz hex_editor_write_jump
-						cpi $08
-						jz hex_editor_dcr
-						mov c,a
-						call hex_test
-						ora a
-						jz hex_editor_write
-						mov a,c
-						call ascii_to_hex
-						add a
-						add a
-						add a
-						add a
-						mov m,a
-						cmp m
-						jnz hex_editor_readonly
-						mov a,c
-						call display_char_out
-hex_editor_req2:		call keyboard_char_in
-						cpi 'Q'
-						jz hex_editor_action
-						cpi 'q'
-						jz hex_editor_action
-						cpi ' '
-						jz hex_editor_write_jump
-						cpi $08
-						jz hex_editor_write_back
-						mov c,a
-						call hex_test
-						ora a
-						jz hex_editor_req2
-						mov a,c
-						call ascii_to_hex
-						ora m
-						mov m,a
-						cmp m
-						jnz hex_editor_write_jump
-						mov a,c
-						call display_char_out
-hex_editor_write_jump:	mvi e,$01
-						mvi d,0
-						call hex_editor_fprocess
-						jmp hex_editor_write
-hex_editor_dcr:			mvi e,0
-						mvi d,$01
-						call hex_editor_fprocess
-						jmp hex_editor_write
-hex_editor_write_back:	push h
-						lhld display_pointer_address
-						dcx h
-						shld display_pointer_address
-						pop h
-						jmp hex_editor_write
-hex_editor_readonly:	push h
-						lhld display_pointer_address
-						inx h
-						shld display_pointer_address
-						pop h
-						jmp hex_editor_req2
+;---- disk devices ----- 
+;come per i device drivers, è possibile registrare più dispositivi per la gestione dei dischi 
+;ongni record della tabella viene assegnato a un identificativo del disco, partendo dal carattere ASCII "A" fino a "Z". Un record contiene:
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_initialize relativa 
+;   Questa funzione inizializza ll dispositivo. Viene richiamata una volta all'avvio del computer. 
 
-hex_editor_search:		push d
-						lxi h,display_character_number-display_character_x_number
-						lxi d,display_character_x_number
-hex_editor_search_loop:	mvi a,display_background_character
-						call display_out
-						dcx d
-						inx h
-						mov a,d
-						ora e
-						jnz hex_editor_search_loop
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_read_sector relativa 
+;   Questa funzione posiziona la testina del disco alla posizione fornita e procede con il caricamento del settore nella RAM all'indirizzo specificato. 
+;   Alla fine dell'esecuzione deve restituire l'indirizzo RAM incrementato della dimensione del settore caricato 
+;   B -> numero di testina 
+;   C -> numero di settore nella traccia 
+;   DE -> numero di traccia nella testina 
+;   HL -> indirizzo di caricamento dei dati 
 
-						lxi h,display_character_number-display_character_x_number
-						call set_display_pointer
+;   HL <- indirizzo incrementato
 
-hex_editor_search_1:	call keyboard_char_in
-						mov d,a
-						call is_hex
-						jz hex_editor_search_1
-						mov a,d
-						call display_char_out
-						call ascii_to_hex
-						add a 
-						add a 
-						add a
-						add a
-						mov h,a
-hex_editor_search_2:	call keyboard_char_in
-						mov d,a
-						call is_hex
-						jz hex_editor_search_2
-						mov a,d
-						call display_char_out
-						call ascii_to_hex
-						ora h
-						mov h,a
-hex_editor_search_3:	call keyboard_char_in
-						mov d,a
-						call is_hex
-						jz hex_editor_search_3
-						mov a,d
-						call display_char_out
-						call ascii_to_hex
-						add a 
-						add a 
-						add a
-						add a
-						mov l,a
-hex_editor_search_4:	call keyboard_char_in
-						mov d,a
-						call is_hex
-						jz hex_editor_search_4
-						mov a,d
-						call display_char_out
-						call ascii_to_hex
-						ora l
-						mov l,a
-						pop d
-						jmp hex_editor_return
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_write_sector relativa 
+;   Questa funzione posiziona la testina del disco alla posizione fornita e procede con il caricamento dei dati dalla RAM all'indirizzo specificato al settore selezionato.
+;   Alla fine dell'esecuzione deve restituire l'indirizzo RAM incrementato della dimensione del settore caricato 
+;   B -> numero di testina 
+;   C -> numero di settore nella traccia 
+;   DE -> numero di traccia nella testina 
+;   HL -> indirizzo di caricamento dei dati 
 
-hex_editor_println:		push b
-						mov a,h
-						rar
-						rar
-						rar
-						rar
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-						mov a,h
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-						mov a,l
-						rar
-						rar
-						rar
-						rar
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-						mov a,l
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-						mvi a,$20
-						call display_char_out
-						mvi a,%10101010
-						call display_out_addr
-						mvi b,$08
-hex_editor_printloop:	mov a,m
-						rar
-						rar 
-						rar 
-						rar
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-		
-						mov a,m
-						ani $0f
-						call hex_to_ascii
-						call display_char_out
-						mvi a,$20
-						call display_char_out
-						inx h
-						dcr b
-						jnz hex_editor_printloop
-						mvi a,$08
-						call display_char_out
-						mvi a,%10010101 
-						call display_out_addr
-						pop b
-						ret 
-			
-hex_memory_address_fix:	push h
-						push b
-						lxi h,0
-						
-						mov a,b
-						ani %11111000
-						rar
-						rar 
-						rar
-						mov c,a
-						jz hex_memory_addfx_jump
-hex_memory_addfx_loop:	mov a,l
-						adi %00100000
-						mov l,a
-						mov a,h
-						aci 0
-						mov h,a
-						dcr c
-						jnz hex_memory_addfx_loop
-hex_memory_addfx_jump:	mov a,b
-						ani %00000111
-						mov c,a
-						mov a,l
-						adi $06
-						mov l,a
-						mov a,c
-						ora a
-						jz hex_editor_addfx_end
-hex_memory_addfx_loop2:	inx h
-						inx h
-						inx h
-						dcr c
-						jnz hex_memory_addfx_loop2
-hex_editor_addfx_end:	shld display_pointer_address
-						pop b
-						pop h
-						ret
+;   HL <- indirizzo incrementato
 
-display_shift_down:			push h
-							push d
-							lxi d,display_character_number-1
-							lxi h,display_character_number-display_character_x_number-1
-display_shift_down_loop:	call display_in
-							xchg
-							call display_out
-							xchg
-							dcx d
-							dcx h
-							mov a,h
-							ora a
-							jnz display_shift_down_loop
-							mov a,l
-							ora a
-							jnz display_shift_down_loop
-							shld display_pointer_address
-							lxi d,display_character_x_number
-display_reset_line:			mvi a,display_background_character
-							call display_out
-							inx h
-							dcx d
-							mov a,d
-							ora e
-							jnz display_reset_line
-							pop d
-							pop h
-							ret
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_status relativa 
+;   Questa funzione restituisce lo stato del dispositivo sotto forma di byte. La funzione deve restituire le flags nel formato riconosciuto dal sistema operativo.
 
-hex_test:	cpi $30			
-			jc not_hex	
-			cpi $3A
-			jnc hex_test_1
-			jmp is_hex
-hex_test_1:	cpi $41
-			jc not_hex
-			cpi $47
-			jnc hex_test_2
-			jmp is_hex
-hex_test_2:	cpi $61
-			jc not_hex
-			cpi $67
-			jnc not_hex
-is_hex:		mvi a,$ff
-			ret
-not_hex:	mvi a,0
-			ret
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_set_motor relativa
+;   Questa funzione serve per abilitare o disabilitare il motore del drive 
+;   A -> $00 se il motore deve essere disabilitato, altro se deve essere abilitato
 
-ascii_to_hex:	cpi $61			
-				jc ascii_to_hex_1	
-				ani $4f	
-ascii_to_hex_1:	push h
-				lxi h,ascii_hex_conv
-ascii_to_hex_2:	cmp m
-				jz ascii_to_hex_e
-				inx h
-				jmp ascii_to_hex_2
-ascii_to_hex_e:	mov a,l
-				ani $0f
-				pop h
-				ret
-		
+;-  due bytes che contengono l'indirizzo per la funzione bios_disk_device_format_drive relativa 
+;   Questa funzione viene utilizzata per formattare la memoria di massa. La formattazione deve cancellare tutti i dati presenti nel disco ed, eventualmente, sostituirli con un valore predefinito.
 
-hex_to_ascii:		push h
-					push b			
-					mov b,a
-					lxi h,ascii_hex_conv
-hex_to_ascii_loop:	mov a,l
-					ani $0f
-					cmp b
-					jz hex_to_ascii_end
-					inx h
-					jmp hex_to_ascii_loop
-hex_to_ascii_end:	mov a,m
-					pop b
-					pop h
-					ret
+;-  un byte che contiene il numero di testine del disco 
+;-  due bytes che contiene il numero di tracce per testina del disco 
+;-  un byte che contiene il numero di settori per traccia del disco 
+;-  un byte che contiene il numero di bytes per settore (codificato in multipli di 128bytes)
 
-string_out:		push psw		
-string_out_1:	mov a,m			
-    			ora a
-				jz string_out_2
-				mov c,m
-				call display_char_out
-				inx h
-				jmp string_out_1
-string_out_2:	pop psw
-        		ret
+;Le funzioni possono anche non preservare il contenuto dei registri che utilizzano ma, tuttavia, devono rispettare le convenzioni sull'output.
+;le coordinate del settore fornite nelle funzioni bios_disk_device_write_sector e bios_disk_device_read_sector sono sempre verificate secondo i parametri inseriti nel record del dispositivo.
 
-graphic_out:		push psw		
-graphic_out_1:		mov a,m			
-					ora a
-					jz graphic_out_2
-					mov c,m
-					call display_out_addr
-					inx h
-					jmp graphic_out_1
-graphic_out_2:		pop psw
-        			ret
+bios_device_disk_table:         .word bios_rom_disk_initialize
+                                .word bios_rom_disk_read_sector
+                                .word bios_rom_disk_write_sector
+                                .word bios_rom_disk_status
+                                .word bios_rom_disk_set_motor  
+                                .word bios_rom_disk_format_drive 
+                                .byte bios_rom_disk_heads_number
+                                .word bios_rom_disk_tph_number
+                                .byte bios_rom_disk_spt_number
+                                .byte bios_rom_disk_bps_coded_number
 
-keyboard_char_in:	push h
-keyboard_loop1:		lxi h,keyboard_pointer_delay 
-					call pointer_enable
-keyboard_loop1_1:	call keyboard_in_ver
-					ora a
-					call delay_millis
-					jnz keyboard_loop1_end 
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_loop1_1
-		
-					call pointer_disable
-					lxi h,keyboard_pointer_delay
-keyboard_loop2_1:	call keyboard_in_ver
-					ora a
-					call delay_millis
-					jnz keyboard_loop2_end 
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_loop2_1
+                                ;inserisci i dispositivi qui 
+bios_device_disk_table_end: 
 
-					jmp keyboard_loop1
+bios_rom_disk_address_start          .equ $8800
+bios_rom_disk_address_end            .equ $ffff
 
-keyboard_loop1_end:	call pointer_disable	 
-keyboard_loop2_end:	call keyboard_in_data
+bios_rom_disk_heads_number           .equ 1
+bios_rom_disk_tph_number             .equ 15 
+bios_rom_disk_spt_number             .equ 8
+bios_rom_disk_bps_coded_number       .equ 2 
+bios_rom_disk_bps_uncoded_number     .equ 256
+   
+bios_rom_disk_format_fill_byte       .equ $ff 
 
-					push psw
-					lxi h,keyboard_insert_delay
-keyboard_end_delay:	call delay_millis
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_end_delay
-					pop psw
-					pop h
-					ret
+bios_rom_disk_initialize:           ret
 
-pointer_enable:	push h
-				push psw
-				lhld display_pointer_address
-				call display_in
-				sta display_character_backup
-				mvi a,display_white_character
-				call display_out
-				pop psw
-				pop h
-				ret
+bios_rom_disk_read_sector:          mvi a,$AA
+                                    push h  
+                                    push d 
+                                    push b 
+                                    mov c,b 
+                                    mvi b,0 
+                                    lxi d,bios_rom_disk_tph_number
+                                    call unsigned_multiply_word 
+                                    inx sp 
+                                    inx sp 
+                                    pop h 
+                                    push h 
+                                    lhld bios_disk_device_selected_track
+                                    dcx sp 
+                                    dcx sp 
+                                    dad d 
+                                    mov c,l 
+                                    mov b,h 
+                                    lxi d,bios_rom_disk_spt_number
+                                    call unsigned_multiply_word 
+                                    xthl
+                                    mov a,l
+                                    xthl 
+                                    mov l,a 
+                                    mvi h,0 
+                                    dad d 
+                                    xchg 
+                                    lxi b,bios_rom_disk_bps_uncoded_number
+                                    call unsigned_multiply_word 
+                                    lxi h,bios_rom_disk_address_start
+                                    dad d 
+                                    inx sp 
+                                    inx sp 
+                                    inx sp 
+                                    inx sp 
+                                    pop d 
+                                    lxi b,bios_rom_disk_bps_uncoded_number
+                                    xchg 
+                                    call bios_memory_transfer
+                                    ret 
 
-pointer_disable:	push h
-					push psw
-					lhld display_pointer_address
-					lda display_character_backup
-					call display_out
-					pop psw
-					pop h
-					ret
+bios_rom_disk_write_sector:         push h  
+                                    push d 
+                                    push b 
+                                    mov c,b 
+                                    mvi b,0 
+                                    lxi d,bios_rom_disk_tph_number
+                                    call unsigned_multiply_word 
+                                    inx sp 
+                                    inx sp 
+                                    pop h 
+                                    push h 
+                                    lhld bios_disk_device_selected_track
+                                    dcx sp 
+                                    dcx sp 
+                                    dad d 
+                                    mov c,l 
+                                    mov b,h 
+                                    lxi d,bios_rom_disk_spt_number
+                                    call unsigned_multiply_word 
+                                    xthl
+                                    mov a,l
+                                    xthl 
+                                    mov l,a 
+                                    mvi h,0 
+                                    dad d 
+                                    xchg 
+                                    lxi b,bios_rom_disk_bps_uncoded_number
+                                    call unsigned_multiply_word 
+                                    lxi h,bios_rom_disk_address_start
+                                    dad d 
+                                    inx sp 
+                                    inx sp 
+                                    inx sp 
+                                    inx sp 
+                                    pop d 
+                                    lxi b,bios_rom_disk_bps_uncoded_number
+                                    call bios_memory_transfer
+                                    xchg 
+                                    ret 
 
-program_launch:	call display_reset
-				pchl
+bios_rom_disk_status:       mvi a,bios_disk_device_controller_ready_status_bit_mask+bios_disk_device_disk_inserted_status_bit_mask
+                            ret 
 
-hex_editor_help_text2:	.text 	"--    FUNZIONI DISPONIBILI    --"
-						.b $0a, $0d
-						.text 	"DURANTE LA FASE DI SELEZIONE:"
-						.b $0a, $0d
-						.text 	"4 PER SCORRERE A SINISTRA"
-						.b $0a, $0d
-						.text 	"6 PER SCORRERE A DESTRA"
-						.b $0a, $0d
-						.text 	"2 PER SCORRERE IN BASSO"
-						.b $0a, $0d
-						.text 	"8 PER SCORRERE IN ALTO"
-						.b $0a, $0d
-						.text  	"INVIO PER MODIFICARE"
-						.b $0a, $0d
-						.text 	"H PER MOSTRARE LA GUIDA"
-						.b $0a, $0d
-						.text 	"L PER AVVIARE IL PROGRAMMA"
-						.b $0a, $0d
-						.text 	"NELLA FASE DI MODIFICA"
-						.b $0a, $0d
-						.text 	"BCK PER TORNARE INDIETRO"
-						.b $0a, $0d
-						.text  	"INVIO PER SALTARE IL BYTE"
-						.b $0a, $0d
-						.text  	"ESC PER TORNARE ALLA SELEZIONE"
-						.b $0a, $0d
-						.b 0
+bios_rom_disk_format_drive:             lxi h,bios_rom_disk_address_start
+                                        lxi d,bios_rom_disk_address_end 
+bios_rom_disk_format_drive_loop:        mvi m,bios_rom_disk_format_fill_byte
+                                        inx h 
+                                        inx d 
+                                        mov a,e 
+                                        sub l 
+                                        mov a,d 
+                                        sbb h 
+                                        jc bios_rom_disk_format_drive_loop
+                                        ret  
 
-								
-hex_editor_help_text:	.text	"--    GUIDA PER L'UTILIZZO    --"
-						.b $0a, $0d
-						.text 	"L'EDITOR ESADECIMALE RENDE POSSI"
-						.text 	"BILE LA LETTURA DEI BYTES PRESEN"
-						.text 	"TI IN MEMORIA."
-						.b $0a, $0d
-						.TEXT 	"PRIMA SI SELEZIONA IL BYTE CON I"
-						.text 	" TASTI DI SCORRIMENTO, POI SI MO"
-						.text 	"DIFICA IL BYTE DESIDERATO"
-						.b $0a, $0d
-						.b 0
+bios_rom_disk_set_motor:    ret 
 
-start_graphic: 		.b %10000001, %10000011, %10000001, %10000001, %10000000, %10000000, %10000011, %10000000, %10000010, %10000001, %10000010, %10000000, %10000011, $80, $80, $80 
-					.b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
-					.b %10010101, %10001100, %10010001, %10011001, %10000100, %10001000, %10101110, %10100010, %10101010, %10101010, %10010101, %10010000, %10001101, $80, $80, $80 
-					.b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
-					.b %10010000, %10000000, %10010000, %10010000, %10000000, %10000000, %10110000, %10000000, %10100000, %10010000, %10100000, %10010000, %10100000, $80, $80, $80
-					.b 0
-
-start_string:		.b $0a, $0d
-					.text "32K BYTES RAM"
-					.b $0a, $0d
-					.text "512 BYTES VIDEO RAM"
-					.b $0a, $0d
-					.text "AVVIO DELLE RISORSE"
-					.b 0
+BIOS_layer_end:     
+.print "Space left in BIOS layer ->",BIOS_dimension-BIOS_layer_end+BIOS
+.memory "fill", BIOS_layer_end, BIOS_dimension-BIOS_layer_end+BIOS,$00
+.print "BIOS load address ->",BIOS
+.print "All functions built successfully"
