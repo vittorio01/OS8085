@@ -66,11 +66,6 @@ bios_system_start:      call bios_IO_device_system_initialize
                         call bios_disk_device_system_initialize
                         ret 
 
-;bios_avabile_ram_memory restituisce la dimensione della RAM totale utilizzabile dal sistema operativo
-;HL <- dimensione della ram  
-bios_avabile_ram_memory:    lxi h,system_ram_dimension 
-                            ret 
-
 ;funzioni relative alla gestione della bios_device_IO_table 
 
 bios_IO_device_system_initialize:   lxi h,bios_IO_default_handler

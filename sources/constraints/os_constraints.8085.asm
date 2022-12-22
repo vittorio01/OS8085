@@ -20,10 +20,10 @@ Z80_int_address             .equ    $0038
 system_interrupt_space_end  .equ    $0040
 
 ;queste informazioni riguardano la gestione dello spazio nelle varie componenti del sistema (da non modificare se non in fase di sviluppo del sistema)
-MSI_dimension           .equ    5632-system_interrupt_space_end
-FSM_dimension           .equ    6144
+MSI_dimension           .equ    5120-system_interrupt_space_end
+FSM_dimension           .equ    8192
 MMS_dimension           .equ    2048
-BIOS_dimension          .equ    3072 
+BIOS_dimension          .equ    4096
 LIBRARIES_dimension     .equ    1536
 SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
