@@ -832,7 +832,7 @@ display_line_feed_verify        .equ    %00000001
 
 keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
-delay_millis_value				.equ 	78
+delay_millis_value				.equ 	87
 keyboard_insert_delay			.equ 	200
 
 display_reset:      push psw
@@ -860,8 +860,8 @@ display_reset_end:  pop d
 
 
 keyboard_char_in:               in keyboard_input_port
-                                ani keyboard_data_mask
                                 cma 
+                                ani keyboard_data_mask 
                                 push b 
                                 mov c,a 
                                 mvi b,keyboard_insert_delay
@@ -1003,7 +1003,7 @@ display_out_addr_send:	lhld display_pointer_address
 ; A <- stato della console
 bios_console_get_state:                 in keyboard_input_port
 					                    ani keyboard_input_mask
-                                        jnz bios_console_get_state2
+                                        jz bios_console_get_state2
                                         mvi a,bios_IO_console_connected_mask+bios_IO_console_input_byte_ready+bios_IO_console_output_byte_ready
                                         jmp bios_console_get_state_end
 bios_console_get_state2:		        mvi a,bios_IO_console_connected_mask+bios_IO_console_output_byte_ready
