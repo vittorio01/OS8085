@@ -833,7 +833,7 @@ display_line_feed_verify        .equ    %00000001
 keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
 delay_millis_value				.equ 	87
-keyboard_insert_delay			.equ 	200
+keyboard_insert_delay			.equ 	150
 
 display_reset:      push psw
                     push h
