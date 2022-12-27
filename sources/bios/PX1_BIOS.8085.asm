@@ -832,8 +832,8 @@ display_line_feed_verify        .equ    %00000001
 
 keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
-delay_millis_value				.equ 	87
-keyboard_insert_delay			.equ 	150
+delay_millis_value				.equ 	91
+keyboard_insert_delay			.equ 	100
 
 display_reset:      push psw
                     push h
@@ -865,7 +865,7 @@ keyboard_char_in:               in keyboard_input_port
                                 push b 
                                 mov c,a 
                                 mvi b,keyboard_insert_delay
-keyboard_char_in_delay_loop1:   mvi a,delay_millis_value	
+keyboard_char_in_delay_loop1:   mvi a,delay_millis_value	        
 keyboard_char_in_delay_loop2:	dcr a						
                                 jnz keyboard_char_in_delay_loop2	
                                 dcr b 

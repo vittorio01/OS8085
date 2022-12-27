@@ -1945,9 +1945,11 @@ msi_shell_command_prompt_get_command:                   call msi_shell_read_cons
                                                         call msi_shell_ascii_character
                                                         jc msi_shell_command_prompt_character_not_printable
                                                         mov b,a 
-                                                        call msi_shell_send_console_byte
-                                                        mov a,b 
                                                         call msi_shell_push_input_buffer_byte
+                                                        cpi msi_operation_ok
+                                                        jnz msi_shell_command_prompt_get_command
+                                                        mov a,b 
+                                                        call msi_shell_send_console_byte
                                                         jmp msi_shell_command_prompt_get_command
 msi_shell_command_prompt_character_not_printable:       cpi msi_shell_send_command_character 
                                                         jz msi_shell_process_command
