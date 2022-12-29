@@ -804,12 +804,16 @@ bios_device_IO_table:       .text "BTTY"
                             .word keyboard_char_in
                             .word display_char_out
 
+                            .text "UART"
+                            .word uart_initialize
+                            .word uart_get_state
+                            .word uart_set_state
+                            .word uart_read_byte 
+                            .word uart_write_byte 
+
                             ;inserisci qui il vettore 
 bios_device_IO_table_end:                                                                                               
 
-usart_cmd 	                    .equ $27
-usart_data      	            .equ $26
-usart_set	                    .equ $4d
 display_low_port		        .equ $20			
 display_high_port		        .equ $21			
 display_data_port		        .equ $22			
@@ -822,6 +826,9 @@ display_pointer_addition		.equ 	bios_reserved_memory+2
 display_character_number		.equ 	512
 display_character_x_number 		.equ 	32
 display_character_y_number		.equ 	16
+display_character_x_mask        .equ    display_character_x_number-1
+display_character_tab_space     .equ    8
+
 display_character_x_dimension	.equ 	2
 display_character_y_dimension	.equ 	3
 
@@ -924,6 +931,8 @@ display_char_out_next:		pop d
 							jz display_new_line ;display_carriage_return
 							cpi $08
 							jz display_backspace
+                            cpi $09
+                            jz display_tab 
 							jmp display_character_send_end
 display_new_line:			mvi a,display_character_x_number
 							add l
@@ -937,6 +946,29 @@ display_carriage_return:	xra a
 							ana l
 							mov l,a
 							jmp display_character_send_end
+display_tab:                lxi b,display_character_x_mask
+                            mov a,l 
+                            ana c 
+                            mov e,a 
+                            mov a,h 
+                            ana b 
+                            mov d,a 
+display_tap_offset:         mov a,e 
+                            sui display_character_tab_space 
+                            mov a,d 
+                            sbi 0 
+                            jc display_tap_offset_end
+                            mov d,a 
+                            mov a,e 
+                            sui display_character_tab_space 
+                            mov e,a 
+                            jmp display_tap_offset
+display_tap_offset_end:     mov a,e 
+                            ora d  
+                            jnz display_tap_offset_end2
+                            lxi d,display_character_tab_space 
+display_tap_offset_end2:    dad d 
+                            jmp display_character_send_end
 display_backspace:			mvi a, display_background_character
 							call display_out
 							dcx h
@@ -999,6 +1031,8 @@ display_out_addr_send:	lhld display_pointer_address
 						pop h
 						ret
 
+
+
 ;bios_console_output_ready
 ; A <- stato della console
 bios_console_get_state:                 in keyboard_input_port
@@ -1014,6 +1048,58 @@ bios_console_get_state_end:             stc
 
 ;bios_console_set_state (funzione che non ha bisogno di essere implementata)
 bios_console_set_state:                 stc 
+                                        cmc 
+                                        ret 
+
+uart_command_port	                    .equ $27
+uart_data_port       	                .equ $26
+uart_settings_flags 	                .equ $4d
+
+uart_initialize:                        xra a 	
+                                        out uart_command_port		
+                                        out uart_command_port	
+                                        out uart_command_port	
+                                        mvi a,$40
+                                        out uart_command_port	
+                                        mvi a,uart_settings_flags
+                                        out uart_command_port	
+                                        mvi a,$37
+                                        out uart_command_port	
+                                        in uart_data_port 	
+                                        stc 
+                                        cmc 
+                                        ret 
+
+uart_get_state:                         push b
+                                        mvi c,bios_IO_console_connected_mask
+                                        in uart_command_port
+                                        mov b,a 
+                                        ani %00000001 
+                                        jz uart_get_state_next
+                                        mov a,c 
+                                        ori bios_IO_console_output_byte_ready
+                                        mov c,a 
+uart_get_state_next:                    mov a,b
+                                        ani %00000010      
+                                        jz uart_get_state_next2
+                                        mov a,c 
+                                        ori bios_IO_console_input_byte_ready
+                                        mov c,a 
+uart_get_state_next2:                   mov a,c 
+                                        pop b
+                                        stc 
+                                        cmc 
+                                        ret  
+
+uart_set_state:                         stc 
+                                        cmc 
+                                        ret 
+
+uart_read_byte:                         stc 
+                                        cmc 
+                                        ret 
+
+uart_write_byte:                        stc 
                                         cmc 
                                         ret 
 

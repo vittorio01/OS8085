@@ -804,11 +804,7 @@ bios_console_input_read_character:      in $23 ;bios_serial_data_port
 
 ;bios_console_output_ready
 ; A <- stato della console
-bios_console_get_state:                 mvi a,$E0 ;in $30
-                                        stc 
-                                        cmc 
-                                        ret 
-                                        push b
+bios_console_get_state:                 push b
                                         mvi c,bios_IO_console_connected_mask
                                         in bios_serial_command_port
                                         mov b,a 

@@ -1833,9 +1833,12 @@ msi_shell_space_character           .equ $20
 
 msi_input_buffer_overflow                   .equ msi_execution_code_mark+$20 
 
+msi_shell_startup_message:                  .text "Starting EDOS..."
+                                            .b $0d, 0
+                                            
 msi_shell_load_program_error_message        .text "Failed to load program: "
                                             .b 0
-msi_shell_program_load_dimension_message    .text "program too large"
+msi_shell_program_load_dimension_message    .text "Program too large"
                                             .b $0d, 0
 
 msi_shell_error_code_received_message       .text "Program exited with abnormal code: "
@@ -1889,6 +1892,8 @@ msi_shell_startup:                                      push psw
 msi_shell_startup_device_wait:                          call msi_shell_bind_console_device
                                                         cpi msi_operation_ok
                                                         jnz msi_shell_startup_device_wait
+                                                        lxi h,msi_shell_startup_message 
+                                                        call msi_shell_send_string_console
                                                         pop psw 
                                                         ora a 
                                                         jz msi_shell_disk_device_search

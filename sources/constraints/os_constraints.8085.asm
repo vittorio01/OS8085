@@ -44,7 +44,7 @@ reserved_memory_start       .equ SYSTEM_memory_end
 reserved_memory_end         .equ reserved_memory_start+reserved_memory_dimension
 
 ;memoria dedicata alla gestione dello stack (si può ottimizare per rispariare RAM ma non è consigliato)
-max_system_stack_dimension  .equ 128                                                
+max_system_stack_dimension  .equ 256                                                
 stack_memory_start          .equ reserved_memory_end+max_system_stack_dimension
 
 ;----- HIGH RAM -----
