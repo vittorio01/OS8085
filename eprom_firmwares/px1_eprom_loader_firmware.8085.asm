@@ -73,10 +73,14 @@ dma_channel2_address_register	    	.equ $04
 dma_channel2_word_count_register     	.equ $05
 
 dma_reset:	out dma_master_clear
-			mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
+			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m disable
 			out dma_command_register
 			mvi a,%00001011			;set dma channels 0,1,3 mask bit
 			out dma_all_mask_register
+			mvi a,%10001000
+			out dma_mode_register 
+			mvi a,%10000101
+			out dma_mode_register 
 			ret
 
 ;dma_memory_transfer 
@@ -84,11 +88,8 @@ dma_reset:	out dma_master_clear
 ;DE -> indirizzo sorgente 
 ;HL -> indirizzo destinazione 
 
-dma_memory_transfer:	out dma_ff_clear
-						mvi a,%00000000
-						out dma_request_register
-						mvi a,%00001001 
-						out dma_command_register 
+dma_memory_transfer:	dcx b 
+						out dma_ff_clear
 						mov a,c 
 						out dma_channel1_word_count_register
 						mov a,b 
