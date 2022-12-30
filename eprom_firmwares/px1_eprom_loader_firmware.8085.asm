@@ -50,15 +50,60 @@ delay_millis_loop:	        dcr a
 load_system:                lxi h,system_load_address 
                             lxi b,system_dimension 
                             lxi d,system_start 
-load_system_transfer:       mov a,b     
-                            ora c 
-                            jz 0
-                            ldax d 
-                            mov m,a 
-                            dcx b 
-                            inx h 
-                            inx d 
-                            jmp load_system_transfer
+							call dma_reset 
+							call dma_memory_transfer  
+                            jmp system_load_address
+
+dma_status_register		    .equ $08
+dma_command_register	    .equ $08
+dma_request_register	    .equ $09
+dma_single_mask_register	.equ $0a
+dma_mode_register		    .equ $0b
+dma_ff_clear		        .equ $0c
+dma_temporary_register	    .equ $0d
+dma_master_clear		    .equ $0d
+dma_clear_mask_register	    .equ $0e
+dma_all_mask_register	    .equ $0f
+
+dma_channel0_address_register 			.equ $00
+dma_channel0_word_count_register 		.equ $01
+dma_channel1_address_register 			.equ $02
+dma_channel1_word_count_register 		.equ $03
+dma_channel2_address_register	    	.equ $04
+dma_channel2_word_count_register     	.equ $05
+
+dma_reset:	out dma_master_clear
+			mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
+			out dma_command_register
+			mvi a,%00001011			;set dma channels 0,1,3 mask bit
+			out dma_all_mask_register
+			ret
+
+;dma_memory_transfer 
+;BC -> numero di bytes 
+;DE -> indirizzo sorgente 
+;HL -> indirizzo destinazione 
+
+dma_memory_transfer:	out dma_ff_clear
+						mvi a,%00000000
+						out dma_request_register
+						mvi a,%00001001 
+						out dma_command_register 
+						mov a,c 
+						out dma_channel1_word_count_register
+						mov a,b 
+						out dma_channel1_word_count_register
+						mov a,e 
+						out dma_channel0_address_register
+						mov a,d  
+						out dma_channel0_address_register
+						mov a,l 
+						out dma_channel1_address_register
+						mov a,h 
+						out dma_channel1_address_register
+						mvi a,%00000100
+						out dma_request_register
+						ret 
 
 display_reset:      push psw
                     push h

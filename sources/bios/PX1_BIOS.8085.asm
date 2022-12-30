@@ -821,7 +821,6 @@ display_status_port 	        .equ $20
 keyboard_input_port		        .equ $21		
 
 display_pointer_address     	.equ    bios_reserved_memory
-display_pointer_addition		.equ 	bios_reserved_memory+2
 
 display_character_number		.equ 	512
 display_character_x_number 		.equ 	32
@@ -847,8 +846,6 @@ display_reset:      push psw
                     push d
                     lxi h,0
 					shld display_pointer_address
-					xra a
-					sta display_pointer_addition
                     lxi d,display_memory_dimension
                     shld display_pointer_address
 display_reset_loop: mvi a,display_background_character
@@ -899,9 +896,9 @@ display_lines_shift_up:		push b
 							lxi b,display_character_number-display_character_x_number
 							lxi d,display_character_x_number
 display_line_shift_up_loop:	xchg 
-							call display_in
+							call display_in_nv 
 							xchg 
-							call display_out		
+							call display_out_nv 	
 							dcx b
 							inx h
 							inx d
@@ -928,7 +925,7 @@ display_char_out_next:		pop d
 							cpi $0a 
 							jz display_new_line
 							cpi $0d
-							jz display_new_line ;display_carriage_return
+							jz display_carriage_return
 							cpi $08
 							jz display_backspace
                             cpi $09
@@ -953,7 +950,7 @@ display_tab:                lxi b,display_character_x_mask
                             mov a,h 
                             ana b 
                             mov d,a 
-display_tap_offset:         mov a,e 
+display_tab_offset:         mov a,e 
                             sui display_character_tab_space 
                             mov a,d 
                             sbi 0 
@@ -962,7 +959,7 @@ display_tap_offset:         mov a,e
                             mov a,e 
                             sui display_character_tab_space 
                             mov e,a 
-                            jmp display_tap_offset
+                            jmp display_tab_offset
 display_tap_offset_end:     mov a,e 
                             ora d  
                             jnz display_tap_offset_end2
