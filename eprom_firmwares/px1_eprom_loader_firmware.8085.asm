@@ -22,7 +22,7 @@ display_line_feed_verify        .equ    %00000001
 
 
 delay_millis_value				.equ 	78
-bios_graphic_delay              .equ    2000
+bios_graphic_delay              .equ    1000
 
 display_low_port		    .equ $20			
 display_high_port		    .equ $21			
@@ -73,13 +73,13 @@ dma_channel2_address_register	    	.equ $04
 dma_channel2_word_count_register     	.equ $05
 
 dma_reset:	out dma_master_clear
-			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m disable
+			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m enable
 			out dma_command_register
 			mvi a,%00001011			;set dma channels 0,1,3 mask bit
 			out dma_all_mask_register
-			mvi a,%10001000
+			mvi a,%00000000
 			out dma_mode_register 
-			mvi a,%10000101
+			mvi a,%00000001
 			out dma_mode_register 
 			ret
 
@@ -289,5 +289,5 @@ start_string:		.b $0a, $0d
 					.b $0a, $0d
 					.text "512 BYTES VIDEO RAM"
 					.b $0a, $0d
-					.text "AVVIO DELLE RISORSE"
+					.text "AVVIO DELL SISTEMA"
 					.b 0
