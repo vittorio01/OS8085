@@ -29,9 +29,27 @@ display_high_port		    .equ $21
 display_data_port		    .equ $22			
 display_status_port 	    .equ $20			
 
+dma_status_register		    .equ $08
+dma_command_register	    .equ $08
+dma_request_register	    .equ $09
+dma_single_mask_register	.equ $0a
+dma_mode_register		    .equ $0b
+dma_ff_clear		        .equ $0c
+dma_temporary_register	    .equ $0d
+dma_master_clear		    .equ $0d
+dma_clear_mask_register	    .equ $0e
+dma_all_mask_register	    .equ $0f
+
+dma_channel0_address_register 			.equ $00
+dma_channel0_word_count_register 		.equ $01
+dma_channel1_address_register 			.equ $02
+dma_channel1_word_count_register 		.equ $03
+dma_channel2_address_register	    	.equ $04
+dma_channel2_word_count_register     	.equ $05
 
 bios_start:     		    .org start_offset 
                             jmp bios_graphic_print
+
 bios_graphic_print:         lxi sp,stack_pointer
 						    call display_reset
 						
@@ -52,25 +70,64 @@ load_system:                lxi h,system_load_address
                             lxi d,system_start 
 							call dma_reset 
 							call dma_memory_transfer  
+							mvi a,$20 
+							call display_char_out
+							call print_address 
+							mvi a,$20 
+							call display_char_out
+							mov c,e 
+							mov b,d 
+							call print_address 
+							mvi a,$20 
+							call display_char_out
+							mov c,l 
+							mov b,h 
+							call print_address 
+							in dma_status_register
+							mvi a,$20 
+							call display_char_out
+							call print_byte 
                             jmp system_load_address
 
-dma_status_register		    .equ $08
-dma_command_register	    .equ $08
-dma_request_register	    .equ $09
-dma_single_mask_register	.equ $0a
-dma_mode_register		    .equ $0b
-dma_ff_clear		        .equ $0c
-dma_temporary_register	    .equ $0d
-dma_master_clear		    .equ $0d
-dma_clear_mask_register	    .equ $0e
-dma_all_mask_register	    .equ $0f
+print_byte:					push psw 
+							rar 
+							rar 
+							rar 
+							rar 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out
+							pop psw 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out 
+							ret 
 
-dma_channel0_address_register 			.equ $00
-dma_channel0_word_count_register 		.equ $01
-dma_channel1_address_register 			.equ $02
-dma_channel1_word_count_register 		.equ $03
-dma_channel2_address_register	    	.equ $04
-dma_channel2_word_count_register     	.equ $05
+print_address:				mov a,b 
+							rar 
+							rar 
+							rar 
+							rar 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out
+							mov a,b 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out 
+							mov a,c 
+							rar 
+							rar 
+							rar 
+							rar 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out
+							mov a,c 
+							ani $0f 
+							call hex_to_ascii
+							call display_char_out 
+							ret 
 
 dma_reset:	out dma_master_clear
 			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m enable
@@ -94,16 +151,34 @@ dma_memory_transfer:	dcx b
 						out dma_channel1_word_count_register
 						mov a,b 
 						out dma_channel1_word_count_register
+						out dma_ff_clear
 						mov a,e 
 						out dma_channel0_address_register
 						mov a,d  
 						out dma_channel0_address_register
+						out dma_ff_clear
 						mov a,l 
 						out dma_channel1_address_register
 						mov a,h 
 						out dma_channel1_address_register
 						mvi a,%00000100
 						out dma_request_register
+						out dma_ff_clear
+						in dma_channel1_word_count_register 
+						mov c,a 
+						in dma_channel1_word_count_register
+						out dma_ff_clear
+						mov b,a 
+						in dma_channel0_address_register
+						mov e,a 
+						in dma_channel0_address_register
+						out dma_ff_clear
+						mov d,a 
+						in dma_channel1_address_register
+						mov l,a 
+						in dma_channel1_address_register
+						mov h,a 
+						inx b 
 						ret 
 
 display_reset:      push psw
@@ -255,6 +330,37 @@ display_out_addr_send:	lhld display_pointer_address
 						pop h
 						ret
 
+ascii_hex_conv: 	.b $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $41, $42, $43, $44, $45, $46
+
+
+ascii_to_hex:	ani $4f	
+				push h
+				push d 
+				lxi h,ascii_hex_conv
+ascii_to_hex_2:	cmp m
+				jz ascii_to_hex_e
+				inx h
+				jmp ascii_to_hex_2
+ascii_to_hex_e:	lxi d,ascii_hex_conv 
+				mov a,l
+				sub e 
+				pop d 
+				pop h
+				ret
+		
+
+hex_to_ascii:		push h
+					ani $0f 
+					lxi h,ascii_hex_conv 	
+					add l 
+					mov l,a 
+					mov a,h 
+					aci 0 
+					mov h,a 
+					mov a,m 
+					pop h
+					ret
+
 string_out:		push psw		
 string_out_1:	mov a,m			
     			ora a
@@ -289,5 +395,8 @@ start_string:		.b $0a, $0d
 					.b $0a, $0d
 					.text "512 BYTES VIDEO RAM"
 					.b $0a, $0d
-					.text "AVVIO DELL SISTEMA"
-					.b 0
+					.text "STARTING SYSTEM"
+					.b $0a, $0d, 0
+
+dma_debug_string:   .text "DMA TRANSFER VALUES:"
+					.b $0a, $0d, 0 
