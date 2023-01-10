@@ -22,7 +22,7 @@ display_line_feed_verify        .equ    %00000001
 
 
 delay_millis_value				.equ 	78
-bios_graphic_delay              .equ    1000
+bios_graphic_delay              .equ    2000
 
 display_low_port		    .equ $20			
 display_high_port		    .equ $21			
@@ -57,7 +57,12 @@ bios_graphic_print:         lxi sp,stack_pointer
 						    call graphic_out
 						    lxi h,start_string
 						    call string_out
-						    lxi h,bios_graphic_delay		    
+							call dma_reset 
+load_system:                lxi h,system_load_address 
+                            lxi b,system_dimension 
+                            lxi d,system_start 
+							call dma_memory_transfer  
+							lxi h,bios_graphic_delay		    
 delay_millis:		        mvi a,delay_millis_value	
 delay_millis_loop:	        dcr a						
 					        jnz delay_millis_loop							
@@ -65,11 +70,6 @@ delay_millis_loop:	        dcr a
 						    mov a,l
 						    ora h
 						    jnz delay_millis
-load_system:                lxi h,system_load_address 
-                            lxi b,system_dimension 
-                            lxi d,system_start 
-							call dma_reset 
-							call dma_memory_transfer  
 							mvi a,$20 
 							call display_char_out
 							call print_address 
@@ -83,9 +83,9 @@ load_system:                lxi h,system_load_address
 							mov c,l 
 							mov b,h 
 							call print_address 
-							in dma_status_register
 							mvi a,$20 
 							call display_char_out
+							in dma_status_register
 							call print_byte 
                             jmp system_load_address
 
@@ -132,7 +132,7 @@ print_address:				mov a,b
 dma_reset:	out dma_master_clear
 			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m enable
 			out dma_command_register
-			mvi a,%00001011			;set dma channels 0,1,3 mask bit
+			mvi a,%00001111			;set dma channels 0,1,3 mask bit
 			out dma_all_mask_register
 			mvi a,%00000000
 			out dma_mode_register 
