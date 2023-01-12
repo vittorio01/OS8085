@@ -130,6 +130,14 @@ print_address:				mov a,b
 							ret 
 
 dma_reset:	out dma_master_clear
+			mvi a,0 
+			out dma_request_register
+			mvi a,1 
+			out dma_request_register 
+			mvi a,2 
+			out dma_request_register 
+			mvi a,3 
+			out dma_request_register
 			mvi a,%00001001			;dack active low, drq active high, compressed timing, m-to-m enable
 			out dma_command_register
 			mvi a,%00001111			;set dma channels 0,1,3 mask bit
