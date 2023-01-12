@@ -61,7 +61,7 @@ bios_graphic_print:         lxi sp,stack_pointer
 load_system:                lxi h,system_load_address 
                             lxi b,system_dimension 
                             lxi d,system_start 
-							call dma_memory_transfer  
+							call cpu_memory_transfer  
 							lxi h,bios_graphic_delay		    
 delay_millis:		        mvi a,delay_millis_value	
 delay_millis_loop:	        dcr a						
@@ -147,6 +147,16 @@ dma_reset:	out dma_master_clear
 			mvi a,%10000101
 			out dma_mode_register 
 			ret
+
+cpu_memory_transfer:		mov a,c 
+							ora b 
+							rz
+							ldax d 
+							mov m,a 
+							inx d 
+							inx h 
+							dcx b
+							jmp cpu_memory_transfer
 
 ;dma_memory_transfer 
 ;BC -> numero di bytes 
