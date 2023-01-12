@@ -22,7 +22,7 @@ display_line_feed_verify        .equ    %00000001
 
 
 delay_millis_value				.equ 	78
-bios_graphic_delay              .equ    2000
+bios_graphic_delay              .equ    1000
 
 display_low_port		    .equ $20			
 display_high_port		    .equ $21			
@@ -134,9 +134,9 @@ dma_reset:	out dma_master_clear
 			out dma_command_register
 			mvi a,%00001111			;set dma channels 0,1,3 mask bit
 			out dma_all_mask_register
-			mvi a,%00000000
+			mvi a,%10001000
 			out dma_mode_register 
-			mvi a,%00000001
+			mvi a,%10000101
 			out dma_mode_register 
 			ret
 
