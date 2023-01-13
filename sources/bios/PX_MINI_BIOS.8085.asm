@@ -789,12 +789,12 @@ bios_device_IO_table_end:
 
 bios_serial_data_port                       .equ $22 
 bios_serial_command_port                    .equ $21
-bios_serial_port_settins_flags              .equ $3B 
+bios_serial_port_settings_flags             .equ %01111101
 
 bios_timer_setup_port                       .equ %00000111
 bios_serial_timer_port                      .equ %00000100
 bios_serial_timer_value                     .equ 8
-bios_timer_settings                         .equ %00010110
+bios_timer_settings                         .equ %01000110 ;1 stop bit, parity disable, 8 bits, x1 divide
 
 bios_console_output_write_character:    out bios_serial_data_port
                                         stc 
@@ -802,7 +802,7 @@ bios_console_output_write_character:    out bios_serial_data_port
                                         ret 
 
 ; A <- carattere ASCII in ingresso
-bios_console_input_read_character:      in $23 ;bios_serial_data_port
+bios_console_input_read_character:      in bios_serial_data_port
                                         stc 
                                         cmc 
                                         ret 
@@ -842,7 +842,7 @@ bios_console_initialize:                mvi a,bios_timer_settings
                                         out bios_serial_command_port	
                                         mvi a,$40
                                         out bios_serial_command_port	
-                                        mvi a,bios_serial_port_settins_flags
+                                        mvi a,bios_serial_port_settings_flags
                                         out bios_serial_command_port	
                                         mvi a,$37
                                         out bios_serial_command_port	
