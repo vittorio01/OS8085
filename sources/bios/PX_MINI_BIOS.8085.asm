@@ -791,6 +791,11 @@ bios_serial_data_port                       .equ $22
 bios_serial_command_port                    .equ $21
 bios_serial_port_settins_flags              .equ $3B 
 
+bios_timer_setup_port                       .equ %00000111
+bios_serial_timer_port                      .equ %00000100
+bios_serial_timer_value                     .equ 8
+bios_timer_settings                         .equ %00010110
+
 bios_console_output_write_character:    out bios_serial_data_port
                                         stc 
                                         cmc 
@@ -827,9 +832,10 @@ bios_console_get_state_next2:           mov a,c
 
 ;viene già inserito un dispositivo di tipo BTTY da implementare tramite le seguenti 5 funzioni:
 ;bios_console_initialize inizializza la conaole 
-bios_console_initialize:                stc 
-                                        cmc 
-                                        ret 
+bios_console_initialize:                mvi a,bios_timer_settings
+                                        out bios_timer_setup_port
+                                        mvi a,bios_serial_timer_value
+                                        out bios_serial_timer_port
                                         xra a 	
                                         out bios_serial_command_port		
                                         out bios_serial_command_port	
@@ -908,11 +914,11 @@ bios_device_disk_table:         .word bios_rom_disk_initialize
                                 ;inserisci i dispositivi qui 
 bios_device_disk_table_end: 
 
-bios_rom_disk_address_start          .equ $8000
+bios_rom_disk_address_start          .equ $8800
 bios_rom_disk_address_end            .equ $ffff
 
 bios_rom_disk_heads_number           .equ 1
-bios_rom_disk_tph_number             .equ 16 
+bios_rom_disk_tph_number             .equ 15
 bios_rom_disk_spt_number             .equ 8
 bios_rom_disk_bps_coded_number       .equ 2 
 bios_rom_disk_bps_uncoded_number     .equ 256
