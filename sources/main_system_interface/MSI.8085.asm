@@ -2429,6 +2429,7 @@ msi_shell_dev_command:          ora a
                                 ;jnz msi_shell_dev_command_specific
                                 lxi h,msi_shell_dev_header_string
                                 call msi_shell_send_string_console
+                                jmp msi_shell_command_prompt_initialize
                                 mvi b,0 
 msi_shell_dev_command_loop:     mov a,b 
                                 call bios_get_IO_device_informations

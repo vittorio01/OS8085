@@ -925,7 +925,7 @@ display_char_out_next:		pop d
 							cpi $0a 
 							jz display_new_line
 							cpi $0d
-							jz display_carriage_return
+							jz display_new_line ;display_carriage_return
 							cpi $08
 							jz display_backspace
                             cpi $09
