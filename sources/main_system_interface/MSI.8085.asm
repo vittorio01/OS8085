@@ -1828,26 +1828,26 @@ msi_shell_unknown_disk_character    .equ $3F
 msi_shell_first_disk_id             .equ $41 
 msi_shell_last_disk_id              .equ $5b 
 msi_shell_new_line_character        .equ $0a 
-msi_shell_send_command_character    .equ $0d 
+msi_shell_carriage_return_character .equ $0d 
 msi_shell_backspace_character       .equ $08
 msi_shell_space_character           .equ $20 
 
 msi_input_buffer_overflow                   .equ msi_execution_code_mark+$20 
 
 msi_shell_startup_message:                  .text "Starting EDOS..."
-                                            .b $0a, 0
+                                            .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0
                                             
 msi_shell_load_program_error_message        .text "Failed to load program: "
                                             .b 0
 msi_shell_program_load_dimension_message    .text "Program too large"
-                                            .b $0a, 0
+                                            .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0
 
 msi_shell_error_code_received_message       .text "Program exited with abnormal code: "
                                             .b 0
 msi_shell_arrow:                            .text ":/> "
                                             .b 0
 msi_shell_command_not_found_message         .text "Command not found"
-                                            .b $0a, 0
+                                            .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0
 
 msi_shell_basic_console_IO_type             .text "BTTY"
 
@@ -1918,6 +1918,8 @@ msi_shell_abnormal_code_unknown_error:                  mov b,a
                                                         call msi_shell_send_console_byte_number 
 msi_shell_disk_device_search:                           mvi a,msi_shell_new_line_character 
                                                         call msi_shell_send_console_byte
+                                                        mvi a,msi_shell_carriage_return_character 
+                                                        call msi_shell_send_console_byte
                                                         call msi_shell_create_input_buffer
                                                         mvi b,msi_shell_first_disk_id
 msi_shell_disk_device_search_loop:                      mov a,b 
@@ -1957,7 +1959,7 @@ msi_shell_command_prompt_get_command:                   call msi_shell_read_cons
                                                         mov a,b 
                                                         call msi_shell_send_console_byte
                                                         jmp msi_shell_command_prompt_get_command
-msi_shell_command_prompt_character_not_printable:       cpi msi_shell_send_command_character 
+msi_shell_command_prompt_character_not_printable:       cpi msi_shell_carriage_return_character
                                                         jz msi_shell_process_command
                                                         cpi msi_shell_backspace_character 
                                                         jnz msi_shell_command_prompt_get_command
@@ -2087,8 +2089,10 @@ msi_shell_process_command_program_load_error2:          mov b,a
                                                         call msi_shell_send_string_console
                                                         mov a,b 
                                                         call msi_shell_send_console_byte_number
-                                                        mvi a,$0d 
+                                                        mvi a,msi_shell_carriage_return_character 
                                                         call msi_shell_send_console_byte
+                                                        mvi a,msi_shell_new_line_character 
+                                                        call msi_shell_send_console_byte 
                                                         jmp msi_shell_command_prompt_initialize
 msi_shell_process_command_program_not_found:            lxi h,msi_shell_command_not_found_message 
                                                         call msi_shell_send_string_console 
@@ -2358,10 +2362,10 @@ msi_shell_ascii_upper_case:         cpi $61
 msi_system_version_message                  .text "EDOS VER "
                                             .b 0 
 
-msi_shell_dev_header_string                 .text "port"
+msi_shell_dev_header_string                 .text "PORT"
                                             .b 9
-                                            .text "device"
-                                            .b $0a, 0 
+                                            .text "DEVICE"
+                                            .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0 
 
 msi_shell_dev_argument_error                .text "argument format error"
                                             .b 0
@@ -2392,7 +2396,9 @@ msi_shell_ver_command:      lxi h,msi_system_version_message
                             mvi a,current_system_version
                             ani $0f 
                             call msi_shell_send_console_byte_number
-                            mvi a,$0d 
+                            mvi a,msi_shell_carriage_return_character 
+                            call msi_shell_send_console_byte
+                            mvi a,msi_shell_new_line_character 
                             call msi_shell_send_console_byte
                             jmp msi_shell_command_prompt_initialize
                             
@@ -2419,8 +2425,10 @@ msi_shell_echo_command_print:   call mms_read_selected_data_segment_byte
                                 call msi_shell_send_console_byte
                                 inx h 
                                 jmp msi_shell_echo_command_print
-msi_shell_echo_command_end:     mvi a,$0d 
+msi_shell_echo_command_end:     mvi a,msi_shell_carriage_return_character 
                                 call msi_shell_send_console_byte
+                                mvi a,msi_shell_new_line_character 
+                                call msi_shell_send_console_byte 
                                 jmp msi_shell_command_prompt_initialize
 
 msi_shell_cd_command:           
@@ -2429,7 +2437,6 @@ msi_shell_dev_command:          ora a
                                 ;jnz msi_shell_dev_command_specific
                                 lxi h,msi_shell_dev_header_string
                                 call msi_shell_send_string_console
-                                jmp msi_shell_command_prompt_initialize
                                 mvi b,0 
 msi_shell_dev_command_loop:     mov a,b 
                                 call bios_get_IO_device_informations
@@ -2447,12 +2454,16 @@ msi_shell_dev_command_println2: mov a,m
                                 inx h 
                                 dcr c 
                                 jnz msi_shell_dev_command_println2
-                                mvi a,$0d 
+                                mvi a,msi_shell_carriage_return_character 
                                 call msi_shell_send_console_byte
+                                mvi a,msi_shell_carriage_return_character 
+                                call msi_shell_send_console_byte 
                                 inr b 
                                 jmp msi_shell_dev_command_loop 
-msi_shell_dev_command_end:      mvi a,$0d 
+msi_shell_dev_command_end:      mvi a,msi_shell_carriage_return_character 
                                 call msi_shell_send_console_byte
+                                mvi a,msi_shell_carriage_return_character 
+                                call msi_shell_send_console_byte 
                                 jmp msi_shell_command_prompt_initialize
 msi_shell_con_command:
 

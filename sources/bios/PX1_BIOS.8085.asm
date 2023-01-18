@@ -925,7 +925,7 @@ display_char_out_next:		pop d
 							cpi $0a 
 							jz display_new_line
 							cpi $0d
-							jz display_new_line ;display_carriage_return
+							jz display_carriage_return
 							cpi $08
 							jz display_backspace
                             cpi $09
@@ -937,7 +937,7 @@ display_new_line:			mvi a,display_character_x_number
 							mov a,h
 							aci 0
 							mov h,a
-							;jmp display_character_send_end
+							jmp display_character_send_end
 display_carriage_return:	xra a
 							sui display_character_x_number
 							ana l
