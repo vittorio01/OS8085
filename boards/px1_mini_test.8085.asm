@@ -7,7 +7,7 @@ timer_counter1      .equ %00000101
 timer_control       .equ %00000111
 usart_data          .equ %00000000
 usart_control       .equ %00000001
-serial_clock_divide .equ 8
+serial_clock_divide .equ 13
 timer_counter0_byte .equ %00010110      ;select counter 0 - lsb only - mode 3 - binary count
 usart_set_byte      .equ %01001101      ; 1 bit stop - no party - 8 bit lenght - divide by x1
 
