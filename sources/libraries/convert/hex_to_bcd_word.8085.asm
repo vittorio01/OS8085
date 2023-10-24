@@ -4,13 +4,15 @@
 ;unsigned_convert_hex_bcd_word converte un numero esadecimale a 16 bit in bcd 
 ;BC -> numero da convertire 
 ;SP -> [numero in BCD (3 bytes)]
-unsigned_convert_hex_bcd_word:          dcx sp 
+unsigned_convert_hex_bcd_word:          pop psw 
                                         dcx sp 
                                         dcx sp 
+                                        dcx sp 
+                                        push psw 
                                         push h 
                                         push d 
                                         push b 
-                                        lxi h,6
+                                        lxi h,8
                                         dad sp 
                                         mvi m,0 
                                         inx h 
@@ -18,7 +20,7 @@ unsigned_convert_hex_bcd_word:          dcx sp
                                         inx h 
                                         mvi m,0 
                                         dcx h 
-                                        dcx h 
+                                        dcx h
 unsigned_convert_hex_bcd_word_loop:     mov a,b 
                                         ora a 
                                         jnz unsigned_convert_hex_bcd_word_loop2

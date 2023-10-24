@@ -213,11 +213,13 @@ msi_shell_program_extension_dimension       .equ 4
 
 ;msi_system_start si occupa di eseguire il warm reset
 msi_system_start:                   lxi sp,stack_memory_start
+                                    
                                     call bios_system_start 
                                     call mms_high_memory_initialize 
                                     call fsm_init 
                                     mvi a,0 
                                     sta msi_current_program_flags
+                                    
                                     jmp msi_shell_startup 
                                      
 
@@ -1834,7 +1836,7 @@ msi_shell_space_character           .equ $20
 
 msi_input_buffer_overflow                   .equ msi_execution_code_mark+$20 
 
-msi_shell_startup_message:                  .text "Starting EDOS..."
+msi_shell_startup_message:                  .text "EDOS v1.0 by V.P."
                                             .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0
                                             
 msi_shell_load_program_error_message        .text "Failed to load program: "
@@ -1889,6 +1891,7 @@ msi_shell_command_list_start    .text "CP"
 msi_shell_command_list_end:
 
 msi_shell_startup:                                      push psw 
+                                                    
                                                         call msi_shell_initialize_all_console_devices
 msi_shell_startup_device_wait:                          call msi_shell_bind_console_device
                                                         cpi msi_operation_ok
@@ -2252,6 +2255,61 @@ msi_shell_send_console_byte_number_next2:   mov a,c
 msi_shell_send_console_byte_number_end:     pop b 
                                             ret 
 
+;msi_shell_send_console_byte_number converte il byte in BCD e lo invia alla console 
+;BC -> indirizzo da convertire
+;A <- esito dell'operazione 
+
+msi_shell_send_console_address_number:          push b 
+                                                push d 
+                                                push h
+                                                call unsigned_convert_hex_bcd_word
+                                                
+                                                lxi h,2
+                                                dad sp 
+                                                mvi e,3 
+                                                mvi d,0
+msi_shell_send_console_address_number_print:    mov a,m 
+                                                rar 
+                                                rar 
+                                                rar 
+                                                rar 
+                                                ani $0f 
+                                                jnz msi_shell_send_console_address_number_print4
+                                                mov b,a 
+                                                mov a,d 
+                                                ora a 
+                                                jz msi_shell_send_console_address_number_print2
+                                                mov a,b 
+msi_shell_send_console_address_number_print4:   mvi d,$ff
+                                                adi $30 
+                                                call msi_shell_send_console_byte
+                                                cpi msi_operation_ok 
+                                                jnz msi_shell_send_console_address_number_end
+msi_shell_send_console_address_number_print2:   mov a,m 
+                                                ani $0f 
+                                                jnz msi_shell_send_console_address_number_print5
+                                                mov b,a 
+                                                mov a,d 
+                                                ora a 
+                                                jz msi_shell_send_console_address_number_print3
+                                                mov a,b
+msi_shell_send_console_address_number_print5:   mvi d,$ff
+                                                adi $30 
+                                                call msi_shell_send_console_byte
+                                                cpi msi_operation_ok 
+                                                jnz msi_shell_send_console_address_number_end
+msi_shell_send_console_address_number_print3:   dcx h 
+                                                dcr e
+                                                jnz msi_shell_send_console_address_number_print
+                                                mvi a,msi_operation_ok
+msi_shell_send_console_address_number_end:      inx sp 
+                                                inx sp 
+                                                inx sp 
+                                                pop h 
+                                                pop d 
+                                                pop b 
+                                                ret 
+
 ;msi_shell_send_string_console stampa la stringa desiderata
 ;HL -> puntatore alla stringa 
 msi_shell_send_string_console:          push h 
@@ -2362,13 +2420,32 @@ msi_shell_ascii_upper_case:         cpi $61
 msi_system_version_message                  .text "EDOS VER "
                                             .b 0 
 
-msi_shell_dev_header_string                 .text "PORT"
-                                            .b 9
-                                            .text "DEVICE"
+msi_shell_dev_header_string                 .text "PORT     DEVICE"
                                             .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0 
 
-msi_shell_dev_argument_error                .text "argument format error"
+msi_shell_dev_tab_space                     .text "      "
                                             .b 0
+
+msi_shell_dev_argument_error                .text "Argument format error"
+                                            .b 0
+
+msi_shell_mem_installed_string:             .text "RAM installed: "
+                                            .b 0
+
+msi_shell_mem_available_string:             .text "Space available: "
+                                            .b 0
+
+msi_shell_mem_system_string:                .text "Space reserved: "
+                                            .b 0
+
+msi_shell_disk_argument_error:              .text "Argument format error"
+                                            .b 0
+
+msi_shell_disk_not_found:                   .text "Disk not found"
+                                            .b 0
+
+msi_shell_disk_command_not_formatted_string:    .text "not formatted"
+                                                .b 0
 
 msi_shell_cp_command:
 
@@ -2376,11 +2453,106 @@ msi_shell_del_command:
 
 msi_shell_rm_command:
 
-msi_shell_mem_command:
+
 
 msi_shell_ls_command:
  
-msi_shell_disk_command:
+msi_shell_disk_command:                     ora a 
+                                            jz msi_shell_disk_command_specific 
+                                            mvi a,"A"
+                                            mov b,a 
+msi_shell_disk_command_list:                mov a,b 
+                                            call fsm_select_disk
+                                            cpi fsm_device_not_found
+                                            jz msi_shell_disk_command_end 
+                                            cpi fsm_operation_ok
+                                            jz msi_shell_disk_command_list_formatted 
+                                            cpi fsm_unknown_format_type
+                                            jz msi_shell_disk_command_list_not_formatted
+msi_shell_disk_command_list_formatted:      mov a,b 
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            call fsm_disk_get_name 
+                                            lxi h,0 
+                                            dad sp 
+                                            call msi_shell_send_string_console
+msi_shell_disk_command_lost_formatted2:     inx h
+                                            mov a,m 
+                                            ora a 
+                                            jnz msi_shell_disk_command_lost_formatted2
+                                            inx h 
+                                            sphl 
+                                            mvi a,msi_shell_carriage_return_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_new_line_character
+                                            call msi_shell_send_console_byte 
+                                            inr b
+                                            jmp msi_shell_disk_command_list
+msi_shell_disk_command_list_not_formatted:  mov a,b 
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_space_character
+                                            call msi_shell_send_console_byte 
+                                            lxi h,msi_shell_disk_command_not_formatted_string 
+                                            call msi_shell_send_string_console
+                                            mvi a,msi_shell_carriage_return_character
+                                            call msi_shell_send_console_byte 
+                                            mvi a,msi_shell_new_line_character
+                                            call msi_shell_send_console_byte 
+                                            inr b
+                                            jmp msi_shell_disk_command_list
+
+msi_shell_disk_command_end:                 lda msi_shell_default_disk 
+                                            call fsm_select_disk 
+                                            jmp msi_shell_command_prompt_initialize
+
+msi_shell_disk_command_specific:            jmp msi_shell_command_prompt_initialize
+
+
+
+msi_shell_mem_command:      lxi h,msi_shell_mem_installed_string
+                            call msi_shell_send_string_console
+                            call bios_avabile_ram_memory
+                            mov c,l 
+                            mov b,h 
+                            call msi_shell_send_console_address_number
+                            mvi a,msi_shell_carriage_return_character
+                            call msi_shell_send_console_byte
+                            mvi a,msi_shell_new_line_character
+                            call msi_shell_send_console_byte
+
+                            lxi h,msi_shell_mem_available_string
+                            call msi_shell_send_string_console
+                            call mms_free_high_ram_bytes
+                            mov c,l 
+                            mov b,h 
+                            call msi_shell_send_console_address_number
+                            mvi a,msi_shell_carriage_return_character
+                            call msi_shell_send_console_byte
+                            mvi a,msi_shell_new_line_character
+                            call msi_shell_send_console_byte
+
+                            lxi h,msi_shell_mem_system_string
+                            call msi_shell_send_string_console
+                            lxi b,high_memory_start
+                            call msi_shell_send_console_address_number
+                            mvi a,msi_shell_carriage_return_character
+                            call msi_shell_send_console_byte
+                            mvi a,msi_shell_new_line_character
+                            call msi_shell_send_console_byte
+
+                            jmp msi_shell_command_prompt_initialize
+                            
+                            
+
 
 msi_shell_ver_command:      lxi h,msi_system_version_message 
                             call msi_shell_send_string_console
@@ -2433,38 +2605,52 @@ msi_shell_echo_command_end:     mvi a,msi_shell_carriage_return_character
 
 msi_shell_cd_command:           
 
-msi_shell_dev_command:          ora a 
-                                ;jnz msi_shell_dev_command_specific
-                                lxi h,msi_shell_dev_header_string
-                                call msi_shell_send_string_console
-                                mvi b,0 
-msi_shell_dev_command_loop:     mov a,b 
-                                call bios_get_IO_device_informations
-                                cpi bios_IO_device_not_found
-                                jz msi_shell_dev_command_end
-                                lxi h,0 
-                                dad sp 
-                                mvi c,4 
-msi_shell_dev_command_println:  mov a,b 
-                                call msi_shell_send_console_byte_number
-                                mvi a,$09 
-                                call msi_shell_send_console_byte 
-msi_shell_dev_command_println2: mov a,m 
-                                call msi_shell_send_console_byte
-                                inx h 
-                                dcr c 
-                                jnz msi_shell_dev_command_println2
-                                mvi a,msi_shell_carriage_return_character 
-                                call msi_shell_send_console_byte
-                                mvi a,msi_shell_carriage_return_character 
-                                call msi_shell_send_console_byte 
-                                inr b 
-                                jmp msi_shell_dev_command_loop 
-msi_shell_dev_command_end:      mvi a,msi_shell_carriage_return_character 
-                                call msi_shell_send_console_byte
-                                mvi a,msi_shell_carriage_return_character 
-                                call msi_shell_send_console_byte 
-                                jmp msi_shell_command_prompt_initialize
+msi_shell_dev_command:              ora a 
+                                    ;jnz msi_shell_dev_command_specific
+                                    lxi h,msi_shell_dev_header_string
+                                    call msi_shell_send_string_console
+                                    mvi b,0 
+msi_shell_dev_command_loop:         mov a,b 
+                                    call bios_get_IO_device_informations
+                                    cpi bios_IO_device_not_found
+                                    jz msi_shell_dev_command_end
+                                    lxi h,0 
+                                    dad sp 
+                                    mvi c,4 
+msi_shell_dev_command_println:      mov a,b 
+                                    call msi_shell_send_console_byte_number
+                                    mov a,b 
+                                    cpi 10
+                                    jnc msi_shell_dev_command_println_tab
+                                    mvi a,msi_shell_space_character
+                                    call msi_shell_send_console_byte 
+msi_shell_dev_command_println_tab:  mov a,b 
+                                    cpi 100
+                                    jnc msi_shell_dev_command_println_tab2
+                                    mvi a,msi_shell_space_character
+                                    call msi_shell_send_console_byte 
+msi_shell_dev_command_println_tab2: push h 
+                                    lxi h,msi_shell_dev_tab_space
+                                    call msi_shell_send_string_console
+                                    pop h 
+msi_shell_dev_command_println2:     mov a,m 
+                                    call msi_shell_send_console_byte
+                                    inx h 
+                                    dcr c 
+                                    jnz msi_shell_dev_command_println2
+                                    mvi a,msi_shell_carriage_return_character 
+                                    call msi_shell_send_console_byte
+                                    mvi a,msi_shell_new_line_character
+                                    call msi_shell_send_console_byte 
+                                    inr b 
+                                    jmp msi_shell_dev_command_loop 
+msi_shell_dev_command_end:          mvi a,msi_shell_carriage_return_character 
+                                    call msi_shell_send_console_byte
+                                    mvi a,msi_shell_new_line_character
+                                    call msi_shell_send_console_byte 
+                                    jmp msi_shell_command_prompt_initialize
+
+
 msi_shell_con_command:
 
 MSI_layer_end:
