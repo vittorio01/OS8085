@@ -629,6 +629,7 @@ bios_disk_device_read_sector_next2:         lxi d,bios_disk_device_device_record
                                             lda bios_disk_device_selected_track
                                             mov e,a 
                                             lda bios_disk_device_selected_track+1 
+                                            mov d,a 
                                             xthl 
                                             ret 
 bios_disk_device_read_sector_ok:            mvi a,bios_operation_ok
@@ -665,7 +666,7 @@ bios_disk_device_format_drive_end:          pop b
 ;----- system ram -----
 ;Il parametro system_ram_dimension viene utilizzato dalla mms per capire quanto spazio ha a disposizione per eseguire i programmi e mantenere i segmenti di memoria attivi. 
 ;Da ricordare che la zona dedicata alla RAM deve partire dal'indirizzo $0000 e una dimensione minima di 20KB 
-system_ram_dimension        .equ 32768-64
+system_ram_dimension        .equ 32768-128
 
 bios_avabile_ram_memory:    lxi h,system_ram_dimension
                             ret 
@@ -795,8 +796,7 @@ bios_device_IO_table:       .text "BTTY"
                             ;inserisci qui il vettore 
 bios_device_IO_table_end:                                                                                               
 
-bios_serial_connect:        call serial_reset_connection
-                            ret 
+bios_serial_connect:        ret 
 
 bios_serial_get_state:      mvi a,%11100000
                             stc 
@@ -883,18 +883,18 @@ bios_serial_disk_bps_coded_number       .equ 4
 bios_serial_disk_bps_uncoded_number     .equ 512
    
 
-bios_serial_disk_initialize:            ;mvi a,$c0 
-                                        ;sim 
+bios_serial_disk_initialize:            call serial_reset_connection
                                         ret
 
 bios_serial_disk_status:        push b 
                                 push d 
                                 push h 
+
 bios_serial_disk_status_retry:  call serial_request_disk_information
                                 jc bios_serial_disk_status_end
                                 call serial_reset_connection
                                 jmp bios_serial_disk_status_retry
-bios_serial_disk_status_end:    mov a,b
+bios_serial_disk_status_end:    mov a,b 
                                 pop b 
                                 pop d 
                                 pop h 
@@ -903,14 +903,15 @@ bios_serial_disk_status_end:    mov a,b
 bios_serial_disk_read_sector:       push b 
                                     push d 
                                     push h 
-bios_serial_disk_read_sector_try:   call serial_request_disk_sector     
+                                    call serial_request_disk_sector
                                     jc bios_serial_disk_read_sector_end
                                     call serial_reset_connection
-                                    pop h
+                                    pop h 
                                     pop d 
                                     pop b 
                                     jmp bios_serial_disk_read_sector
-bios_serial_disk_read_sector_end:   pop psw 
+bios_serial_disk_read_sector_end:   inx sp 
+                                    inx sp 
                                     pop d 
                                     pop b 
                                     ret 
@@ -918,21 +919,23 @@ bios_serial_disk_read_sector_end:   pop psw
 bios_serial_disk_write_sector:      push b 
                                     push d 
                                     push h 
-bios_serial_disk_write_sector_try:  call serial_write_disk_sector     
+                                    call serial_write_disk_sector
                                     jc bios_serial_disk_write_sector_end
                                     call serial_reset_connection
-                                    pop h
+                                    pop h 
                                     pop d 
                                     pop b 
                                     jmp bios_serial_disk_write_sector
-bios_serial_disk_write_sector_end:  pop psw 
+bios_serial_disk_write_sector_end:  inx sp 
+                                    inx sp 
                                     pop d 
                                     pop b 
                                     ret 
 
-bios_serial_disk_format_drive:         ret  
+bios_serial_disk_format_drive:          ret  
 
-bios_serial_disk_set_motor:            ret 
+bios_serial_disk_set_motor:             
+                                        ret 
 
 
 ;This file contains all functions that implements Retro Commander protocol. All code is written in 8085 assembly but can be used also for INTEL 8080 and Z80 platforms.
@@ -992,40 +995,30 @@ serial_packet_connection_reset    .equ %01000000
 serial_delay_value                      .equ 16
 
 ;device_boardId is the string that will be sent to the slave device to identify the master. This string can be replaced with a custom board ID
-device_boardId          .text   "FENIX 1 FULL"                       
-device_boardId_dimension .equ 12    ;dimension of the string
+device_boardId          .text   "FENIX 1 FULL OS"                       
+device_boardId_dimension .equ 15    ;dimension of the string
 
 ; ------ memory addresses ------
 ;This implementation uses also a portion of memory to save important informations. 
 ;To manage terminal chars received from the slave, a small array queue is used  
 
 ;To change the posizion of this memory space the variable memory_space_base_address can be modified.
-memory_space_base_address                       .equ $7fb8
+memory_space_base_address                       .equ $8000-64
 ;this variable indicates the first address that can be used to save data. 
 ;The final memory region used will be from memory_space_base_address to memory_space_base_address+42
 
-serial_packet_state                             .equ    memory_space_base_address
+serial_packet_timeout_current_value             .equ    memory_space_base_address
+serial_packet_state                             .equ    serial_packet_timeout_current_value+2
 serial_packet_disk_bps                          .equ    serial_packet_state+1
 serial_packet_disk_spt                          .equ    serial_packet_disk_bps+1
 serial_packet_disk_tph                          .equ    serial_packet_disk_spt+1
-serial_packet_disk_heads_number                 .equ    serial_packet_disk_tph+2
-serial_packet_timeout_current_value             .equ    serial_packet_disk_heads_number+1
+serial_packet_disk_heads_number                 .equ    serial_packet_disk_tph+2            
 
-terminal_input_char_queue_start_address         .equ serial_packet_timeout_current_value+2
+terminal_input_char_queue_start_address         .equ serial_packet_disk_heads_number+1
 terminal_input_char_queue_end_address           .equ terminal_input_char_queue_start_address+2
 terminal_input_char_queue_number                .equ terminal_input_char_queue_end_address+2
 
 terminal_input_char_queue_fixed_space_address   .equ terminal_input_char_queue_number+1
-
-; -------- Function addresses --------
-
-function_addresses:             jmp serial_reset_connection         ;this function creates a new connection with the slave
-                                jmp serial_send_terminal_char       ;this function sends a single char to the slave's terminal
-                                jmp serial_request_terminal_char    ;this function requests a char from the slave's terminal
-                                jmp serial_request_disk_information ;this function requests all disk informations
-                                jmp serial_request_disk_sector      ;this function requests a single disk sector from the slave
-                                jmp serial_write_disk_sector        ;this function sensd a single disk sector to the slave
-
 
 ; -------- primary functions implementation --------
 
@@ -1215,7 +1208,7 @@ serial_request_disk_sector_retry:       lxi h,$ffff-serial_packet_max_dimension+
                                         jnc serial_request_disk_sector_byte_skip
                                         mvi e,%10000000
 serial_request_disk_sector_byte_skip:   pop h 
-serial_request_disk_sector_loop:        mvi a,$ff 
+serial_request_disk_sector_loop:        mvi a,0
                                         call serial_set_new_timeout
                                         stc 
                                         call serial_get_packet
@@ -1242,7 +1235,8 @@ serial_request_disk_sector_loop:        mvi a,$ff
                                         ora e 
                                         jz serial_request_disk_sector_loop_end 
                                         jmp serial_request_disk_sector_loop
-serial_request_disk_sector_loop_fail:   stc 
+serial_request_disk_sector_loop_fail:    
+                                        stc 
                                         cmc 
                                         jmp serial_request_disk_sector_end
 serial_request_disk_sector_loop_end:    stc 
@@ -1250,7 +1244,8 @@ serial_request_disk_sector_loop_end:    stc
 serial_request_disk_sector_failure:     stc 
                                         cmc 
                                         pop h 
-serial_request_disk_sector_end:         pop b 
+serial_request_disk_sector_end:         
+                                        pop b 
                                         pop d 
                                         ret 
 
@@ -1438,12 +1433,14 @@ serial_get_packet_retry:        pop h
                                 push psw 
                                 push h 
                                 jnc serial_get_packet_wait
+
 serial_get_packet_wait_timeout: call serial_wait_timeout_new_byte
                                 jc serial_get_packet_begin
                                 lxi b,0 
                                 xra a 
                                 stc 
                                 cmc 
+
                                 jmp serial_get_packet_end
 serial_get_packet_wait:         call serial_wait_new_byte
 serial_get_packet_begin:        cpi serial_packet_start_packet_byte

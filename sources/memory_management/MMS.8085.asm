@@ -1038,7 +1038,7 @@ mms_get_selected_data_segment_temporary_flag_status_end:    pop h
 
 
 ;mms_get_selected_data_segment_dimension restituisce la dimensione del segmento selezionato 
-;HL <- dimensione del segmento (0 se si è verificato un errore)
+;HL <- dimensione del segmento
 
 mms_get_selected_data_segment_dimension:        lda mms_data_selected_segment_id
                                                 ora a 
@@ -1364,6 +1364,7 @@ mms_disk_device_read_sector_loop:   mov a,e
 mms_disk_device_read_sector_next3:  lhld mms_data_selected_segment_address
                                     dad b 
                                     call bios_disk_device_read_sector
+
                                     xchg 
                                     lhld mms_data_selected_segment_address
                                     mov a,e 

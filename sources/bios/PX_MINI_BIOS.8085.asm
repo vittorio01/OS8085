@@ -630,6 +630,7 @@ bios_disk_device_read_sector_next2:         lxi d,bios_disk_device_device_record
                                             lda bios_disk_device_selected_track
                                             mov e,a 
                                             lda bios_disk_device_selected_track+1 
+                                            mov d,a 
                                             xthl 
                                             ret 
 bios_disk_device_read_sector_ok:            mvi a,bios_operation_ok

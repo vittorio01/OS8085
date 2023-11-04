@@ -169,6 +169,7 @@ msi_system_calls_id_table:      .org MSI
                                 .word msi_system_call_write_temporary_segment_byte 
                                 .word msi_system_call_read_temporary_segment_dimension 
                                 .word msi_system_call_get_current_program_dimension 
+                                .word msi_system_call_get_selected_data_segment_dimension
 
                                 .word msi_system_call_select_disk 
                                 .word msi_system_call_get_disk_format_type 
@@ -772,6 +773,20 @@ msi_system_call_get_current_program_dimension:  call mms_get_high_memory_program
                                                 pop psw 
                                                 lhld msi_HL_backup_address
                                                 jmp msi_system_calls_return
+
+;msi_system_call_get_selected_data_segment_dimension restituisce la dimensione del segmento di memoria attualmente selezionato
+;DE <- bytes occupati dal programma attualmente in esecuzione (restituisce 0 se il segmento non è stato selezionato)
+
+msi_system_call_get_selected_data_segment_dimension:    call mms_get_selected_data_segment_dimension
+                                                        xchg 
+                                                        lhld msi_BC_backup_address
+                                                        mov c,l 
+                                                        mov b,h 
+                                                        lhld msi_PSW_backup_address
+                                                        push h 
+                                                        pop psw 
+                                                        lhld msi_HL_backup_address
+                                                        jmp msi_system_calls_return
 
 ;msi_system_call_create_temporary_memory_segment crea un segmento temporaneo all'interno della RAM 
 ;PSW <- se si è verificato un errore nella creazione CY assume 1 
@@ -1388,18 +1403,24 @@ msi_system_call_delete_file_end:            lhld msi_BC_backup_address
                                             jmp msi_system_calls_return
 
 ;msi_system_call_reset_file_scan_pointer reimposta il flne scan spointer alla posizione iniziale 
+;A <- esito dell'operazione
+;PSW <- CY viene settato a 1 in caso di errore 
 
-msi_system_call_reset_file_scan_pointer:    call fsm_reset_file_header_scan_pointer
-                                            lhld msi_PSW_backup_address
-                                            push h 
-                                            pop psw 
-                                            lhld msi_BC_backup_address
-                                            mov c,l 
-                                            mov b,h 
-                                            lhld msi_DE_backup_address
-                                            xchg 
-                                            lhld msi_HL_backup_address  
-                                            jmp msi_system_calls_return
+msi_system_call_reset_file_scan_pointer:        call fsm_reset_file_header_scan_pointer
+                                                cpi fsm_operation_ok
+                                                jnz msi_system_call_reset_file_scan_pointer_ok
+                                                stc
+                                                cmc 
+                                                jmp msi_system_call_reset_file_scan_pointer_end
+msi_system_call_reset_file_scan_pointer_ok:     mvi a,msi_operation_ok
+                                                stc 
+msi_system_call_reset_file_scan_pointer_end:    lhld msi_BC_backup_address
+                                                mov c,l 
+                                                mov b,h 
+                                                lhld msi_DE_backup_address
+                                                xchg 
+                                                lhld msi_HL_backup_address  
+                                                jmp msi_system_calls_return
 
 ;msi_system_call_increment_file_scan_pointer incrementa il file scan pointer 
 ;A <- esito dell'operazione 
@@ -1817,6 +1838,8 @@ msi_system_call_get_os_version:     mvi a,current_system_version
 ;-  CD -> cambia il disco attualmente selezionato
 ;-  DEV -> stampa la lista dei dispositivi IO disponibili 
 ;-  CON -> cambia il dispositivo IO della console 
+msi_shell_start_address:
+
 
 msi_shell_default_disk              .equ    reserved_memory_start+$005f 
 msi_shell_input_buffer_id           .equ    reserved_memory_start+$0060 
@@ -1861,9 +1884,9 @@ msi_shell_command_list_start    .text "CP"
                                 .text "DEL"
                                 .b 0 
                                 .word   msi_shell_del_command
-                                .text "RM"
+                                .text "MV"
                                 .b 0 
-                                .word   msi_shell_rm_command
+                                .word   msi_shell_mv_command
                                 .text "MEM"
                                 .b 0 
                                 .word   msi_shell_mem_command
@@ -1872,9 +1895,7 @@ msi_shell_command_list_start    .text "CP"
                                 .word   msi_shell_ls_command
                                 .text "DISK"
                                 .b 0 
-                                .word   msi_shell_disk_command
-                                .text "VER"
-                                .b 0 
+                            
                                 .word   msi_shell_ver_command
                                 .text "ECHO"
                                 .b 0 
@@ -1885,9 +1906,6 @@ msi_shell_command_list_start    .text "CP"
                                 .text "DEV"
                                 .b 0 
                                 .word   msi_shell_dev_command
-                                .text "CON"
-                                .b 0 
-                                .word   msi_shell_con_command
 msi_shell_command_list_end:
 
 msi_shell_startup:                                      push psw 
@@ -1942,8 +1960,13 @@ msi_shell_command_prompt_initialize:                    lxi sp,stack_memory_star
                                                         xra a 
                                                         sta msi_current_program_flags 
                                                         lda msi_shell_default_disk 
+                                                        mov b,a 
                                                         ora a 
-                                                        jnz msi_shell_command_prompt_print_arrow 
+                                                        jz msi_shell_command_prompt_default_disk_not_selected
+msi_shell_command_prompt_reselect_default_disk:         call fsm_select_disk 
+                                                        cpi fsm_operation_ok
+                                                        jz msi_shell_command_prompt_print_arrow
+msi_shell_command_prompt_default_disk_not_selected:     call fsm_deselect_disk 
                                                         mvi b,msi_shell_unknown_disk_character
 msi_shell_command_prompt_print_arrow:                   call msi_shell_select_console_IO_device
                                                         call msi_shell_select_input_buffer 
@@ -2240,8 +2263,6 @@ msi_shell_send_console_byte_number_next:    mov a,c
                                             rar 
                                             rar 
                                             ani $0f 
-                                            ora a 
-                                            jz msi_shell_send_console_byte_number_next2
                                             adi $30 
                                             call msi_shell_send_console_byte
                                             cpi msi_operation_ok 
@@ -2263,7 +2284,6 @@ msi_shell_send_console_address_number:          push b
                                                 push d 
                                                 push h
                                                 call unsigned_convert_hex_bcd_word
-                                                
                                                 lxi h,2
                                                 dad sp 
                                                 mvi e,3 
@@ -2289,10 +2309,13 @@ msi_shell_send_console_address_number_print2:   mov a,m
                                                 ani $0f 
                                                 jnz msi_shell_send_console_address_number_print5
                                                 mov b,a 
+                                                mov a,e 
+                                                ora a 
+                                                jz msi_shell_send_console_address_number_print6
                                                 mov a,d 
                                                 ora a 
                                                 jz msi_shell_send_console_address_number_print3
-                                                mov a,b
+msi_shell_send_console_address_number_print6:   mov a,b
 msi_shell_send_console_address_number_print5:   mvi d,$ff
                                                 adi $30 
                                                 call msi_shell_send_console_byte
@@ -2309,6 +2332,66 @@ msi_shell_send_console_address_number_end:      inx sp
                                                 pop d 
                                                 pop b 
                                                 ret 
+
+;msi_shell_send_console_byte_number converte il numero a 32bit in BCD e lo invia alla console 
+;BCDE -> indirizzo da convertire
+;A <- esito dell'operazione 
+msi_shell_send_console_long_number:             push h 
+                                                push d  
+                                                push b 
+
+                                                push b 
+                                                push d 
+                                                call unsigned_convert_hex_bcd_long 
+                                                lxi h,5
+                                                dad sp 
+                                                mvi e,6
+                                                mvi d,0
+msi_shell_send_console_long_number_print:       mov a,m 
+                                                rar 
+                                                rar 
+                                                rar 
+                                                rar 
+                                                ani $0f 
+                                                jnz msi_shell_send_console_long_number_print4
+                                                mov b,a 
+                                                mov a,d 
+                                                ora a 
+                                                jz msi_shell_send_console_long_number_print2
+                                                mov a,b 
+msi_shell_send_console_long_number_print4:      mvi d,$ff
+                                                adi $30 
+                                                call msi_shell_send_console_byte
+                                                cpi msi_operation_ok 
+                                                jnz msi_shell_send_console_long_number_end
+msi_shell_send_console_long_number_print2:      mov a,m 
+                                                ani $0f 
+                                                jnz msi_shell_send_console_long_number_print5
+                                                mov b,a 
+                                                mov a,e 
+                                                cpi 1 
+                                                jz msi_shell_send_console_long_number_print6
+                                                mov a,d 
+                                                ora a 
+                                                jz msi_shell_send_console_long_number_print3
+msi_shell_send_console_long_number_print6:      mov a,b
+msi_shell_send_console_long_number_print5:      mvi d,$ff
+                                                adi $30 
+                                                call msi_shell_send_console_byte
+                                                cpi msi_operation_ok 
+                                                jnz msi_shell_send_console_long_number_end
+msi_shell_send_console_long_number_print3:      dcx h 
+                                                dcr e
+                                                jnz msi_shell_send_console_long_number_print
+                                                mvi a,msi_operation_ok
+msi_shell_send_console_long_number_end:         lxi h,6 
+                                                dad sp 
+                                                sphl 
+                                                pop b 
+                                                pop d 
+                                                pop h 
+                                                ret 
+
 
 ;msi_shell_send_string_console stampa la stringa desiderata
 ;HL -> puntatore alla stringa 
@@ -2413,6 +2496,42 @@ msi_shell_ascii_upper_case:         cpi $61
                                     ani %11011111
                                     ret 
 
+;msi_shell_point_argument restituisce l'indirizzo relativo al buffer della console che indica l'argomento desiderato a partire
+;A -> numero di argomento (parte da sinistra e arriva verso destra)
+;A <- $ff se l'argomento esiste, $00 altrimenti
+;HL <- indirizzo dell'argomento nel buffer
+
+msi_shell_point_argument:                       push b 
+                                                push d 
+                                                lxi h,0 
+                                                ora a 
+                                                jz msi_shell_point_argument
+                                                mov b,a 
+msi_shell_point_argument_skip_argument:         call mms_read_selected_data_segment_byte
+                                                jc msi_shell_point_argument_not_found
+                                                inx h 
+                                                ora a 
+                                                jz msi_shell_point_argument_not_found
+                                                cpi $20 
+                                                jnz msi_shell_point_argument_skip_argument
+msi_shell_point_argument_align:                 call mms_read_selected_data_segment_byte
+                                                ora a 
+                                                jz msi_shell_point_argument_not_found
+                                                cpi $20 
+                                                jnz msi_shell_point_argument_verify_number
+                                                inx h 
+                                                jmp msi_shell_point_argument_align
+msi_shell_point_argument_verify_number:         dcr b 
+                                                jnz msi_shell_point_argument_skip_argument
+                                                jmp msi_shell_point_argument_ok
+msi_shell_point_argument_not_found:             xra a 
+                                                jmp msi_shell_point_argument_end
+msi_shell_point_argument_null:                  lxi h,0
+msi_shell_point_argument_ok:                    mvi a,$ff
+msi_shell_point_argument_end:                   pop d 
+                                                pop b 
+                                                ret 
+
 ;----- shell commands -----
 ;A -> se $00 il comando non ha nessun argomento 
 ;     se $20 il comando ha almeno un argomento
@@ -2438,83 +2557,999 @@ msi_shell_mem_available_string:             .text "Space available: "
 msi_shell_mem_system_string:                .text "Space reserved: "
                                             .b 0
 
-msi_shell_disk_argument_error:              .text "Argument format error"
-                                            .b 0
 
-msi_shell_disk_not_found:                   .text "Disk not found"
-                                            .b 0
 
-msi_shell_disk_command_not_formatted_string:    .text "not formatted"
+
+msi_shell_del_command_wipe_disk_string:        .text "This command will clear all data saved."
+                                                .b msi_shell_new_line_character,msi_shell_carriage_return_character
+                                                .text "Are you sure? (y/n) "
+                                                .b msi_shell_new_line_character,msi_shell_carriage_return_character, 0
+
+msi_shell_del_command_not_found:                .text "File not found"
+                                                .b msi_shell_carriage_return_character, msi_shell_new_line_character, 0
+msi_shell_del_command_read_only_string:         .text "Read only file"
+                                                .b msi_shell_carriage_return_character, msi_shell_new_line_character, 0
+
+msi_shell_abnormal_error:                       .text "Error during command execution: "
                                                 .b 0
 
-msi_shell_cp_command:
+msi_shell_ls_command_not_formatted_string:      .text "not formatted"
+                                                .b 0
 
-msi_shell_del_command:
+msi_shell_ls_specific_name_string               .text "Disk name: "
+                                                .b 0
 
-msi_shell_rm_command:
+msi_shell_ls_specific_space_left                .text "Free space: "
+                                                .b 0
+msi_shell_ls_specific_bytes_string              .text " bytes"
+                                                .b 0
 
+msi_shell_ls_specific_dimension_string          .text "File dimension: "
+                                                .b 0
+msi_shell_ls_specific_read_only_string          .text "Read only: "
+                                                .b 0
+msi_shell_ls_specific_system_string             .text "System:  "
+                                                .b 0
 
+msi_shell_ls_specific_hidden_string             .text "Hidden:  "
+                                                .b 0
 
-msi_shell_ls_command:
- 
-msi_shell_disk_command:                     ora a 
-                                            jz msi_shell_disk_command_specific 
-                                            mvi a,"A"
-                                            mov b,a 
-msi_shell_disk_command_list:                mov a,b 
-                                            call fsm_select_disk
-                                            cpi fsm_device_not_found
-                                            jz msi_shell_disk_command_end 
+msi_shell_ls_specific_yes_string                .text "yes"
+                                                .b 0
+
+msi_shell_ls_specific_no_string                 .text "no"
+                                                .b 0
+
+msi_shell_ls_command_pause_string               .text "Press any key to continue..."
+                                                .b msi_shell_carriage_return_character, msi_shell_new_line_character, msi_shell_carriage_return_character, msi_shell_new_line_character,0
+
+msi_shell_cd_command_path_not_valid_string      .text "Path not valid"
+                                                .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+
+msi_shell_cd_command_not_valid_string           .text "Path not found"
+                                                .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+
+msi_shell_mv_cp_command_source_not_valid_string         .text "Source path not valid"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_command_destination_not_valid_string    .text "Destination path not valid"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_command_file_exists_string              .text "Destination file exists"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_command_source_not_found_string         .text "Source file not found"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_command_dest_not_found_string           .text "Destination disk not found"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_ram_error_string                        .text "Not enough ram available"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_command_space_disk_string               .text "Not enough space on destination disk"
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character,0
+msi_shell_mv_cp_abnormal_error_string                   .text "Error during data transfer."
+                                                        .b msi_shell_carriage_return_character, msi_shell_new_line_character
+                                                        .text "Attempting to remove destination file: "
+                                                        .b 0
+msi_shell_del_command:                      mvi a,1
+                                            call msi_shell_point_argument
+                                            ora a 
+                                            jz msi_shell_del_command_not_specified
+                                            call mms_read_selected_data_segment_byte
+                                            jc msi_shell_del_command_not_specified
+                                            cpi "*"
+                                            jnz msi_shell_del_command_file
+                                            inx h 
+                                            call mms_read_selected_data_segment_byte
+                                            dcx h
+                                            jc msi_shell_del_command_confirm
+                                            cpi msi_shell_space_character 
+                                            ora a 
+                                            jz msi_shell_del_command_confirm
+                                            cpi msi_shell_space_character
+                                            jnz msi_shell_del_command_file
+msi_shell_del_command_confirm:              lxi h,msi_shell_del_command_wipe_disk_string
+                                            call msi_shell_send_string_console
+                                            call msi_shell_read_console_byte
+                                            cpi "Y"
+                                            jz msi_shell_del_command_wipe
+                                            cpi "y"
+                                            jz msi_shell_del_command_wipe 
+                                            jmp msi_shell_del_command_end
+msi_shell_del_command_wipe:                 call fsm_wipe_disk
                                             cpi fsm_operation_ok
-                                            jz msi_shell_disk_command_list_formatted 
-                                            cpi fsm_unknown_format_type
-                                            jz msi_shell_disk_command_list_not_formatted
-msi_shell_disk_command_list_formatted:      mov a,b 
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            call fsm_disk_get_name 
+                                            jz msi_shell_del_command_end
+                                            mov b,a 
+                                            lxi h,msi_shell_abnormal_error
+                                            call msi_shell_send_string_console
+                                            mov a,b 
+                                            call msi_shell_send_console_byte_number
+                                            mvi a,msi_shell_carriage_return_character
+                                            call msi_shell_send_console_byte
+                                            mvi a,msi_shell_carriage_return_character
+                                            call msi_shell_send_console_byte
+                                            jmp msi_shell_del_command_end
+
+msi_shell_del_command_file:                 xchg 
+                                            call fsm_file_name_max_dimension
+                                            lxi h,$ffff 
+                                            mov b,a 
+                                            inr b 
+                                            mov a,l 
+                                            sub b 
+                                            mov l,a 
+                                            mov a,h 
+                                            sbi 0
+                                            mov h,a
+                                            pop b  
+                                            dad sp 
+                                            sphl 
+                                            xchg 
+msi_shell_del_command_copy_loop:            call mms_read_selected_data_segment_byte
+                                            jc msi_shell_del_command_copy_loop_end
+                                            cpi msi_shell_space_character
+                                            jz msi_shell_del_command_copy_loop_end
+                                            ora a 
+                                            jz msi_shell_del_command_copy_loop_end
+                                            stax d
+                                            inx d
+                                            inx h 
+                                            jmp msi_shell_del_command_copy_loop
+msi_shell_del_command_copy_loop_end:        xchg 
+                                            mvi m,$00 
                                             lxi h,0 
                                             dad sp 
-                                            call msi_shell_send_string_console
-msi_shell_disk_command_lost_formatted2:     inx h
-                                            mov a,m 
-                                            ora a 
-                                            jnz msi_shell_disk_command_lost_formatted2
-                                            inx h 
-                                            sphl 
+                                            mov c,l 
+                                            mov b,h 
+                                            call fsm_select_file_header
+                                            cpi fsm_operation_ok
+                                            jz msi_shell_del_command_delete
+                                            cpi fsm_header_not_found
+                                            jnz msi_shell_return_abnormal_error
+                                            lxi h,msi_shell_del_command_not_found
+                                            jmp msi_shell_print_error_message
+msi_shell_del_command_delete:               call fsm_delete_selected_file_header
+                                            cpi fsm_operation_ok
+                                            jnz msi_shell_return_abnormal_error
                                             mvi a,msi_shell_carriage_return_character
-                                            call msi_shell_send_console_byte 
+                                            call msi_shell_send_console_byte
                                             mvi a,msi_shell_new_line_character
-                                            call msi_shell_send_console_byte 
-                                            inr b
-                                            jmp msi_shell_disk_command_list
-msi_shell_disk_command_list_not_formatted:  mov a,b 
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_space_character
-                                            call msi_shell_send_console_byte 
-                                            lxi h,msi_shell_disk_command_not_formatted_string 
-                                            call msi_shell_send_string_console
-                                            mvi a,msi_shell_carriage_return_character
-                                            call msi_shell_send_console_byte 
-                                            mvi a,msi_shell_new_line_character
-                                            call msi_shell_send_console_byte 
-                                            inr b
-                                            jmp msi_shell_disk_command_list
+                                            call msi_shell_send_console_byte        
+msi_shell_del_command_end:                  jmp msi_shell_command_prompt_initialize                      
 
-msi_shell_disk_command_end:                 lda msi_shell_default_disk 
-                                            call fsm_select_disk 
+msi_shell_del_command_read_only:            lxi h,msi_shell_del_command_read_only_string 
+                                            call msi_shell_send_string_console
                                             jmp msi_shell_command_prompt_initialize
 
-msi_shell_disk_command_specific:            jmp msi_shell_command_prompt_initialize
+msi_shell_del_command_not_specified:        lxi h, msi_shell_del_command_not_found
+                                            call msi_shell_send_string_console
+                                            jmp msi_shell_command_prompt_initialize
+
+
+msi_shell_mv_command:                       mvi a,$ff 
+                                            jmp msi_shell_mv_cp_command
+msi_shell_cp_command:                       mvi a,0
+                                            jmp msi_shell_mv_cp_command
+
+msi_shell_mv_cp_ram_buffer_min_dimension        .equ 128
+
+msi_shell_mv_cp_command:                        push psw                                    
+                                                mvi a,1 
+                                                call msi_shell_point_argument
+                                                ora a 
+                                                jz msi_shell_mv_cp_command_source_not_valid
+                                                xchg 
+                                                lxi h,$ffff 
+                                                call fsm_file_name_max_dimension
+                                                ;inr a 
+                                                mov b,a 
+                                                mov a,l 
+                                                sub b 
+                                                mov l,a 
+                                                mov a,h 
+                                                sbi 0
+                                                mov h,a
+                                                dad sp 
+                                                sphl    
+                                                dcr b
+                                                xchg 
+msi_shell_mv_cp_command_copy_source:            call mms_read_selected_data_segment_byte
+                                                jc msi_shell_mv_cp_command_copy_source_end
+                                                cpi msi_shell_space_character
+                                                jz msi_shell_mv_cp_command_copy_source_end
+                                                ora a 
+                                                jz msi_shell_mv_cp_command_copy_source_end
+                                                stax d 
+                                                inx h 
+                                                inx d 
+                                                dcr b
+                                                jnz msi_shell_mv_cp_command_copy_source
+msi_shell_mv_cp_command_copy_source_end:        xchg 
+                                                mvi m,0
+msi_shell_mv_cp_command_verify_destination:     mvi a,2 
+                                                call msi_shell_point_argument
+                                                ora a 
+                                                jz msi_shell_mv_cp_command_destination_not_valid
+                                                xchg 
+                                                lxi h,$ffff
+                                                call fsm_file_name_max_dimension
+                                                mov b,a 
+                                                mov a,l 
+                                                sub b 
+                                                mov l,a 
+                                                mov a,h 
+                                                sbi 0
+                                                mov h,a
+                                                dad sp 
+                                                sphl    
+                                                dcr b
+                                                xchg 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc msi_shell_mv_cp_command_destination_not_valid
+                                                dcx h 
+                                                cpi ":"
+                                                jnz msi_shell_mv_cp_command_copy_dest_current_dsk
+                                                inx h 
+                                                inx h 
+                                                call mms_read_selected_data_segment_byte
+                                                jc msi_shell_mv_cp_command_destination_not_valid
+                                                dcx h 
+                                                dcx h 
+                                                cpi msi_shell_space_character
+                                                jz msi_shell_mv_cp_command_destination_not_valid
+                                                ora a 
+                                                jz msi_shell_mv_cp_command_destination_not_valid
+                                                cpi "/"
+                                                jnz msi_shell_mv_cp_command_copy_dest_current_dsk
+                                                call mms_read_selected_data_segment_byte
+                                                jc msi_shell_mv_cp_command_destination_not_valid
+                                                cpi $41 
+                                                jc msi_shell_mv_cp_command_destination_not_valid
+                                                cpi $5B 
+                                                jnc msi_shell_mv_cp_command_destination_not_valid
+                                                mov c,a 
+                                                jmp msi_shell_mv_cp_command_copy_destination
+msi_shell_mv_cp_command_copy_dest_current_dsk:  lda msi_shell_default_disk
+                                                mov c,a 
+msi_shell_mv_cp_command_copy_destination:       call mms_read_selected_data_segment_byte
+                                                jc msi_shell_mv_cp_command_copy_destination_end
+                                                cpi msi_shell_space_character
+                                                jz msi_shell_mv_cp_command_copy_destination_end
+                                                ora a 
+                                                jz msi_shell_mv_cp_command_copy_destination_end
+                                                stax d 
+                                                inx h 
+                                                inx d 
+                                                dcr b
+                                                jnz msi_shell_mv_cp_command_copy_destination
+msi_shell_mv_cp_command_copy_destination_end:   xchg 
+                                                mvi m,0 
+                                                lxi h,0 
+                                                dad sp 
+                                                xchg 
+                                                call fsm_file_name_max_dimension
+                                                inr a 
+                                                mov l,a                         
+                                                mvi h,0                         ;B -> source file disk
+                                                dad d                           ;C -> destination disk 
+                                                xchg 
+                                                lda msi_shell_default_disk      ;DE -> source file pointer
+                                                mov b,a                         ;HL -> destination file pointer 
+msi_shell_mv_cp_source_verify:                  push b 
+                                                push d 
+                                                push h                          
+                                                mov a,b 
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                mov b,d 
+                                                mov d,c 
+                                                mov c,e 
+                                                call fsm_search_file_header
+                                                cpi fsm_operation_ok
+                                                jz msi_shell_mv_cp_destination_verify
+                                                cpi fsm_header_not_found
+                                                jz msi_shell_mv_cp_command_source_not_found
+                                                jmp msi_shell_return_abnormal_error
+msi_shell_mv_cp_destination_verify:             mov a,d 
+                                                call fsm_select_disk 
+                                                cpi fsm_operation_ok
+                                                jz msi_shell_mv_cp_destination_verify2
+                                                cpi fsm_device_not_found
+                                                jz msi_shell_mv_cp_command_dest_not_found
+                                                jmp msi_shell_return_abnormal_error
+msi_shell_mv_cp_destination_verify2:            mov c,l 
+                                                mov b,h 
+                                                call fsm_search_file_header
+                                                cpi fsm_operation_ok
+                                                jz msi_shell_mv_cp_command_file_exists
+                                                cpi fsm_header_not_found
+                                                jnz msi_shell_return_abnormal_error
+msi_shell_mv_cp_destination_mv_verify:          lxi h,6+2
+                                                call fsm_file_name_max_dimension
+                                                add l 
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0 
+                                                mov h,a 
+                                                call fsm_file_name_max_dimension
+                                                add l 
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0 
+                                                mov h,a 
+                                                dad sp 
+                                                inx h 
+                                                mov c,m
+                                                lxi h,0                              
+                                                dad sp 
+                                                push b 
+                                                lxi h,0             ;SP -> [current file pointer (4)][file dimension (4)][segment,command][dest pointer][source pointer][disk numbers][header 2][header 1]
+                                                push h 
+                                                push h 
+                                                push h 
+                                                push h 
+                                                call msi_shell_mv_cp_command_type_load
+                                                ora a 
+                                                jz msi_shell_mv_cp_destination_create
+                                                call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,c 
+                                                cmp b 
+                                                jnz msi_shell_mv_cp_destination_create
+                                                call msi_shell_mv_cp_pointers_load
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d 
+                                                call fsm_set_selected_file_header_name
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                jmp msi_shell_command_prompt_initialize
+msi_shell_mv_cp_destination_create:             call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d
+                                                call fsm_create_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,b 
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_pointers_load
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call fsm_get_selected_file_header_dimension
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                lxi h,4 
+                                                dad sp 
+                                                mov m,e 
+                                                inx h 
+                                                mov m,d 
+                                                inx h 
+                                                mov m,c 
+                                                inx h 
+                                                mov m,b 
+                                                call msi_shell_mv_cp_disk_numbers_load 
+                                                mov a,c
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d 
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete 
+
+                                                call msi_shell_mv_cp_file_dimension_load
+                                                call fsm_selected_file_append_data_bytes
+                                                cpi fsm_operation_ok
+                                                jz msi_shell_mv_cp_command_destination_space_ok
+                                                cpi fsm_not_enough_spage_left
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                lxi h,msi_shell_mv_cp_command_space_disk_string 
+                                                call msi_shell_send_string_console
+                                                jmp msi_shell_command_prompt_initialize
+msi_shell_mv_cp_command_destination_space_ok:   call mms_free_high_ram_bytes
+                                                lxi d,msi_shell_mv_cp_ram_buffer_min_dimension
+                                                mov a,e 
+                                                sub l 
+                                                mov a,d 
+                                                sbb h 
+                                                jnc msi_shell_mv_cp_ram_error 
+                                                call mms_create_high_memory_data_segment
+                                                jc msi_shell_mv_cp_command_file_delete
+                                                lxi h,9
+                                                dad sp 
+                                                mov m,a 
+
+msi_shell_mv_cp_command_data_transfer_loop:     call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,b 
+                                                call fsm_select_disk
+                                                call msi_shell_mv_cp_pointers_load
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                xthl 
+                                                mov e,l 
+                                                mov d,h 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov c,l 
+                                                mov b,h 
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                call fsm_selected_file_set_data_pointer
+                                                cpi fsm_file_pointer_overflow
+                                                jz msi_shell_mv_cp_command_data_transfer_loop_end
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_file_dimension_load
+                                                xthl 
+                                                mov a,e 
+                                                sub l 
+                                                mov e,a 
+                                                mov a,d 
+                                                sbb h 
+                                                mov d,a 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov a,c 
+                                                sbb l 
+                                                mov c,a 
+                                                mov a,b 
+                                                sbb h 
+                                                mov b,a
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                call msi_shell_mv_cp_segment_load
+                                                call mms_select_high_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call mms_get_selected_data_segment_dimension
+                                                mov a,e 
+                                                sub l 
+                                                mov l,a 
+                                                mov a,d 
+                                                sbb h 
+                                                mov h,a 
+                                                mov a,c 
+                                                sbi 0 
+                                                mov a,b 
+                                                sbi 0 
+                                                jnc msi_shell_mv_cp_command_data_transfer_loop2
+                                                mov l,e
+                                                mov h,d 
+                                                jmp msi_shell_mv_cp_command_data_transfer_loop3
+msi_shell_mv_cp_command_data_transfer_loop2:    call mms_get_selected_data_segment_dimension
+msi_shell_mv_cp_command_data_transfer_loop3:    xchg
+                                                lxi h,0 
+                                                call msi_shell_mv_cp_segment_load
+                                                mov c,e 
+                                                mov b,d
+                                                call fsm_selected_file_read_bytes
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,c 
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                xchg 
+                                                call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d 
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                xthl 
+                                                mov e,l 
+                                                mov d,h 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov c,l 
+                                                mov b,h 
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                call fsm_selected_file_set_data_pointer
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                xchg 
+                                                mov c,e
+                                                mov b,d
+                                                lxi h,0
+                                                call msi_shell_mv_cp_segment_load
+                                                call fsm_selected_file_write_bytes
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                xthl 
+                                                mov a,l 
+                                                add e 
+                                                mov l,a 
+                                                mov a,h 
+                                                adc d 
+                                                mov h,a 
+                                                xthl 
+                                                inx sp 
+                                                inx sp 
+                                                xthl 
+                                                mov a,l 
+                                                aci 0
+                                                mov l,a 
+                                                mov a,h 
+                                                aci 0
+                                                mov h,a 
+                                                xthl 
+                                                dcx sp 
+                                                dcx sp 
+                                                jmp msi_shell_mv_cp_command_data_transfer_loop
+msi_shell_mv_cp_command_data_transfer_loop_end: call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,b 
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                call msi_shell_mv_cp_pointers_load
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
+                                                mvi d,0 
+                                                call fsm_get_selected_file_header_system_flag_status
+                                                jc msi_shell_mv_cp_command_file_delete
+                                                ani %10000000
+                                                ora d 
+                                                mov d,a 
+                                                call fsm_get_selected_file_header_readonly_flag_status
+                                                jc msi_shell_mv_cp_command_file_delete
+                                                ani %01000000
+                                                ora d 
+                                                mov d,a 
+                                                call fsm_get_selected_file_header_hidden_flag_status
+                                                jc msi_shell_mv_cp_command_file_delete
+                                                ani %00100000
+                                                ora d 
+                                                mov d,a 
+                                                call msi_shell_mv_cp_command_type_load
+                                                ora a 
+                                                jz msi_shell_mv_cp_skip_delete_source
+                                                mov a,d 
+                                                ani %01000000
+                                                jz msi_shell_mv_cp_delete_source
+                                                xra a 
+                                                call fsm_set_selected_file_header_readonly_flag
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+msi_shell_mv_cp_delete_source:                  call fsm_delete_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+msi_shell_mv_cp_skip_delete_source:             call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,c 
+                                                call fsm_select_disk
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                mov h,d 
+                                                call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d 
+                                                mov d,h
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                mov a,d 
+                                                ani %10000000
+                                                jz msi_shell_mv_cp_skip_system_flag
+                                                mvi a,$ff 
+                                                call fsm_set_selected_file_header_system_flag
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+msi_shell_mv_cp_skip_system_flag:               mov a,d 
+                                                ani %01000000
+                                                jz msi_shell_mv_cp_skip_read_only_flag
+                                                mvi a,$ff 
+                                                call fsm_set_selected_file_header_readonly_flag
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                jmp msi_shell_command_prompt_initialize
+msi_shell_mv_cp_skip_read_only_flag:            mov a,d 
+                                                ani %00100000
+                                                jz msi_shell_command_prompt_initialize
+                                                mvi a,$ff 
+                                                call fsm_set_selected_file_header_hidden_flag
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call msi_shell_mv_cp_segment_load
+                                                ora a 
+                                                jz msi_shell_return_abnormal_error
+                                                call mms_select_high_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call mms_delete_selected_high_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                jmp msi_shell_command_prompt_initialize
+
+msi_shell_mv_cp_command_file_delete:            mov b,a 
+                                                lxi h,msi_shell_mv_cp_abnormal_error_string 
+                                                call msi_shell_send_string_console
+                                                mov a,b 
+                                                call msi_shell_send_console_byte_number
+                                                mvi a,msi_shell_carriage_return_character
+                                                call msi_shell_send_console_byte
+                                                mvi a,msi_shell_new_line_character
+                                                call msi_shell_send_console_byte
+                                    
+                                                call msi_shell_mv_cp_disk_numbers_load
+                                                mov a,c 
+                                                call fsm_Select_disk 
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call msi_shell_mv_cp_pointers_load
+                                                mov c,e 
+                                                mov b,d 
+                                                call fsm_select_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call fsm_delete_selected_file_header
+                                                cpi fsm_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call msi_shell_mv_cp_segment_load
+                                                ora a 
+                                                jz msi_shell_return_abnormal_error
+                                                call mms_select_high_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                call mms_delete_selected_high_memory_data_segment
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_return_abnormal_error
+                                                jmp msi_shell_command_prompt_initialize
+
+msi_shell_mv_cp_command_type_load:              push h
+                                                lxi h,12
+                                                dad sp 
+                                                mov a,m
+                                                pop h 
+                                                ret 
+
+msi_shell_mv_cp_segment_load:                   push h 
+                                                lxi h,13
+                                                dad sp 
+                                                mov a,m
+                                                pop h 
+                                                ret 
+
+msi_shell_mv_cp_pointers_load:                  push h 
+                                                lxi h,14
+                                                dad sp 
+                                                mov e,m             ;DE -> destination
+                                                inx h               ;BC -> source
+                                                mov d,m 
+                                                inx h  
+                                                mov c,m 
+                                                inx h 
+                                                mov b,m
+                                                pop h 
+                                                ret 
+
+msi_shell_mv_cp_disk_numbers_load:              push h 
+                                                lxi h,18
+                                                dad sp 
+                                                mov c,m 
+                                                inx h 
+                                                mov b,m 
+                                                pop h 
+                                                ret 
+
+msi_shell_mv_cp_file_dimension_load:            push h 
+                                                lxi h,8 
+                                                dad sp 
+                                                mov e,m 
+                                                inx h 
+                                                mov d,m 
+                                                inx h 
+                                                mov c,m 
+                                                inx h 
+                                                mov b,m 
+                                                pop h 
+                                                ret 
+
+msi_shell_mv_cp_ram_error:                      lxi h,msi_shell_mv_cp_ram_error_string 
+                                                jmp msi_shell_print_error_message
+msi_shell_mv_cp_command_source_not_found:       lxi h,msi_shell_mv_cp_command_source_not_found_string 
+                                                jmp msi_shell_print_error_message
+msi_shell_mv_cp_command_dest_not_found:         lxi h,msi_shell_mv_cp_command_dest_not_found_string
+                                                jmp msi_shell_print_error_message
+msi_shell_mv_cp_command_source_not_valid:       lxi h,msi_shell_mv_cp_command_source_not_valid_string 
+                                                jmp msi_shell_print_error_message
+msi_shell_mv_cp_command_destination_not_valid:  lxi h,msi_shell_mv_cp_command_destination_not_valid_string
+                                                jmp msi_shell_print_error_message
+msi_shell_mv_cp_command_file_exists:            lxi h,msi_shell_mv_cp_command_file_exists_string
+                                                jmp msi_shell_print_error_message     
+
+
+
+
+ 
+
+
+
+
+msi_shell_ls_command_pause_line_number              .equ 8
+
+msi_shell_ls_command:                               mvi c,0 
+                                                    mvi b,1 
+                                                    mvi d,0
+msi_shell_ls_command_read_options_loop:             mov a,b 
+                                                    call msi_shell_point_argument
+                                                    ora a 
+                                                    jz msi_shell_ls_command_read_options_loop_end
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc msi_shell_ls_command_read_options_loop_end
+                                                    cpi "-"
+                                                    jnz msi_shell_ls_command_read_options_loop_2
+                                                    inx h 
+                                                    call mms_read_selected_data_segment_byte
+                                                    jc msi_shell_ls_command_read_options_loop_end
+                                                    cpi "h"
+                                                    jnz msi_shell_ls_command_read_options_loop_1
+                                                    mov a,c 
+                                                    ori %10000000
+                                                    mov c,a 
+                                                    inr b 
+                                                    jmp msi_shell_ls_command_read_options_loop
+msi_shell_ls_command_read_options_loop_1:           cpi "p"
+                                                    jnz msi_shell_ls_command_read_options_loop_not_valid
+                                                    mov a,c 
+                                                    ori %01000000
+                                                    mov c,a 
+                                                    inr b 
+                                                    jmp msi_shell_ls_command_read_options_loop
+msi_shell_ls_command_read_options_loop_not_valid:   lxi h,msi_shell_dev_argument_error
+                                                    call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte 
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte 
+                                                    jmp msi_shell_ls_command_end 
+msi_shell_ls_command_read_options_loop_2:           mov a,c 
+                                                    ani %00100000
+                                                    jnz msi_shell_ls_command_read_options_loop_not_valid
+                                                    mov a,c 
+                                                    ori %00100000
+                                                    mov c,a 
+                                                    mov d,b 
+                                                    inr b 
+                                                    jmp msi_shell_ls_command_read_options_loop
+msi_shell_ls_command_read_options_loop_end:         mov a,c 
+                                                    ani %00100000
+                                                    jnz msi_shell_ls_command_specific
+msi_shell_ls_command_list_next:                     lxi h,msi_shell_ls_specific_name_string 
+                                                    call msi_shell_send_string_console
+                                                    call fsm_disk_get_name
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_shell_return_abnormal_error
+                                                    lxi h,0 
+                                                    dad sp 
+                                                    call msi_shell_send_string_console
+msi_shell_ls_command_list_fetch_loop:               inx h
+                                                    mov a,m 
+                                                    ora a 
+                                                    jnz msi_shell_ls_command_list_fetch_loop
+                                                    inx h 
+                                                    sphl 
+                                                    push b
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte
+msi_shell_ls_command_list_space_left:               lxi h,msi_shell_ls_specific_space_left
+                                                    call msi_shell_send_string_console
+                                                    call fsm_disk_get_free_space
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_shell_return_abnormal_error
+                                                    call msi_shell_send_console_long_number 
+                                                    lxi h,msi_shell_ls_specific_bytes_string
+                                                    call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte
+                                                    call fsm_reset_file_header_scan_pointer
+                                                    cpi fsm_operation_ok
+                                                    jz msi_shell_ls_command_list_loop
+                                                    cpi fsm_end_of_list
+                                                    jz msi_shell_ls_command_list_loop_end
+                                                    jmp msi_shell_return_abnormal_error
+                                                    xthl 
+                                                    mvi h,0 
+                                                    xthl
+msi_shell_ls_command_list_loop:                     xthl 
+                                                    mov a,l 
+                                                    xthl  
+                                                    ani %10000000
+                                                    jnz msi_shell_ls_command_list_loop_name_print
+                                                    call fsm_get_selected_file_header_hidden_flag_status
+                                                    jc msi_shell_return_abnormal_error
+                                                    cpi $ff 
+                                                    jz msi_shell_ls_command_list_loop_increment
+msi_shell_ls_command_list_loop_name_print:          xthl 
+                                                    mov a,l 
+                                                    xthl  
+                                                    ani %01000000
+                                                    jz msi_shell_ls_command_list_loop_name_print2
+                                                    xthl 
+                                                    inr h 
+                                                    mov a,h
+                                                    xthl  
+                                                    cpi msi_shell_ls_command_pause_line_number
+                                                    jc msi_shell_ls_command_list_loop_name_print2
+                                                    xthl 
+                                                    mvi h,0 
+                                                    xthl
+                                                    lxi h,msi_shell_ls_command_pause_string 
+                                                    call msi_shell_send_string_console
+                                                    call msi_shell_read_console_byte
+msi_shell_ls_command_list_loop_name_print2:         call fsm_get_selected_file_header_name
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_shell_return_abnormal_error
+                                                    lxi h,0 
+                                                    dad sp 
+                                                    call msi_shell_send_string_console
+                                                    mvi b,0 
+msi_shell_ls_command_list_name_loop:                inx h
+                                                    inr b 
+                                                    mov a,m 
+                                                    ora a 
+                                                    jnz msi_shell_ls_command_list_name_loop
+                                                    inx h 
+                                                    sphl 
+msi_shell_ls_command_list_name_tab:                 call fsm_file_name_max_dimension 
+                                                    cmp b 
+                                                    jc msi_shell_ls_command_list_name_tab_end
+                                                    inr b 
+                                                    mvi a,msi_shell_space_character
+                                                    call msi_shell_send_console_byte
+                                                    jmp msi_shell_ls_command_list_name_tab
+msi_shell_ls_command_list_name_tab_end:             mvi a,msi_shell_space_character
+                                                    call msi_shell_send_console_byte
+                                                    call fsm_get_selected_file_header_dimension 
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_shell_return_abnormal_error
+                                                    call msi_shell_send_console_long_number 
+                                                    lxi h,msi_shell_ls_specific_bytes_string
+                                                    call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte
+msi_shell_ls_command_list_loop_increment:           call fsm_increment_file_header_scan_pointer
+                                                    cpi fsm_operation_ok
+                                                    jz msi_shell_ls_command_list_loop
+                                                    cpi fsm_end_of_list
+                                                    jnz msi_shell_return_abnormal_error
+msi_shell_ls_command_list_loop_end:                 mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte
+                                                    jmp msi_shell_ls_command_end
+
+msi_shell_ls_command_specific:                      mov a,d 
+                                                    call msi_shell_point_argument
+                                                    xchg 
+                                                    push b 
+                                                    call fsm_file_name_max_dimension
+                                                    lxi h,$ffff 
+                                                    mov b,a 
+                                                    inr b 
+                                                    mov a,l 
+                                                    sub b 
+                                                    mov l,a 
+                                                    mov a,h 
+                                                    sbi 0
+                                                    mov h,a
+                                                    pop b  
+                                                    dad sp 
+                                                    sphl 
+                                                    xchg 
+msi_shell_ls_command_specific_copy_loop:            call mms_read_selected_data_segment_byte
+                                                    jc msi_shell_ls_command_specific_copy_loop_end
+                                                    cpi msi_shell_space_character
+                                                    jz msi_shell_ls_command_specific_copy_loop_end
+                                                    ora a 
+                                                    jz msi_shell_ls_command_specific_copy_loop_end
+                                                    stax d
+                                                    inx d
+                                                    inx h 
+                                                    jmp msi_shell_ls_command_specific_copy_loop
+msi_shell_ls_command_specific_copy_loop_end:        xchg 
+                                                    mvi m,$00 
+                                                    lxi h,0 
+                                                    dad sp 
+                                                    mov e,c 
+                                                    mov c,l 
+                                                    mov b,h 
+                                                    call fsm_select_file_header
+                                                    cpi fsm_operation_ok
+                                                    jz msi_shell_ls_command_specific_print
+                                                    cpi fsm_header_not_found
+                                                    jnz msi_shell_return_abnormal_error
+msi_shell_ls_command_specific_file_not_found:       lxi h,msi_shell_del_command_not_found
+                                                    jmp msi_shell_print_error_message
+msi_shell_ls_command_specific_print:                call fsm_get_selected_file_header_hidden_flag_status
+                                                    jc msi_shell_return_abnormal_error
+                                                    ora a 
+                                                    jz msi_shell_ls_command_specific_print2
+                                                    mov a,e 
+                                                    ani %10000000
+                                                    jz msi_shell_ls_command_specific_file_not_found
+msi_shell_ls_command_specific_print2:               lxi h, msi_shell_ls_specific_dimension_string
+                                                    call msi_shell_send_string_console
+                                                    call fsm_get_selected_file_header_dimension
+                                                    cpi fsm_operation_ok
+                                                    jnz msi_shell_return_abnormal_error
+                                                    call msi_shell_send_console_long_number
+                                                    mvi a,msi_shell_space_character
+                                                    call msi_shell_send_console_byte 
+                                                    lxi h,msi_shell_ls_specific_bytes_string
+                                                    call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte
+                                                    lxi h, msi_shell_ls_specific_system_string
+                                                    call msi_shell_send_string_console 
+                                                    call fsm_get_selected_file_header_system_flag_status
+                                                    jc msi_shell_return_abnormal_error
+                                                    ora a 
+                                                    jz msi_shell_ls_command_specific_print_normal
+                                                    lxi h,msi_shell_ls_specific_yes_string
+                                                    jmp msi_shell_ls_command_specific_print_system
+msi_shell_ls_command_specific_print_normal:         lxi h,msi_shell_ls_specific_no_string 
+msi_shell_ls_command_specific_print_system:         call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte  
+                                                    lxi h, msi_shell_ls_specific_read_only_string
+                                                    call msi_shell_send_string_console 
+                                                    call fsm_get_selected_file_header_readonly_flag_status
+                                                    jc msi_shell_return_abnormal_error
+                                                    ora a 
+                                                    jz msi_shell_ls_command_specific_print_normal2
+                                                    lxi h,msi_shell_ls_specific_yes_string
+                                                    jmp msi_shell_ls_command_specific_print_readable
+msi_shell_ls_command_specific_print_normal2:        lxi h,msi_shell_ls_specific_no_string 
+msi_shell_ls_command_specific_print_readable:       call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte  
+                                                    lxi h, msi_shell_ls_specific_hidden_string
+                                                    call msi_shell_send_string_console 
+                                                    call fsm_get_selected_file_header_hidden_flag_status
+                                                    jc msi_shell_return_abnormal_error
+                                                    ora a 
+                                                    jz msi_shell_ls_command_specific_print_normal3
+                                                    lxi h,msi_shell_ls_specific_yes_string
+                                                    jmp msi_shell_ls_command_specific_print_hidden
+msi_shell_ls_command_specific_print_normal3:        lxi h,msi_shell_ls_specific_no_string 
+msi_shell_ls_command_specific_print_hidden:         call msi_shell_send_string_console
+                                                    mvi a,msi_shell_carriage_return_character
+                                                    call msi_shell_send_console_byte
+                                                    mvi a,msi_shell_new_line_character
+                                                    call msi_shell_send_console_byte  
+                                                    jmp msi_shell_ls_command_end            
+msi_shell_ls_command_end:                           jmp msi_shell_command_prompt_initialize
+
 
 
 
@@ -2524,6 +3559,10 @@ msi_shell_mem_command:      lxi h,msi_shell_mem_installed_string
                             mov c,l 
                             mov b,h 
                             call msi_shell_send_console_address_number
+                            mvi a,msi_shell_space_character
+                            call msi_shell_send_console_byte 
+                            lxi h,msi_shell_ls_specific_bytes_string
+                            call msi_shell_send_string_console
                             mvi a,msi_shell_carriage_return_character
                             call msi_shell_send_console_byte
                             mvi a,msi_shell_new_line_character
@@ -2535,6 +3574,10 @@ msi_shell_mem_command:      lxi h,msi_shell_mem_installed_string
                             mov c,l 
                             mov b,h 
                             call msi_shell_send_console_address_number
+                            mvi a,msi_shell_space_character
+                            call msi_shell_send_console_byte 
+                            lxi h,msi_shell_ls_specific_bytes_string
+                            call msi_shell_send_string_console
                             mvi a,msi_shell_carriage_return_character
                             call msi_shell_send_console_byte
                             mvi a,msi_shell_new_line_character
@@ -2544,6 +3587,10 @@ msi_shell_mem_command:      lxi h,msi_shell_mem_installed_string
                             call msi_shell_send_string_console
                             lxi b,high_memory_start
                             call msi_shell_send_console_address_number
+                            mvi a,msi_shell_space_character
+                            call msi_shell_send_console_byte 
+                            lxi h,msi_shell_ls_specific_bytes_string
+                            call msi_shell_send_string_console
                             mvi a,msi_shell_carriage_return_character
                             call msi_shell_send_console_byte
                             mvi a,msi_shell_new_line_character
@@ -2575,21 +3622,10 @@ msi_shell_ver_command:      lxi h,msi_system_version_message
                             jmp msi_shell_command_prompt_initialize
                             
 
-msi_shell_echo_command:         ora a
+msi_shell_echo_command:         mvi a,1
+                                call msi_shell_point_argument
+                                ora a 
                                 jz msi_shell_echo_command_end
-                                lxi h,0 
-msi_shell_echo_command_read:    call mms_read_selected_data_segment_byte
-                                jc msi_shell_echo_command_align
-                                inx h 
-                                cpi $20 
-                                jz msi_shell_echo_command_align
-                                inx h 
-                                jnz msi_shell_echo_command_read
-msi_shell_echo_command_align:   call mms_read_selected_data_segment_byte
-                                cpi $20 
-                                jnz msi_shell_echo_command_print
-                                inx h 
-                                jmp msi_shell_echo_command_align
 msi_shell_echo_command_print:   call mms_read_selected_data_segment_byte
                                 jc msi_shell_echo_command_end
                                 ora a 
@@ -2603,7 +3639,57 @@ msi_shell_echo_command_end:     mvi a,msi_shell_carriage_return_character
                                 call msi_shell_send_console_byte 
                                 jmp msi_shell_command_prompt_initialize
 
-msi_shell_cd_command:           
+msi_shell_cd_command:               mvi a,1 
+                                    call msi_shell_point_argument
+                                    ora a 
+                                    jz msi_shell_cd_command_not_found
+                                    call mms_read_selected_data_segment_byte
+                                    jc msi_shell_cd_command_not_valid
+                                    cpi $41
+                                    jc msi_shell_cd_command_not_valid
+                                    cpi $5B
+                                    jnc msi_shell_cd_command_not_valid
+                                    mov b,a 
+                                    inx h 
+                                    call mms_read_selected_data_segment_byte
+                                    jc msi_shell_command_cd_select_disk
+                                    ora a 
+                                    jz msi_shell_command_cd_select_disk
+                                    cpi msi_shell_space_character
+                                    jz msi_shell_command_cd_select_disk
+                                    cpi ":"
+                                    jnz msi_shell_cd_command_not_valid
+                                    inx h 
+                                    call mms_read_selected_data_segment_byte
+                                    jc msi_shell_command_cd_select_disk
+                                    cpi msi_shell_space_character
+                                    jz msi_shell_command_cd_select_disk
+                                    ora a 
+                                    jz msi_shell_command_cd_select_disk
+                                    cpi "/"
+                                    jnz msi_shell_cd_command_not_valid
+                                    inx h 
+                                    call mms_read_selected_data_segment_byte
+                                    jc msi_shell_command_cd_select_disk
+                                    ora a 
+                                    jz msi_shell_command_cd_select_disk
+                                    cpi msi_shell_space_character
+                                    jnz msi_shell_cd_command_not_valid
+msi_shell_command_cd_select_disk:   mov a,b 
+                                    call fsm_select_disk
+                                    cpi fsm_operation_ok
+                                    jz msi_shell_cd_command_save
+                                    cpi fsm_device_not_found
+                                    jz msi_shell_cd_command_not_found
+                                    jmp msi_shell_return_abnormal_error
+msi_shell_cd_command_save:          mov a,b 
+                                    sta msi_shell_cd_command_save
+                                    jmp msi_shell_cd_command_end 
+msi_shell_cd_command_not_valid:     lxi h,msi_shell_cd_command_path_not_valid_string
+                                    jmp msi_shell_print_error_message
+msi_shell_cd_command_not_found:     lxi h,msi_shell_cd_command_not_valid_string 
+                                    jmp msi_shell_print_error_message
+msi_shell_cd_command_end:           jmp msi_shell_command_prompt_initialize
 
 msi_shell_dev_command:              ora a 
                                     ;jnz msi_shell_dev_command_specific
@@ -2650,8 +3736,23 @@ msi_shell_dev_command_end:          mvi a,msi_shell_carriage_return_character
                                     call msi_shell_send_console_byte 
                                     jmp msi_shell_command_prompt_initialize
 
+msi_shell_return_abnormal_error:    mov b,a
+                                    mvi a,msi_shell_carriage_return_character
+                                    call msi_shell_send_console_byte
+                                    mvi a,msi_shell_new_line_character
+                                    call msi_shell_send_console_byte
+                                    lxi h,msi_shell_abnormal_error
+                                    call msi_shell_send_string_console
+                                    mov a,b 
+                                    call msi_shell_send_console_byte_number
+                                    mvi a,msi_shell_carriage_return_character
+                                    call msi_shell_send_console_byte
+                                    mvi a,msi_shell_new_line_character
+                                    call msi_shell_send_console_byte    
+                                    jmp msi_shell_command_prompt_initialize    
 
-msi_shell_con_command:
+msi_shell_print_error_message:      call msi_shell_send_string_console
+                                    jmp msi_shell_command_prompt_initialize 
 
 MSI_layer_end:
 .print "Space left in MSI layer ->",MSI_dimension-MSI_layer_end+MSI 
@@ -2661,3 +3762,4 @@ MSI_layer_end:
 .print "All functions built successfully"
 .print "System calls number -> ",(msi_system_calls_id_table_end-msi_system_calls_id_table)/2
 .print "System end ram address ->", SYSTEM_memory_end
+.print "Space used by shell -> ",MSI_layer_end-msi_shell_start_address
