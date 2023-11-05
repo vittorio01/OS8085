@@ -174,8 +174,8 @@ fsm_selected_file_header_php_address        .equ reserved_memory_start + $004C
 fsm_selected_file_data_pointer_page_address .equ reserved_memory_start + $004E 
 fsm_selected_file_data_pointer_offset       .equ reserved_memory_start + $0050
 
-fsm_coded_page_dimension                .equ 4
-fsm_uncoded_page_dimension              .equ 512
+fsm_coded_page_dimension                .equ 8
+fsm_uncoded_page_dimension              .equ 1024
 fsm_boot_sector_start_position          .equ $0020
 fsm_boot_sector_compile_address_offset  .equ high_memory_start
 

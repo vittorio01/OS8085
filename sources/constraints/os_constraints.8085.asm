@@ -23,7 +23,7 @@ system_interrupt_space_end  .equ    $0040
 MSI_dimension           .equ    7168-system_interrupt_space_end
 FSM_dimension           .equ    7168
 MMS_dimension           .equ    2048
-BIOS_dimension          .equ    3072
+BIOS_dimension          .equ    4096
 LIBRARIES_dimension     .equ    1536
 SYSTEM_dimension        .equ    MSI_dimension+FSM_dimension+MMS_dimension+BIOS_dimension+LIBRARIES_dimension        ;insica la dimensione finale del sistema
 
@@ -44,7 +44,7 @@ reserved_memory_start       .equ SYSTEM_memory_end
 reserved_memory_end         .equ reserved_memory_start+reserved_memory_dimension
 
 ;memoria dedicata alla gestione dello stack (si può ottimizare per rispariare RAM ma non è consigliato)
-max_system_stack_dimension  .equ 512                                                
+max_system_stack_dimension  .equ 368                                                
 stack_memory_start          .equ reserved_memory_end+max_system_stack_dimension
 
 ;----- HIGH RAM -----

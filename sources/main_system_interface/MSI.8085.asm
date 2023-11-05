@@ -1864,7 +1864,7 @@ msi_shell_startup_message:                  .text "EDOS v1.0 by V.P."
                                             
 msi_shell_load_program_error_message        .text "Failed to load program: "
                                             .b 0
-msi_shell_program_load_dimension_message    .text "Program too large"
+msi_shell_program_load_dimension_message    .text "Not enough ram"
                                             .b msi_shell_new_line_character, msi_shell_carriage_return_character, 0
 
 msi_shell_error_code_received_message       .text "Program exited with abnormal code: "
@@ -1878,19 +1878,19 @@ msi_shell_basic_console_IO_type             .text "BTTY"
 
 
 
-msi_shell_command_list_start    .text "CP"
+msi_shell_command_list_start    .text "COPY"
                                 .b 0
                                 .word   msi_shell_cp_command 
                                 .text "DEL"
                                 .b 0 
                                 .word   msi_shell_del_command
-                                .text "MV"
+                                .text "MOVE"
                                 .b 0 
                                 .word   msi_shell_mv_command
                                 .text "MEM"
                                 .b 0 
                                 .word   msi_shell_mem_command
-                                .text "LS"
+                                .text "FILE"
                                 .b 0 
                                 .word   msi_shell_ls_command
                                 .text "DISK"
@@ -1959,6 +1959,7 @@ msi_shell_disk_device_search_loop_end:                  mov a,b
 msi_shell_command_prompt_initialize:                    lxi sp,stack_memory_start 
                                                         xra a 
                                                         sta msi_current_program_flags 
+                                                        call mms_delete_all_temporary_segments
                                                         lda msi_shell_default_disk 
                                                         mov b,a 
                                                         ora a 
@@ -2961,6 +2962,10 @@ msi_shell_mv_cp_command_destination_space_ok:   call mms_free_high_ram_bytes
                                                 jnc msi_shell_mv_cp_ram_error 
                                                 call mms_create_high_memory_data_segment
                                                 jc msi_shell_mv_cp_command_file_delete
+                                                mvi a,$ff 
+                                                call mms_set_selected_data_segment_temporary_flag
+                                                cpi mms_operation_ok
+                                                jnz msi_shell_mv_cp_command_file_delete
                                                 lxi h,9
                                                 dad sp 
                                                 mov m,a 
@@ -3202,15 +3207,6 @@ msi_shell_mv_cp_command_file_delete:            mov b,a
                                                 call fsm_delete_selected_file_header
                                                 cpi fsm_operation_ok
                                                 jnz msi_shell_return_abnormal_error
-                                                call msi_shell_mv_cp_segment_load
-                                                ora a 
-                                                jz msi_shell_return_abnormal_error
-                                                call mms_select_high_memory_data_segment
-                                                cpi mms_operation_ok
-                                                jnz msi_shell_return_abnormal_error
-                                                call mms_delete_selected_high_memory_data_segment
-                                                cpi mms_operation_ok
-                                                jnz msi_shell_return_abnormal_error
                                                 jmp msi_shell_command_prompt_initialize
 
 msi_shell_mv_cp_command_type_load:              push h
@@ -3274,14 +3270,6 @@ msi_shell_mv_cp_command_destination_not_valid:  lxi h,msi_shell_mv_cp_command_de
                                                 jmp msi_shell_print_error_message
 msi_shell_mv_cp_command_file_exists:            lxi h,msi_shell_mv_cp_command_file_exists_string
                                                 jmp msi_shell_print_error_message     
-
-
-
-
- 
-
-
-
 
 msi_shell_ls_command_pause_line_number              .equ 8
 
