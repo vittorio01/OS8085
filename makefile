@@ -15,7 +15,7 @@ ASSEMBLER=retroassembler/retroassembler.dll
 TEMP=tmp
 OUTPUT=bin
 
-FIRMWARE_DIR=boards/firmwares/$(FIRMWARE)/$(FIRMWARE)_firmware.8085.asm
+FIRMWARE_DIR=boards/firmwares/$(FIRMWARE)/
 
 all: system firmware
 
@@ -56,9 +56,14 @@ system: $(MSI) $(FSM) $(MMS) $(BIOS_DIR) $(MAIN)
 
 
 firmware: 
-	@echo selected FIRMWARE: $(FIRMWARE_DIR)
+	@echo selected FIRMWARE: $(FIRMWARE)
+	rm -rf $(TEMP)
+	mkdir $(TEMP)
+	cp -r $(FIRMWARE_DIR)/* $(TEMP)
+	cp -r $(LIBRARIES_DIR)/* $(TEMP)
 	@echo building firmware image...
-	dotnet $(ASSEMBLER) $(FIRMWARE_DIR) bin/firmware.bin
+	dotnet $(ASSEMBLER) $(TEMP)/$(FIRMWARE)_firmware.8085.asm bin/firmware.bin
+	rm -rf $(TEMP)
 	@echo -------------------------------- 
 	@echo Done. Files generated: 
 	@ls bin

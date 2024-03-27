@@ -28,7 +28,6 @@ serial_packet_resend_attempts           .equ 5
 serial_wait_timeout_value_short:       .equ 750         
 serial_wait_timeout_value_long:        .equ 2500
 
-
 serial_command_reset_connection_byte    .equ $21
 serial_command_send_identifier_byte     .equ $22
 
@@ -63,7 +62,7 @@ device_boardId_dimension .equ 14    ;dimension of the string
 ;To manage terminal chars received from the slave, a small array queue is used  
 
 ;To change the posizion of this memory space the variable memory_space_base_address can be modified.
-memory_space_base_address                       .equ $0000
+memory_space_base_address                       .equ serial_memory_space_base_address
 ;this variable indicates the first address that can be used to save data. 
 ;The final memory region used will be from memory_space_base_address to memory_space_base_address+42
 
