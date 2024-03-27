@@ -1,15 +1,14 @@
-ascii_hex_conv: 	.org rom_memory_offset+$30					
-					.b $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $41, $42, $43, $44, $45, $46
+;PX1 firmware program is a simple hex editor that can be used to read, manage data and execute code using the crt controller and the PS/2 keyboard
 
-
+;--------- environment variables ---------
 delay_millis_value				.equ 	78
 
 keyboard_pointer_delay			.equ 	500
 keyboard_insert_delay			.equ 	200
-;firmware di base
-bios_start:     		lxi sp,stack_pointer
+
+;--------- main application ---------
+exitor_start:     		lxi sp,stack_pointer
 						call display_reset
-						
 						lxi h,start_graphic
 						call graphic_out
 						lxi h,start_string
@@ -371,138 +370,92 @@ display_reset_line:			mvi a,display_background_character
 							pop h
 							ret
 
-hex_test:	cpi $30			
-			jc not_hex	
-			cpi $3A
-			jnc hex_test_1
-			jmp is_hex
-hex_test_1:	cpi $41
-			jc not_hex
-			cpi $47
-			jnc hex_test_2
-			jmp is_hex
-hex_test_2:	cpi $61
-			jc not_hex
-			cpi $67
-			jnc not_hex
-is_hex:		mvi a,$ff
-			ret
-not_hex:	mvi a,0
-			ret
-
-ascii_to_hex:	cpi $61			
-				jc ascii_to_hex_1	
-				ani $4f	
-ascii_to_hex_1:	push h
-				lxi h,ascii_hex_conv
-ascii_to_hex_2:	cmp m
-				jz ascii_to_hex_e
-				inx h
-				jmp ascii_to_hex_2
-ascii_to_hex_e:	mov a,l
-				ani $0f
-				pop h
+hex_test:		cpi $30			
+				jc not_hex	
+				cpi $3A
+				jnc hex_test_1
+				jmp is_hex
+hex_test_1:		cpi $41
+				jc not_hex
+				cpi $47
+				jnc hex_test_2
+				jmp is_hex
+hex_test_2:		cpi $61
+				jc not_hex
+				cpi $67
+				jnc not_hex
+is_hex:			mvi a,$ff
 				ret
+not_hex:		mvi a,0
+				ret
+
+ascii_to_hex:			cpi $41 
+						jc ascii_to_hex_number
+						sui $37 
+						ret  
+ascii_to_hex_number:	sui $30
+						ret
 		
 
-hex_to_ascii:		push h
-					push b			
-					mov b,a
-					lxi h,ascii_hex_conv
-hex_to_ascii_loop:	mov a,l
-					ani $0f
-					cmp b
-					jz hex_to_ascii_end
-					inx h
-					jmp hex_to_ascii_loop
-hex_to_ascii_end:	mov a,m
-					pop b
-					pop h
-					ret
+hex_to_ascii:			cpi $0A 
+						jc hex_to_ascii_number
+						adi $37
+						ret
+hex_to_ascii_number:	adi $30
+						ret
 
-string_out:		push psw		
+string_out:		push psw 
 string_out_1:	mov a,m			
     			ora a
 				jz string_out_2
 				mov c,m
-				call display_char_out
+				call crt_char_out
 				inx h
 				jmp string_out_1
 string_out_2:	pop psw
         		ret
 
-graphic_out:		push psw		
-graphic_out_1:		mov a,m			
-					ora a
-					jz graphic_out_2
-					mov c,m
-					call display_out_addr
-					inx h
-					jmp graphic_out_1
-graphic_out_2:		pop psw
-        			ret
-
-keyboard_char_in:	push h
-keyboard_loop1:		lxi h,keyboard_pointer_delay 
-					call pointer_enable
-keyboard_loop1_1:	call keyboard_in_ver
-					ora a
-					call delay_millis
-					jnz keyboard_loop1_end 
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_loop1_1
+keyboard_char_in:		push h
+keyboard_loop1:			lxi h,keyboard_pointer_delay 
+						call crt_show_cursor
+keyboard_loop1_1:		call keyb_status
+						ora a
+						call delay_millis
+						jnz keyboard_loop1_end 
+						dcx h
+						mov a,h
+						ora l
+						jnz keyboard_loop1_1
 		
-					call pointer_disable
-					lxi h,keyboard_pointer_delay
-keyboard_loop2_1:	call keyboard_in_ver
-					ora a
-					call delay_millis
-					jnz keyboard_loop2_end 
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_loop2_1
+						call crt_hide_cursor
+						lxi h,keyboard_pointer_delay
+keyboard_loop2_1:		call keyb_status
+						ora a
+						call delay_millis
+						jnz keyboard_loop2_end 
+						dcx h
+						mov a,h
+						ora l
+						jnz keyboard_loop2_1
 
-					jmp keyboard_loop1
+						jmp keyboard_loop1
 
-keyboard_loop1_end:	call pointer_disable	 
-keyboard_loop2_end:	call keyboard_in_data
+keyboard_loop1_end:		call crt_hide_cursor 
+keyboard_loop2_end:		call keyb_read
 
-					push psw
-					lxi h,keyboard_insert_delay
-keyboard_end_delay:	call delay_millis
-					dcx h
-					mov a,h
-					ora l
-					jnz keyboard_end_delay
-					pop psw
-					pop h
-					ret
+						push psw
+						lxi h,keyboard_insert_delay
+keyboard_end_delay:		call delay_millis
+						dcx h
+						mov a,h
+						ora l
+						jnz keyboard_end_delay
+						pop psw
+						pop h
+						ret
 
-pointer_enable:	push h
-				push psw
-				lhld display_pointer_address
-				call display_in
-				sta display_character_backup
-				mvi a,display_white_character
-				call display_out
-				pop psw
-				pop h
-				ret
-
-pointer_disable:	push h
-					push psw
-					lhld display_pointer_address
-					lda display_character_backup
-					call display_out
-					pop psw
-					pop h
-					ret
-
-program_launch:	call display_reset
-				pchl
+program_launch:			call display_reset
+						pchl
 
 hex_editor_help_text2:	.text 	"--    FUNZIONI DISPONIBILI    --"
 						.b $0a, $0d
@@ -545,17 +498,6 @@ hex_editor_help_text:	.text	"--    GUIDA PER L'UTILIZZO    --"
 						.b $0a, $0d
 						.b 0
 
-start_graphic: 		.b %10000001, %10000011, %10000001, %10000001, %10000000, %10000000, %10000011, %10000000, %10000010, %10000001, %10000010, %10000000, %10000011, $80, $80, $80 
-					.b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
-					.b %10010101, %10001100, %10010001, %10011001, %10000100, %10001000, %10101110, %10100010, %10101010, %10101010, %10010101, %10010000, %10001101, $80, $80, $80 
-					.b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
-					.b %10010000, %10000000, %10010000, %10010000, %10000000, %10000000, %10110000, %10000000, %10100000, %10010000, %10100000, %10010000, %10100000, $80, $80, $80
-					.b 0
-
 start_string:		.b $0a, $0d
-					.text "32K BYTES RAM"
-					.b $0a, $0d
-					.text "512 BYTES VIDEO RAM"
-					.b $0a, $0d
-					.text "AVVIO DELLE RISORSE"
+					.text "STARTING HEX EDITOR..."
 					.b 0

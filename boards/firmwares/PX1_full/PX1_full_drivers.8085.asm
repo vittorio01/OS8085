@@ -22,17 +22,9 @@ crt_background_character    	.equ    %10000000
 crt_cursor_character 			.equ 	%10111111
 crt_line_feed_verify        	.equ    %00000001
 
-crt_character_mode_setting_mask	.equ	%10000000 	
-crt_character_mode_on 			.equ 	%10000000
-crt_character_mode_off 			.equ 	%00000000
-
-crt_cursor_status_mask			.equ 	%01000000
+crt_cursor_status_mask			.equ 	%10000000
 crt_cursor_status_off			.equ 	%00000000
-crt_cursor_status_on			.equ 	%01000000
-
-crt_vram_mode_mask 						.equ %11000000
-crt_vram_character_mode_enable_bits		.equ %00000000
-crt_vram_direct_mode_enable_bits		.equ %10000000
+crt_cursor_status_on			.equ 	%10000000
 
 ;CRT controller port addresses
 crt_vram_low_address_port		.equ 	$20			
@@ -51,18 +43,18 @@ keyboard_input_port		    	.equ 	$21
 ;dma_initial_address				.equ 	$0080
 
 ;DMA controller port addresses
-;dma_status_register		    .equ $08
-;dma_command_register	    .equ $08
-;dma_request_register	    .equ $09
-;dma_single_mask_register	.equ $0a
-;dma_mode_register		    .equ $0b
-;dma_ff_clear		        .equ $0c
-;dma_temporary_register	    .equ $0d
-;dma_master_clear		    .equ $0d
-;dma_clear_mask_register	    .equ $0e
-;dma_all_mask_register	    .equ $0f
-;dma_address_register	    .equ $04
-;dma_word_count_register     .equ $05
+dma_status_register		    .equ $08
+dma_command_register	    .equ $08
+dma_request_register	    .equ $09
+dma_single_mask_register	.equ $0a
+dma_mode_register		    .equ $0b
+dma_ff_clear		        .equ $0c
+dma_temporary_register	    .equ $0d
+dma_master_clear		    .equ $0d
+dma_clear_mask_register	    .equ $0e
+dma_all_mask_register	    .equ $0f
+dma_address_register	    .equ $04
+dma_word_count_register     .equ $05
 
 ;FDC controller environment variables
 
@@ -91,18 +83,16 @@ crt_vram_start_address				.equ vram_memory_space_address
 ;floppy_sector_number			.equ	$7ff8
 ;floppy_sector_size				.equ 	$7ff9
 
-;------- drivers function addresses -------
-bios_entries:  	jmp crt_display_reset
-                jmp crt_enable_character_mode
-				jmp crt_disable_character_mode
-				jmp crt_set_display_pointer
-				jmp crt_get_display_pointer
-				jmp crt_char_out
-				jmp crt_show_cursor
-				jmp crt_hide_cursor
+extended_ascii_characters_table_start_offset 	.equ 219
+extended_ascii_characters_table_end_offset		.equ 224
 
-				jmp keyb_status 
-				jmp keyb_read 
+extended_ascii_characters_table:		.byte %10111111
+										.byte %10001111
+										.byte %10101010
+										.byte %10010101
+										.byte %10111100
+extended_ascii_characters_table_end:
+
 
 ;------- CRT controller driver implementation ----
 
@@ -111,7 +101,7 @@ crt_display_reset:  				push h
 									push d
 									lxi h,0
 									shld crt_current_pointer_address
-									mvi a,crt_character_mode_on+crt_cursor_status_off
+									mvi a,crt_cursor_status_off
 									sta crt_current_settings
 									lxi h,crt_vram_start_address
 									lxi d,crt_vram_dimension
@@ -134,54 +124,6 @@ crt_display_reset_end:  			pop d
 									pop h
 									ret
 
-;crt_enable_character_mode turns the crt controller into a default ASCII terminal with automatic shift up
-crt_enable_character_mode:		push h 
-								push d 
-								push b 
-								lda crt_current_settings 
-								ani $ff-crt_character_mode_setting_mask
-								ori crt_character_mode_on
-								sta crt_current_settings
-								lxi b,crt_vram_start_address
-								lxi h,0 
-								lxi d,crt_vram_dimension
-crt_enable_character_mode_loop:	ldax b 
-								call crt_byte_out 
-								inx b 
-								inx h 
-								dcx b 
-								mov a,e 
-								ora d 
-								jnz crt_enable_character_mode_loop
-crt_enable_character_mode_end:	pop b 
-								pop d 
-								pop h 
-								ret 
-
-;crt_disable_character_mode the CRT controller just show the vram values in pixel format
-crt_disable_character_mode:			push h 
-									push d  
-									push b 
-									lda crt_current_settings 
-									ani $ff-crt_character_mode_setting_mask
-									ori crt_character_mode_off
-									sta crt_current_settings	
-									lxi b,crt_vram_start_address
-									lxi h,0 
-									lxi d,crt_vram_dimension
-crt_disable_character_mode_loop:	ldax b 
-									call crt_byte_out 
-									inx b 
-									inx h 
-									dcx b 
-									mov a,e 
-									ora d 
-									jnz crt_disable_character_mode_loop
-crt_disable_character_mode_end:		pop b 
-									pop d 
-									pop h 
-									ret 
-
 ;crt_byte_out sends a byte to the external vram 
 ;A 	-> 	byte to send
 ;HL -> 	vram address
@@ -189,7 +131,6 @@ crt_disable_character_mode_end:		pop b
 crt_byte_out:					push h 
 								push d
 								push b
-								ani $ff-crt_vram_mode_mask
 								mov b,a   
 								lxi d,crt_display_characters_size
 								mov a,l 
@@ -202,17 +143,6 @@ crt_byte_out:					push h
 								dad d 
 								mov m,b 
 								xchg 
-								lda crt_current_settings 
-								ani crt_character_mode_setting_mask
-								cpi crt_character_mode_on
-								jz crt_byte_out_character_mode
-								mvi a,crt_vram_direct_mode_enable_bits
-								ora b 
-								mov b,a 
-								jmp crt_byte_out_next
-crt_byte_out_character_mode:	mvi a,crt_vram_character_mode_enable_bits
-								ora b 
-								mov b,a 
 crt_byte_out_next:				mov a,l 
 								out crt_vram_low_address_port 
 								mov a,h 
@@ -274,10 +204,6 @@ crt_char_out:						push h
 									push b 
 									mov b,a 
 									lda crt_current_settings
-									ani crt_character_mode_setting_mask
-									cpi crt_character_mode_off
-									jz crt_char_out_end 
-									lda crt_current_settings
 									ani $ff-crt_cursor_status_mask
 									cpi crt_cursor_status_off 
 									jz crt_char_out_start
@@ -317,19 +243,22 @@ crt_char_out_line_shift_up_loop2:	mvi a,crt_background_character
 									pop b 
 									lhld crt_current_pointer_address
 crt_char_out_next:					mov a,b 
-									ani $ff-crt_vram_mode_mask
+									cpi extended_ascii_characters_table_start_offset
+									jnc crt_char_out_extended_char
 									cpi $0a 
 									jz crt_char_out_new_line
 									cpi $0d
 									jz crt_char_out_carriage_return
 									cpi $08
 									jz crt_char_out_backspace
-crt_char_out_print:					cpi $61
-									jc crt_char_out_print_upper_case
+									cpi $20 
+									jc crt_char_out_unknown_char
+crt_char_out_ascii:					cpi $61
+									jc crt_char_out_print
 									cpi $7B
-									jnc crt_char_out_print_upper_case
+									jnc crt_char_out_print
 									ani %11011111
-crt_char_out_print_upper_case:		call crt_byte_out 
+crt_char_out_print:					call crt_byte_out 
 									inx h
 									shld crt_current_pointer_address
 									jmp crt_char_out_end
@@ -346,6 +275,24 @@ crt_char_out_carriage_return:		xra a
 crt_char_out_backspace:				mvi a,crt_background_character
 									call crt_byte_out
 									dcx h
+									shld crt_current_pointer_address
+									jmp crt_char_out_end 
+crt_char_out_extended_char:			cpi extended_ascii_characters_table_end_offset
+									jnc crt_char_out_unknown_char
+									lxi d,extended_ascii_characters_table
+									sui extended_ascii_characters_table_start_offset
+									add e 
+									mov e,a 
+									mov a,d 
+									aci 0 
+									mov d,a 
+									mov a,m
+									call crt_byte_out 
+									inx h
+									shld crt_current_pointer_address
+									jmp crt_char_out_end
+crt_char_out_unknown_char:			mvi a,crt_background_character
+									call crt_byte_out 
 									shld crt_current_pointer_address
 crt_char_out_end:					lda crt_current_settings
 									ani $ff-crt_cursor_status_mask
@@ -393,17 +340,12 @@ crt_hide_cursor_end:	pop h
 
 ;-------- DMA controller driver implementation --------
 
-/*
-dma_reset:	push h
-			lxi h,0
-			shld dma_initial_address
-			pop h
-			out dma_master_clear
-			mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
-			out dma_command_register
-			mvi a,%00001011			;set dma channels 0,1,3 mask bit
-			out dma_all_mask_register
-			ret
+dma_reset:				out dma_master_clear
+						mvi a,%00001000			;dack active low, drq active high, compressed timing, m-to-m disable
+						out dma_command_register
+						mvi a,%00001011			;set dma channels 0,1,3 mask bit
+						out dma_all_mask_register
+						ret
 
 dma_set_write_address:	mvi a,%01000110
 						jmp dma_set_next
@@ -419,7 +361,7 @@ dma_set_next:			out dma_mode_register
 						out dma_word_count_register
 						out dma_word_count_register
 						ret
-*/
+
 
 ;--------- PS/2 Keyboard driver implementation ---------
 
@@ -440,8 +382,6 @@ keyb_read:				in keyboard_input_port
 						cma
 						ani keyboard_data_mask
 						ret
-
-;funzioni del BIOS secondarie
 
 /*
 

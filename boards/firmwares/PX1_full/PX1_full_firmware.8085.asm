@@ -18,14 +18,14 @@ stack_pointer                       .equ serial_memory_space_base_address-1
 
 .include "PX1_full_serial_drivers.8085.asm"
 .include "PX1_full_drivers.8085.asm"
-;.include "PX1_full_firmware_shell.8085.asm"
+;.include "PX1_full_firmware_program.8085.asm"
 
 time_delay_value    .equ $76
 
 
 firmware_boot:          lxi sp,stack_pointer 
+                        call dma_reset 
                         call crt_display_reset 
-                        call crt_enable_character_mode 
                         call crt_show_cursor 
 firmware_loop:          call keyb_status 
                         ora a 
