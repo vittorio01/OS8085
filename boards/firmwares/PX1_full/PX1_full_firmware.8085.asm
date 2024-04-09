@@ -24,9 +24,10 @@ time_delay_value    .equ $76
 
 
 firmware_boot:          lxi sp,stack_pointer 
-                        call dma_reset 
+                        ;call dma_reset 
                         call crt_display_reset 
-                        call crt_show_cursor 
+                        hlt
+                        ;call crt_show_cursor 
 firmware_loop:          call keyb_status 
                         ora a 
                         jz firmware_loop
