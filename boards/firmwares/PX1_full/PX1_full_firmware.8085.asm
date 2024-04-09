@@ -17,6 +17,7 @@ serial_memory_space_base_address    .equ drivers_memory_space_base_address-42
 stack_pointer                       .equ serial_memory_space_base_address-1
 
 .include "PX1_full_serial_drivers.8085.asm"
+.include "PX1_full_drivers.8085.asm"
 ;.include "PX1_full_firmware_program.8085.asm"
 
 time_delay_value    .equ $76
@@ -61,4 +62,5 @@ firmware_end:
 .print "Space left in firmware memory ->",firmware_dimension-(firmware_end-firmware_functions) 
 .memory "fill", firmware_end, firmware_dimension-(firmware_end-firmware_functions),$00
 .print "Firmware load address ->",firmware_functions
+.print "VRAM start address ->", vram_memory_space_address
 .print "All functions built successfully"

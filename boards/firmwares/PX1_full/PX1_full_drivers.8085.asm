@@ -120,7 +120,8 @@ crt_display_external_vram_clear:	mvi a,crt_background_character
 									mov a,d
 									ora e
 									jnz crt_display_external_vram_clear
-crt_display_reset_end:  			pop d
+crt_display_reset_end:  			call crt_hide_cursor
+									pop d
 									pop h
 									ret
 
@@ -212,10 +213,10 @@ crt_char_out:						push h
 									call crt_byte_out 
 crt_char_out_start:					lhld crt_current_pointer_address 
 									lxi d,crt_display_characters_size
-									mov a,e 
-									sub l 
-									mov a,d 
-									sbb h 
+									mov a,l
+									sub e 
+									mov a,h
+									sbb d 
 									jc crt_char_out_next
 crt_char_out_line_shift_up:			push b 
 									lxi h,0
