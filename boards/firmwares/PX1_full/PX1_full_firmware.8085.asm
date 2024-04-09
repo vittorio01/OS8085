@@ -17,7 +17,6 @@ serial_memory_space_base_address    .equ drivers_memory_space_base_address-42
 stack_pointer                       .equ serial_memory_space_base_address-1
 
 .include "PX1_full_serial_drivers.8085.asm"
-.include "PX1_full_drivers.8085.asm"
 ;.include "PX1_full_firmware_program.8085.asm"
 
 time_delay_value    .equ $76
