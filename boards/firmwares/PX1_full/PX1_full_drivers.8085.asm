@@ -83,7 +83,7 @@ crt_vram_start_address				.equ vram_memory_space_address
 ;floppy_sector_number			.equ	$7ff8
 ;floppy_sector_size				.equ 	$7ff9
 
-extended_ascii_characters_table_start_offset 	.equ 219
+extended_ascii_characters_table_start_offset 	.equ 21
 extended_ascii_characters_table_end_offset		.equ 224
 
 extended_ascii_characters_table:		.byte %10111111
@@ -120,7 +120,8 @@ crt_display_external_vram_clear:	mvi a,crt_background_character
 									mov a,d
 									ora e
 									jnz crt_display_external_vram_clear
-crt_display_reset_end:  			call crt_hide_cursor
+crt_display_reset_end:  			mvi a,crt_background_character
+									sta crt_backup_cursor_character	
 									pop d
 									pop h
 									ret
@@ -205,11 +206,11 @@ crt_char_out:						push h
 									push b 
 									mov b,a 
 									lda crt_current_settings
-									ani $ff-crt_cursor_status_mask
+									ani crt_cursor_status_mask
 									cpi crt_cursor_status_off 
 									jz crt_char_out_start
 									lhld crt_current_pointer_address
-									call crt_byte_in 
+									lda crt_backup_cursor_character	
 									call crt_byte_out 
 crt_char_out_start:					lhld crt_current_pointer_address 
 									lxi d,crt_display_characters_size
@@ -273,9 +274,9 @@ crt_char_out_carriage_return:		xra a
 									mov l,a
 									shld crt_current_pointer_address
 									jmp crt_char_out_end
-crt_char_out_backspace:				mvi a,crt_background_character
+crt_char_out_backspace:				dcx h
+									mvi a,crt_background_character
 									call crt_byte_out
-									dcx h
 									shld crt_current_pointer_address
 									jmp crt_char_out_end 
 crt_char_out_extended_char:			cpi extended_ascii_characters_table_end_offset
@@ -296,10 +297,12 @@ crt_char_out_unknown_char:			mvi a,crt_background_character
 									call crt_byte_out 
 									shld crt_current_pointer_address
 crt_char_out_end:					lda crt_current_settings
-									ani $ff-crt_cursor_status_mask
+									ani crt_cursor_status_mask
 									cpi crt_cursor_status_off 
 									jz crt_char_out_end2
 									lhld crt_current_pointer_address
+									call crt_byte_in
+									sta crt_backup_cursor_character	
 									mvi a,crt_cursor_character 
 									call crt_byte_out 
 crt_char_out_end2:					pop b 
@@ -321,6 +324,8 @@ crt_show_cursor:		push h
 						ori crt_cursor_status_on
 						sta crt_current_settings
 						lhld crt_current_pointer_address
+						call crt_byte_in 
+						sta crt_backup_cursor_character	
 						mvi a,crt_cursor_character 
 						call crt_byte_out 
 crt_show_cursor_end:	pop h 
@@ -333,7 +338,7 @@ crt_hide_cursor:		push h
 						ori crt_cursor_status_off
 						sta crt_current_settings
 						lhld crt_current_pointer_address
-						call crt_byte_in 
+						lda crt_backup_cursor_character	
 						call crt_byte_out 
 crt_hide_cursor_end:	pop h 
 						ret 
