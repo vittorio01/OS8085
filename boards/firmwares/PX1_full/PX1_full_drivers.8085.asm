@@ -19,7 +19,7 @@ crt_display_lines_number 				.equ 	48
 
 crt_vram_dimension        		.equ    512
 crt_background_character    	.equ    %10000000
-crt_cursor_character 			.equ 	%10111111
+crt_cursor_character 			.equ 	%10000011
 crt_line_feed_verify        	.equ    %00000001
 
 crt_cursor_status_mask			.equ 	%10000000
