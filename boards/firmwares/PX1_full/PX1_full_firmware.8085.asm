@@ -21,19 +21,19 @@ stack_pointer                       .equ serial_memory_space_base_address-1
 ;.include "PX1_full_firmware_program.8085.asm"
 
 ;tvalue=(fvalue-31)/14
-time_delay_value    .equ 140
+time_delay_value    .equ 85
 
 
 firmware_boot:          lxi sp,stack_pointer 
                         ;call dma_reset 
                         call crt_display_reset 
-                        call crt_show_cursor 
+                        call crt_hide_cursor 
 firmware_loop:          call keyb_status 
                         ora a 
                         jz firmware_loop
                         call keyb_read
                         call crt_char_out 
-                        lxi h,100
+                        lxi h,200
                         call time_delay 
                         jmp firmware_loop
 

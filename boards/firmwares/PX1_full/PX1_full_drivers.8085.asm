@@ -74,6 +74,7 @@ drivers_memory_start_address:		.equ drivers_memory_space_base_address
 crt_current_pointer_address     	.equ drivers_memory_start_address
 crt_current_settings				.equ crt_current_pointer_address+2
 crt_backup_cursor_character			.equ crt_current_settings+1
+keyb_key_pressed_status				.equ crt_backup_cursor_character+1
 crt_vram_start_address				.equ vram_memory_space_address
 
 ;program_status_byte				.equ 	drivers_memory_start_address
@@ -83,7 +84,7 @@ crt_vram_start_address				.equ vram_memory_space_address
 ;floppy_sector_number			.equ	$7ff8
 ;floppy_sector_size				.equ 	$7ff9
 
-extended_ascii_characters_table_start_offset 	.equ 21
+extended_ascii_characters_table_start_offset 	.equ 219
 extended_ascii_characters_table_end_offset		.equ 224
 
 extended_ascii_characters_table:		.byte %10111111
