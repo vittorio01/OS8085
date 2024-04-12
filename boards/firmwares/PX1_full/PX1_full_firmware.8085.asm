@@ -30,8 +30,6 @@ firmware_loop:          call keyb_status
                         jz firmware_loop
                         call keyb_read
                         call crt_char_out 
-                        lxi h,200
-                        call time_delay 
                         jmp firmware_loop
 
 
