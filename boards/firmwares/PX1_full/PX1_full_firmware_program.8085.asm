@@ -1,6 +1,5 @@
 ;PX1 firmware program is a simple hex editor that can be used to read, manage data and execute code using the crt controller and the PS/2 keyboard
 
-.include "PX1_full_drivers.8085.asm"
 
 ;--------- environment variables ---------
 
@@ -20,7 +19,13 @@ hex_editor_line_byte_divisor_character		.equ $20
 
 hex_editor_start:					call crt_display_reset
 									lxi h,0 
-									mvi b,16 
+									call crt_set_display_pointer
+									lxi h,hex_editor_top_bar_string
+									call hex_editor_string_out
+									lxi h,crt_display_character_line_size
+									call crt_set_display_pointer
+									lxi h,0 
+									mvi b,15
 hex_editor_start_print_loop:		call hex_editor_print_address
 									mov a,l 
 									adi hex_editor_line_bytes_number
@@ -29,11 +34,29 @@ hex_editor_start_print_loop:		call hex_editor_print_address
 									aci 0 
 									mov h,a 
 									dcr b 
-									jnz hex_editor_start_print_loop:
-									
+									jnz hex_editor_start_print_loop
+									hlt 
 
+hex_editor_top_bar_string:	 		.b $DB
+									.text "Search"
+									.b $DB,$DB 
+									.text"Help"
+									.b $DB,$DB 
+									.text "Exec"
+									.b $DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB
+									.b 0
 
-
+;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
+;HL -> string address
+hex_editor_string_out:		push h
+hex_editor_string_out_loop:	mov a,m 
+							ora a 
+							jz hex_editor_string_out_end
+							call crt_char_out
+							inx h 
+							jmp hex_editor_string_out_loop
+hex_editor_string_out_end:	pop h 
+							ret 			
 
 ;hex_editor_clean_line replaces all character on the specified display line address with background characters   
 ;this function will not affects the current display pointer 
@@ -198,17 +221,6 @@ keyb_wait_char_end:			pop b
 							pop h
 							ret
 
-;time_delay generates a custom delay expressed in milliseconds 
-;HL -> milliseconds
-
-time_delay:		        mvi a,time_delay_loop_value	
-time_delay_loop:	    dcr a						
-						jnz time_delay_loop						
-						dcx h
-						mov a,l
-						ora h
-						jnz time_delay
-						ret 
 
 /*
 exitor_start:     		lxi sp,stack_pointer

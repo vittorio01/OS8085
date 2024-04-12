@@ -18,20 +18,11 @@ stack_pointer                       .equ serial_memory_space_base_address-1
 
 .include "PX1_full_serial_drivers.8085.asm"
 .include "PX1_full_drivers.8085.asm"
-;.include "PX1_full_firmware_program.8085.asm"
+.include "PX1_full_firmware_program.8085.asm"
 
 
 firmware_boot:          lxi sp,stack_pointer 
-                        ;call dma_reset 
-                        call crt_display_reset 
-                        call crt_hide_cursor 
-firmware_loop:          call keyb_status 
-                        ora a 
-                        jz firmware_loop
-                        call keyb_read
-                        call crt_char_out 
-                        jmp firmware_loop
-
+                        jmp hex_editor_start
 
 
 firmware_send_char:     ret 
