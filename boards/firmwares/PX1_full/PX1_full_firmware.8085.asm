@@ -20,9 +20,6 @@ stack_pointer                       .equ serial_memory_space_base_address-1
 .include "PX1_full_drivers.8085.asm"
 ;.include "PX1_full_firmware_program.8085.asm"
 
-;tvalue=(fvalue-31)/14
-time_delay_value    .equ 85
-
 
 firmware_boot:          lxi sp,stack_pointer 
                         ;call dma_reset 
@@ -36,19 +33,6 @@ firmware_loop:          call keyb_status
                         lxi h,200
                         call time_delay 
                         jmp firmware_loop
-
-;time_delay generates a custom delay
-;HL -> delay millis
-time_delay:         push h                  ;12
-time_delay_millis:  mvi a,time_delay_value  ;7
-time_delay_loop:    dcr a                   ;4
-                    jnz time_delay_loop     ;10
-                    dcx h                   ;6
-                    mov a,l                 ;4
-                    ora h                   ;4
-                    jnz time_delay_millis   ;10
-time_delay_end:     pop h                   ;10
-                    ret                     ;10
 
 
 

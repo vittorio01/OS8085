@@ -9,6 +9,10 @@
 
 fdc_interrupt_address			.equ 	$0034
 
+;Time delay environment variables
+
+time_delay_value    .equ 85		;time_delay_value=(CPU_freq-31)/14
+
 ;CRT controller environment variables
 crt_display_characters_size				.equ 	512
 crt_display_character_line_size			.equ 	32
@@ -35,6 +39,8 @@ crt_status_port 	    		.equ 	$20
 ;PS/2 keyboard environment variables
 keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
+keyb_status_time_delay_value 	.equ 10
+keyb_repeat_key_threshold 		.equ 200
 
 ;PS/2 keyboard port address
 keyboard_input_port		    	.equ 	$21			
@@ -375,13 +381,31 @@ dma_set_next:			out dma_mode_register
 ;keyb_status gets the current state of the PS/2 keyboard 
 ;A	<- $ff if there is an available character, $00 otherwise
 
-keyb_status:			in keyboard_input_port 
-						ani keyboard_input_mask
-						jz keyb_status_available
-						xra a 
-						ret
-keyb_status_available:	mvi a,$ff
-						ret
+keyb_status:				push h 
+							lxi h,keyb_status_time_delay_value
+							call time_delay
+							in keyboard_input_port 
+							ani keyboard_input_mask
+							jz keyb_status_available
+							xra a 
+							sta keyb_key_pressed_status
+							jmp keyb_status_end
+keyb_status_available:		lda keyb_key_pressed_status
+							ora a 
+							jz keyb_status_first_press 
+							cpi keyb_repeat_key_threshold
+							jnc keyb_status_repeat
+							inr a 
+							sta keyb_key_pressed_status 
+							xra a 
+							jmp keyb_status_end
+keyb_status_repeat:			mvi a,$ff 
+							jmp keyb_status_end
+keyb_status_first_press:	inr a 
+							sta keyb_key_pressed_status
+							mvi a,$ff
+keyb_status_end:			pop h 
+							ret
 
 ;keyb_read gets the last avaiulable character from the PS/2 keyboard
 ;A <- last character
@@ -390,8 +414,20 @@ keyb_read:				in keyboard_input_port
 						ani keyboard_data_mask
 						ret
 
-/*
+;time_delay generates a custom delay
+;HL -> delay millis
+time_delay:         push h                  ;12
+time_delay_millis:  mvi a,time_delay_value  ;7
+time_delay_loop:    dcr a                   ;4
+                    jnz time_delay_loop     ;10
+                    dcx h                   ;6
+                    mov a,l                 ;4
+                    ora h                   ;4
+                    jnz time_delay_millis   ;10
+time_delay_end:     pop h                   ;10
+                    ret                     ;10
 
+/*
 
 
 fdc_reset:		push b
