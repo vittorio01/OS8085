@@ -41,6 +41,7 @@ keyboard_input_mask				.equ 	%10000000
 keyboard_data_mask				.equ 	%01111111
 keyb_status_time_delay_value 	.equ 10
 keyb_repeat_key_threshold 		.equ 200
+keyb_repeat_filter_value 		.equ 3 
 
 ;PS/2 keyboard port address
 keyboard_input_port		    	.equ 	$21			
@@ -387,7 +388,16 @@ keyb_status:				push h
 							in keyboard_input_port 
 							ani keyboard_input_mask
 							jz keyb_status_available
-							xra a 
+							lda keyb_key_pressed_status
+							sui keyb_repeat_key_threshold
+							jc keyb_status_released
+							cpi keyb_repeat_filter_value
+							jnc keyb_status_released
+							inr a 
+							sta keyb_key_pressed_status
+							mvi a,$ff 
+							jmp keyb_status_end
+keyb_status_released:		xra a 
 							sta keyb_key_pressed_status
 							jmp keyb_status_end
 keyb_status_available:		lda keyb_key_pressed_status

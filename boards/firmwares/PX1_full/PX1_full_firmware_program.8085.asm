@@ -18,6 +18,21 @@ hex_editor_line_byte_divisor_character		.equ $20
 
 ;--------- main application ---------
 
+hex_editor_start:					call crt_display_reset
+									lxi h,0 
+									mvi b,16 
+hex_editor_start_print_loop:		call hex_editor_print_address
+									mov a,l 
+									adi hex_editor_line_bytes_number
+									mov l,a 
+									mov a,h 
+									aci 0 
+									mov h,a 
+									dcr b 
+									jnz hex_editor_start_print_loop:
+									
+
+
 
 
 ;hex_editor_clean_line replaces all character on the specified display line address with background characters   
