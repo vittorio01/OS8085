@@ -23,20 +23,11 @@ hex_editor_start:					call crt_display_reset
 									lxi h,hex_editor_top_bar_string
 									stc 
 									call hex_editor_string_out
-									lxi h,crt_display_character_line_size
+									lxi h,crt_display_characters_size-crt_display_character_line_size
 									call crt_set_display_pointer
-									lxi h,0 
-									mvi b,15
-
-hex_editor_start_print_loop:		call hex_editor_print_line
-									mov a,l 
-									adi hex_editor_line_bytes_number
-									mov l,a 
-									mov a,h 
-									aci 0 
-									mov h,a 
-									dcr b 
-									jnz hex_editor_start_print_loop
+									lxi h,hex_editor_bottom_bar_string 
+									stc 
+									call hex_editor_string_out 
 									hlt
 
 hex_editor_top_bar_string:	 		.b $7f
@@ -48,12 +39,19 @@ hex_editor_top_bar_string:	 		.b $7f
 									.b $7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f 
 									.b 0
 
+hex_editor_bottom_bar_string:	 	.b $43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43
+									.b 0
+
 ;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
 ;Cy -> 1 if the string has to be printed with a white background, 0 otherwise
 ;HL -> string address
 
 hex_editor_string_out:					push h
 										push b 
+										push d 
+										xchg 
+										call crt_get_display_pointer
+										xchg 
 										jc hex_editor_string_out_black_background
 										mvi b,crt_output_byte_mode_inverted_character
 										jmp hex_editor_string_out_loop
@@ -70,11 +68,16 @@ hex_editor_string_out_loop:				mov a,m
 										ora b
 hex_editor_string_out_loop_out:			call crt_byte_out
 										inx h 
+										xchg 
+										inx h 
+										call crt_set_display_pointer
+										xchg 
 										jmp hex_editor_string_out_loop
 hex_editor_string_out_end:				pop b 
 										pop h 
 										ret 			
 
+/*
 ;hex_editor_clean_line replaces all character on the specified display line address with background characters   
 ;this function will not affects the current display pointer 
 ;HL -> display line start address 
@@ -144,6 +147,7 @@ hex_editor_print_line_end:			pop h
 									pop h 
 									ret 
 
+*/
 ;hex_editor_print_address prints the given address 
 ;Cy -> 1 if the address has to be represented with a white background, 0 otherwise
 ;HL -> address to print 
@@ -159,8 +163,10 @@ hex_editor_print_address:	push psw
 ;Cy -> 1 if the byte has to be represented with a white background, 0 otherwise
 ;A -> value to print 
 hex_editor_print_byte:					push b 
+										push h 
 										jc hex_editor_print_black_background
 										mov b,a 
+										call crt_get_display_pointer
 										rar 
 										rar 
 										rar 
@@ -170,13 +176,17 @@ hex_editor_print_byte:					push b
 										ani $ff-crt_output_byte_mode_mask
 										ori crt_output_byte_mode_inverted_character
 										call crt_byte_out
+										inx h 
+										call crt_set_display_pointer
 										mov a,b 
 										ani $0f 
 										call hex_to_ascii 
 										ani $ff-crt_output_byte_mode_mask
 										ori crt_output_byte_mode_inverted_character
 										call crt_byte_out 
+										jmp hex_editor_print_byte_end
 hex_editor_print_black_background:		mov b,a 
+										call crt_get_display_pointer
 										rar 
 										rar 
 										rar 
@@ -186,13 +196,18 @@ hex_editor_print_black_background:		mov b,a
 										ani $ff-crt_output_byte_mode_mask
 										ori crt_output_byte_mode_character
 										call crt_byte_out
+										inx h 
+										call crt_set_display_pointer
 										mov a,b 
 										ani $0f 
 										call hex_to_ascii 
 										ani $ff-crt_output_byte_mode_mask
 										ori crt_output_byte_mode_character
 										call crt_byte_out 
-hex_editor_print_byte_end:				pop b 
+hex_editor_print_byte_end:				inx h 
+										call crt_set_display_pointer
+										pop h 	
+										pop b 
 										ret 	
 
 ;hex_to_ascii converts the first four number of given value into his ascii char 
