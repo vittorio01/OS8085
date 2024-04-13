@@ -20,6 +20,10 @@ crt_display_character_lines_number		.equ 	16
 crt_display_line_size 					.equ 	64
 crt_display_lines_number 				.equ 	48
 
+crt_output_byte_mode_mask 				.equ  	%11000000
+crt_output_byte_mode_character 			.equ  	%10000000
+crt_output_byte_mode_inverted_character .equ  	%10000000
+crt_output_byte_mode_semigraphic		.equ 	%01000000
 
 crt_vram_dimension        		.equ    512
 crt_background_character    	.equ    %10000000

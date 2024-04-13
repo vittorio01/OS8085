@@ -21,12 +21,14 @@ hex_editor_start:					call crt_display_reset
 									lxi h,0 
 									call crt_set_display_pointer
 									lxi h,hex_editor_top_bar_string
+									stc 
 									call hex_editor_string_out
 									lxi h,crt_display_character_line_size
 									call crt_set_display_pointer
 									lxi h,0 
 									mvi b,15
-hex_editor_start_print_loop:		call hex_editor_print_address
+
+hex_editor_start_print_loop:		call hex_editor_print_line
 									mov a,l 
 									adi hex_editor_line_bytes_number
 									mov l,a 
@@ -35,28 +37,43 @@ hex_editor_start_print_loop:		call hex_editor_print_address
 									mov h,a 
 									dcr b 
 									jnz hex_editor_start_print_loop
-									hlt 
+									hlt
 
-hex_editor_top_bar_string:	 		.b $DB
+hex_editor_top_bar_string:	 		.b $7f
 									.text "Search"
-									.b $DB,$DB 
+									.b $7f,$7f
 									.text"Help"
-									.b $DB,$DB 
+									.b $7f,$7f
 									.text "Exec"
-									.b $DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB,$DB
+									.b $7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f 
 									.b 0
 
 ;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
+;Cy -> 1 if the string has to be printed with a white background, 0 otherwise
 ;HL -> string address
-hex_editor_string_out:		push h
-hex_editor_string_out_loop:	mov a,m 
-							ora a 
-							jz hex_editor_string_out_end
-							call crt_char_out
-							inx h 
-							jmp hex_editor_string_out_loop
-hex_editor_string_out_end:	pop h 
-							ret 			
+
+hex_editor_string_out:					push h
+										push b 
+										jc hex_editor_string_out_black_background
+										mvi b,crt_output_byte_mode_inverted_character
+										jmp hex_editor_string_out_loop
+hex_editor_string_out_black_background:	mvi b,crt_output_byte_mode_character
+hex_editor_string_out_loop:				mov a,m 
+										ora a 
+										jz hex_editor_string_out_end
+										mov c,a 
+										ani crt_output_byte_mode_mask
+										cpi crt_output_byte_mode_semigraphic
+										mov a,c 
+										jz hex_editor_string_out_loop_out
+										ani $ff-crt_output_byte_mode_mask
+										ora b
+hex_editor_string_out_loop_out:			call crt_byte_out
+										inx h 
+										jmp hex_editor_string_out_loop
+hex_editor_string_out_end:				pop b 
+										pop h 
+										ret 			
 
 ;hex_editor_clean_line replaces all character on the specified display line address with background characters   
 ;this function will not affects the current display pointer 
@@ -128,30 +145,55 @@ hex_editor_print_line_end:			pop h
 									ret 
 
 ;hex_editor_print_address prints the given address 
+;Cy -> 1 if the address has to be represented with a white background, 0 otherwise
 ;HL -> address to print 
-hex_editor_print_address:	mov a,h 
+hex_editor_print_address:	push psw 
+							mov a,h 
 							call hex_editor_print_byte 
+							pop psw 
 							mov a,l 
 							call hex_editor_print_byte 
 							ret 
 
 ;hex_editor_print_byte prints the hex value of the given byte 
+;Cy -> 1 if the byte has to be represented with a white background, 0 otherwise
 ;A -> value to print 
-hex_editor_print_byte:		push b 
-							mov b,a 
-							rar 
-							rar 
-							rar 
-							rar 
-							ani $f0 
-							call hex_to_ascii 
-							call crt_char_out
-							mov a,b 
-							ani $0f 
-							call hex_to_ascii 
-							call crt_char_out 
-hex_editor_print_byte_end:	pop b 
-							ret 	
+hex_editor_print_byte:					push b 
+										jc hex_editor_print_black_background
+										mov b,a 
+										rar 
+										rar 
+										rar 
+										rar 
+										ani $f0 
+										call hex_to_ascii 
+										ani $ff-crt_output_byte_mode_mask
+										ori crt_output_byte_mode_inverted_character
+										call crt_byte_out
+										mov a,b 
+										ani $0f 
+										call hex_to_ascii 
+										ani $ff-crt_output_byte_mode_mask
+										ori crt_output_byte_mode_inverted_character
+										call crt_byte_out 
+hex_editor_print_black_background:		mov b,a 
+										rar 
+										rar 
+										rar 
+										rar 
+										ani $f0 
+										call hex_to_ascii 
+										ani $ff-crt_output_byte_mode_mask
+										ori crt_output_byte_mode_character
+										call crt_byte_out
+										mov a,b 
+										ani $0f 
+										call hex_to_ascii 
+										ani $ff-crt_output_byte_mode_mask
+										ori crt_output_byte_mode_character
+										call crt_byte_out 
+hex_editor_print_byte_end:				pop b 
+										ret 	
 
 ;hex_to_ascii converts the first four number of given value into his ascii char 
 ;A	-> hex value
