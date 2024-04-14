@@ -5,6 +5,8 @@
 ;- 	PS/2 keyboard interface
 ;All code is written in 8085 assembly and can be used for BIOS implementation.
 
+;debug_mode 				.var 	true
+
 ;--------- environment_variables ---------
 
 fdc_interrupt_address			.equ 	$0034
@@ -123,6 +125,7 @@ crt_display_vram_clear_loop:		mvi m,crt_background_character
 									mov a,d 
 									ora e 
 									jnz crt_display_vram_clear_loop 
+.if(debug_mode==false)
 									lxi d,crt_vram_dimension
 									lxi h,0
 crt_display_external_vram_clear:	mvi a,crt_background_character
@@ -132,6 +135,7 @@ crt_display_external_vram_clear:	mvi a,crt_background_character
 									mov a,d
 									ora e
 									jnz crt_display_external_vram_clear
+.endif 
 crt_display_reset_end:  			mvi a,crt_background_character
 									sta crt_backup_cursor_character	
 									pop d
@@ -161,15 +165,18 @@ crt_byte_out_next:				mov a,l
 								out crt_vram_low_address_port 
 								mov a,h 
 								out crt_vram_high_address_port 
+.if(debug_mode==false)
 crt_byte_out_ready_wait:		in crt_status_port 
 								ani crt_line_feed_verify
 								jnz crt_byte_out_ready_wait
 								mov a,b 
 								out crt_data_port 
+.endif
 crt_byte_out_end:				pop b 
 								pop d 
 								pop h 
 								ret 
+
 
 ;crt_byte_in reads a byte from the vram 
 ;HL -> 	vram address
@@ -386,6 +393,7 @@ dma_set_next:			out dma_mode_register
 ;keyb_status gets the current state of the PS/2 keyboard 
 ;A	<- $ff if there is an available character, $00 otherwise
 
+.if(debug_mode==false)
 keyb_status:				push h 
 							lxi h,keyb_status_time_delay_value
 							call time_delay
@@ -421,15 +429,25 @@ keyb_status_first_press:	inr a
 keyb_status_end:			pop h 
 							ret
 
+.endif 
+.if(debug_mode==true) 
+keyb_status:				mvi a,$ff 
+							ret 
+.endif 
+
 ;keyb_read gets the last avaiulable character from the PS/2 keyboard
 ;A <- last character
 keyb_read:				in keyboard_input_port
+.if(debug_mode==false)
 						cma
 						ani keyboard_data_mask
+.endif
 						ret
 
 ;time_delay generates a custom delay
 ;HL -> delay millis
+
+.if (debug_mode==false)
 time_delay:         push h                  ;12
 time_delay_millis:  mvi a,time_delay_value  ;7
 time_delay_loop:    dcr a                   ;4
@@ -440,7 +458,10 @@ time_delay_loop:    dcr a                   ;4
                     jnz time_delay_millis   ;10
 time_delay_end:     pop h                   ;10
                     ret                     ;10
-
+.endif 
+.if(debug_mode==true)
+time_delay: 		ret 
+.endif 
 /*
 
 

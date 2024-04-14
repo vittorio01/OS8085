@@ -1,5 +1,6 @@
 ;PX1 firmware program is a simple hex editor that can be used to read, manage data and execute code using the crt controller and the PS/2 keyboard
 
+;debug_mode		.var true 
 
 ;--------- environment variables ---------
 
@@ -31,15 +32,15 @@ hex_editor_start:					call crt_display_reset
 									hlt
 
 hex_editor_top_bar_string:	 		.b $7f
-									.text "Search"
+									.text "SEARCH"
 									.b $7f,$7f
-									.text"Help"
+									.text"HELP"
 									.b $7f,$7f
-									.text "Exec"
-									.b $7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f 
+									.text "RUN"
+									.b $7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f 
 									.b 0
 
-hex_editor_bottom_bar_string:	 	.b $43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$43
+hex_editor_bottom_bar_string:	 	.b $43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$42,$43,$43
 									.b 0
 
 ;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
@@ -49,31 +50,33 @@ hex_editor_bottom_bar_string:	 	.b $43,$43,$34,$34,$34,$43,$43,$34,$34,$34,$43,$
 hex_editor_string_out:					push h
 										push b 
 										push d 
+										push psw 
 										xchg 
 										call crt_get_display_pointer
 										xchg 
-										jc hex_editor_string_out_black_background
+										pop psw 
+										jnc hex_editor_string_out_black_background
 										mvi b,crt_output_byte_mode_inverted_character
 										jmp hex_editor_string_out_loop
 hex_editor_string_out_black_background:	mvi b,crt_output_byte_mode_character
 hex_editor_string_out_loop:				mov a,m 
 										ora a 
 										jz hex_editor_string_out_end
-										mov c,a 
 										ani crt_output_byte_mode_mask
 										cpi crt_output_byte_mode_semigraphic
-										mov a,c 
+										mov a,m 
 										jz hex_editor_string_out_loop_out
 										ani $ff-crt_output_byte_mode_mask
 										ora b
-hex_editor_string_out_loop_out:			call crt_byte_out
+hex_editor_string_out_loop_out:			xchg 
+										call crt_byte_out
 										inx h 
+										call crt_set_display_pointer 
 										xchg 
 										inx h 
-										call crt_set_display_pointer
-										xchg 
 										jmp hex_editor_string_out_loop
-hex_editor_string_out_end:				pop b 
+hex_editor_string_out_end:				pop d 
+										pop b 
 										pop h 
 										ret 			
 

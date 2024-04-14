@@ -41,7 +41,7 @@ serial_command_write_sector_request             .equ $13
 serial_packet_max_dimension             .equ 31
 serial_disk_packet_dimension            .equ 16
 
-debug_mode      .var  false
+;debug_mode      .var  false
 
 terminal_input_char_queue_dimension             .equ 32
 

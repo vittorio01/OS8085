@@ -1,3 +1,6 @@
+
+debug_mode          .var false
+
 firmware_start_address              .equ $8000
 firmware_dimension                  .equ 32768
 bootloader_load_address     .equ $0020
