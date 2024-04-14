@@ -11,205 +11,177 @@ pointer_blinking_delay			.equ 	500
 start_screen_delay				.equ 	2000
 
 hex_editor_line_address_divisor_character	.equ $20 
-hex_editor_line_end_border_character		.equ $20
-hex_editor_line_bytes_number				.equ 8
-hex_editor_line_address_mask				.equ %00000111
-hex_editor_line_byte_divisor_character		.equ $20 
+hex_editor_table_end_border_character		.equ $20
+hex_editor_table_bytes_per_line				.equ 8
 
+hex_editor_left_border_character 				.equ %10101010
+hex_editor_right_border_character 				.equ %10010101
+hex_editor_table_address_divisor_character		.equ %10010101
+hex_editor_table_byte_divisor_character			.equ $20 
+hex_editor_lower_border_left_corner_character	.equ %10101011
+hex_editor_lower_border_right_corner_character	.equ %10010111
+hed_editor_lower_border_character				.equ %10000011
+
+
+hex_editor_table_start_position				.equ crt_display_character_line_size
+hex_editor_table_lines_number				.equ 14
 ;--------- main application ---------
 
-hex_editor_start:					call crt_display_reset
-									lxi h,0 
-									call crt_set_display_pointer
-									lxi h,hex_editor_top_bar_string
-									stc 
-									call hex_editor_string_out
-									lxi h,crt_display_characters_size-crt_display_character_line_size
-									call crt_set_display_pointer
-									lxi h,hex_editor_bottom_bar_string 
-									stc 
-									call hex_editor_string_out 
-									hlt
+hex_editor_start:						call crt_display_reset
+										lxi h,0 
+										call crt_set_display_pointer
+										lxi h,hex_editor_top_bar_string
+										stc 
+										call hex_editor_string_out
+										lxi h,hex_editor_table_start_position 
+										call crt_set_display_pointer
+										lxi h,crt_display_character_line_size
+										call crt_set_display_pointer
+										mvi b,hex_editor_table_lines_number 
+										lxi h,0 
+hex_editor_table_print_loop:			call hex_editor_print_line
+										mov a,l 
+										adi hex_editor_table_bytes_per_line
+										mov l,a 
+										mov a,h 
+										aci 0
+										mov h,a 
+										dcr b 
+										jnz hex_editor_table_print_loop
+hex_editor_bottom_border_print:			mvi a,hex_editor_lower_border_left_corner_character
+										call hex_editor_char_out 
+										mvi b,crt_display_character_line_size-2 
+hex_editor_bottom_border_print_loop:	mvi a,hed_editor_lower_border_character
+										call hex_editor_char_out
+										dcr b 
+										jnz hex_editor_bottom_border_print_loop
+										mvi a,hex_editor_lower_border_right_corner_character
+										call hex_editor_char_out 
+										hlt 
 
-hex_editor_top_bar_string:	 		.b $7f
+hex_editor_top_bar_string:	 		.b $bf 
 									.text "SEARCH"
-									.b $7f,$7f
+									.b $bf,$bf
 									.text"HELP"
-									.b $7f,$7f
+									.b $bf,$bf
 									.text "RUN"
-									.b $7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f,$7f 
+									.b $bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf
 									.b 0
 
-hex_editor_bottom_bar_string:	 	.b $43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$43,$42,$43,$43
-									.b 0
 
 ;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
 ;Cy -> 1 if the string has to be printed with a white background, 0 otherwise
 ;HL -> string address
 
 hex_editor_string_out:					push h
-										push b 
-										push d 
 										push psw 
-										xchg 
-										call crt_get_display_pointer
-										xchg 
-										pop psw 
-										jnc hex_editor_string_out_black_background
-										mvi b,crt_output_byte_mode_inverted_character
-										jmp hex_editor_string_out_loop
-hex_editor_string_out_black_background:	mvi b,crt_output_byte_mode_character
 hex_editor_string_out_loop:				mov a,m 
 										ora a 
 										jz hex_editor_string_out_end
-										ani crt_output_byte_mode_mask
-										cpi crt_output_byte_mode_semigraphic
-										mov a,m 
-										jz hex_editor_string_out_loop_out
-										ani $ff-crt_output_byte_mode_mask
-										ora b
-hex_editor_string_out_loop_out:			xchg 
-										call crt_byte_out
-										inx h 
-										call crt_set_display_pointer 
-										xchg 
+										pop psw 
+										push psw 
+										mov a,m
+										call hex_editor_char_out
 										inx h 
 										jmp hex_editor_string_out_loop
-hex_editor_string_out_end:				pop d 
-										pop b 
+hex_editor_string_out_end:				pop psw 
 										pop h 
-										ret 			
+										ret 				
 
-/*
-;hex_editor_clean_line replaces all character on the specified display line address with background characters   
-;this function will not affects the current display pointer 
-;HL -> display line start address 
-hex_editor_clear_line:				push h
-									push d
-									xchg 
-									call crt_get_display_pointer 
-									push h
-									xchg 
-									mov a,l 
-									ani crt_display_character_line_size-1
-									mov l,a 
-									call crt_set_display_pointer	
-									mvi d,crt_display_character_line_size
-hex_editor_clear_line_loop:			mvi a,crt_background_character
-									call crt_char_out 
-									dcr d
-									jnz hex_editor_clear_line_loop
-hex_editor_clear_line_end:			pop h 
-									call crt_set_display_pointer
-									pop d 
-									pop h 
-									ret 
+;hex_editor_char_out prints the character and increments the display pointer
+;Cy -> 1 for white background, 0 for black background 
+;A -> character to print
+hex_editor_char_out:			push h 
+								push d 
+								push psw
+								pop d
+								call crt_get_display_pointer
+								mov a,d 
+								ani crt_output_byte_type_mode_mask
+								cpi crt_output_byte_mode_special
+								mov a,d
+								jz hex_editor_char_out_loop_out
+								mov a,e 
+								ani %00000001
+								jnz hex_editor_char_out_inverted
+								mov a,d
+								ani $ff-crt_output_byte_type_mode_mask
+								ori crt_output_byte_mode_character
+								jmp hex_editor_char_out_loop_out
+hex_editor_char_out_inverted:	mov a,d
+								ani $ff-(crt_output_byte_type_mode_mask+crt_output_byte_special_mode)
+								ori crt_output_byte_inverted_mode+crt_output_byte_mode_special
+hex_editor_char_out_loop_out:	call crt_byte_out
+								inx h 
+								call crt_set_display_pointer 
+hex_editor_char_out_end:		pop d 
+								pop h 
+								ret 
 
-;hex_editor_print_line prints the memory values line that contains the requested address and returns the X position of the requested byte.
-;This function will not affects the current display pointer 
+;hex_editor_print_line prints the memory values line that contains the requested address.
 ;HL -> address memory 
-;A 	<- byte line position offset
+
 hex_editor_print_line:				push h 
-									push d 
 									push b 
-									xchg 
-									call crt_get_display_pointer
-									push h 									;SP -> [display pointer][BC][DE][HL]
-									mov a,l 
-									ani crt_display_character_line_size-1
-									mov l,a 
-									call crt_set_display_pointer	
-									xchg 
-									mov a,l 
-									ani hex_editor_line_address_mask
-									mov b,a 
-									mov a,l 
-									ani $ff-hex_editor_line_address_mask
-									mov l,a 
+									mvi a,hex_editor_left_border_character
+									stc 
+									cmc 
+									call hex_editor_char_out 
 									call hex_editor_print_address
-									mvi a,hex_editor_line_address_divisor_character
-									call crt_char_out
-									mvi c,hex_editor_line_bytes_number
-hex_editor_print_line_loop:			mov a,m 
+									mvi a,hex_editor_table_address_divisor_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+									mvi c,hex_editor_table_bytes_per_line
+hex_editor_print_line_loop:			mvi a,hex_editor_table_byte_divisor_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+									mov a,m 
 									call hex_editor_print_byte 
+									inx h 
 									dcr c
 									jz hex_editor_print_line_loop_end 
-									mvi a,hex_editor_line_byte_divisor_character
-									call crt_char_out 
 									jmp hex_editor_print_line_loop
-hex_editor_print_line_loop_end:		mvi a,hex_editor_line_end_border_character
-									call crt_char_out
-									mvi a,5
-hex_editor_print_line_offset_sum:	adi 3
-									dcr b 
-									jnz hex_editor_print_line_offset_sum
-hex_editor_print_line_end:			pop h 
-									call crt_set_display_pointer
-									pop b
-									pop d 
+hex_editor_print_line_loop_end:		mvi a,hex_editor_table_byte_divisor_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+									mvi a,hex_editor_right_border_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+hex_editor_print_line_end:			pop b
 									pop h 
 									ret 
 
-*/
 ;hex_editor_print_address prints the given address 
-;Cy -> 1 if the address has to be represented with a white background, 0 otherwise
 ;HL -> address to print 
-hex_editor_print_address:	push psw 
-							mov a,h 
+hex_editor_print_address:	mov a,h 
 							call hex_editor_print_byte 
-							pop psw 
 							mov a,l 
 							call hex_editor_print_byte 
 							ret 
 
 ;hex_editor_print_byte prints the hex value of the given byte 
-;Cy -> 1 if the byte has to be represented with a white background, 0 otherwise
 ;A -> value to print 
 hex_editor_print_byte:					push b 
-										push h 
-										jc hex_editor_print_black_background
 										mov b,a 
-										call crt_get_display_pointer
 										rar 
 										rar 
 										rar 
 										rar 
-										ani $f0 
+										ani $0f
 										call hex_to_ascii 
-										ani $ff-crt_output_byte_mode_mask
-										ori crt_output_byte_mode_inverted_character
-										call crt_byte_out
-										inx h 
-										call crt_set_display_pointer
+										stc 
+										cmc 
+										call hex_editor_char_out
 										mov a,b 
 										ani $0f 
 										call hex_to_ascii 
-										ani $ff-crt_output_byte_mode_mask
-										ori crt_output_byte_mode_inverted_character
-										call crt_byte_out 
-										jmp hex_editor_print_byte_end
-hex_editor_print_black_background:		mov b,a 
-										call crt_get_display_pointer
-										rar 
-										rar 
-										rar 
-										rar 
-										ani $f0 
-										call hex_to_ascii 
-										ani $ff-crt_output_byte_mode_mask
-										ori crt_output_byte_mode_character
-										call crt_byte_out
-										inx h 
-										call crt_set_display_pointer
-										mov a,b 
-										ani $0f 
-										call hex_to_ascii 
-										ani $ff-crt_output_byte_mode_mask
-										ori crt_output_byte_mode_character
-										call crt_byte_out 
-hex_editor_print_byte_end:				inx h 
-										call crt_set_display_pointer
-										pop h 	
+										stc 
+										cmc 
+										call hex_editor_char_out
 										pop b 
 										ret 	
 
@@ -219,7 +191,7 @@ hex_editor_print_byte_end:				inx h
 
 hex_to_ascii:				ani $0f 
 							cpi $0a 
-							jnz hex_to_ascii_letter
+							jnc hex_to_ascii_letter
 							adi $30 
 							ret 
 hex_to_ascii_letter:		adi $37
