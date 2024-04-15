@@ -10,9 +10,11 @@ pointer_blinking_delay			.equ 	500
 
 start_screen_delay				.equ 	2000
 
-hex_editor_line_address_divisor_character	.equ $20 
-hex_editor_table_end_border_character		.equ $20
+hex_editor_table_start_position				.equ crt_display_character_line_size
 hex_editor_table_bytes_per_line				.equ 8
+hex_editor_table_lines_number				.equ 14
+hex_editor_table_bytes_represented			.equ hex_editor_table_bytes_per_line*hex_editor_table_lines_number
+
 
 hex_editor_left_border_character 				.equ %10101010
 hex_editor_right_border_character 				.equ %10010101
@@ -20,54 +22,251 @@ hex_editor_table_address_divisor_character		.equ %10010101
 hex_editor_table_byte_divisor_character			.equ $20 
 hex_editor_lower_border_left_corner_character	.equ %10101011
 hex_editor_lower_border_right_corner_character	.equ %10010111
-hed_editor_lower_border_character				.equ %10000011
+hex_editor_lower_border_character				.equ %10000011
+hex_editor_lower_border_divisor_character		.equ %10010111
+hex_editor_top_bar_position						.equ 0 
+hex_editor_lower_border_position				.equ crt_display_characters_size-crt_display_character_line_size
+hex_editor_line_address_divisor_character	.equ $20 
+hex_editor_table_end_border_character		.equ $20
 
 
-hex_editor_table_start_position				.equ crt_display_character_line_size
-hex_editor_table_lines_number				.equ 14
+hex_editor_start_memory_address 			.equ 0
+
 ;--------- main application ---------
 
 hex_editor_start:						call crt_display_reset
-										lxi h,0 
-										call crt_set_display_pointer
-										lxi h,hex_editor_top_bar_string
-										stc 
-										call hex_editor_string_out
-										lxi h,hex_editor_table_start_position 
-										call crt_set_display_pointer
-										lxi h,crt_display_character_line_size
-										call crt_set_display_pointer
-										mvi b,hex_editor_table_lines_number 
-										lxi h,0 
-hex_editor_table_print_loop:			call hex_editor_print_line
-										mov a,l 
-										adi hex_editor_table_bytes_per_line
-										mov l,a 
-										mov a,h 
-										aci 0
-										mov h,a 
-										dcr b 
-										jnz hex_editor_table_print_loop
-hex_editor_bottom_border_print:			mvi a,hex_editor_lower_border_left_corner_character
-										call hex_editor_char_out 
-										mvi b,crt_display_character_line_size-2 
-hex_editor_bottom_border_print_loop:	mvi a,hed_editor_lower_border_character
-										call hex_editor_char_out
-										dcr b 
-										jnz hex_editor_bottom_border_print_loop
-										mvi a,hex_editor_lower_border_right_corner_character
-										call hex_editor_char_out 
+										call hex_editor_print_frame 
+										lxi h,hex_editor_start_memory_address
+										call hex_editor_print_table 
+										call hex_editor_shift_table_down
+
 										hlt 
 
 hex_editor_top_bar_string:	 		.b $bf 
 									.text "SEARCH"
 									.b $bf,$bf
-									.text"HELP"
+									.text "HELP"
 									.b $bf,$bf
 									.text "RUN"
-									.b $bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf
+									.b $bf,$bf
+									.text "EDIT"
+									.b $bf,$bf,$bf,$bf,$bf,$bf,$bf,$bf
 									.b 0
 
+
+;hex_editor_shift_table_up shifts the hex table in order to free the last line
+hex_editor_shift_table_up:				push h 
+										push d
+										push b  
+										lxi h,hex_editor_table_start_position+crt_display_character_line_size
+										lxi d,hex_editor_table_start_position
+										lxi b,hex_editor_lower_border_position-hex_editor_table_start_position-crt_display_character_line_size
+hex_editor_shift_table_up_loop:			call crt_byte_in
+										xchg 
+										call crt_byte_out 
+										xchg 
+										inx h 
+										inx d 
+										dcx b 
+										mov a,c
+										ora b
+										jnz hex_editor_shift_table_up_loop
+hex_editor_shift_table_up_end:			pop b 
+										pop d 
+										pop h
+										ret 
+
+;hex_editor_shift_table_up shifts the hex table in order to free the last line
+hex_editor_shift_table_down:			push h 
+										push d
+										push b  
+										lxi h,hex_editor_lower_border_position-crt_display_character_line_size-1
+										lxi d,hex_editor_lower_border_position-1
+										lxi b,hex_editor_lower_border_position-hex_editor_table_start_position-crt_display_character_line_size
+hex_editor_shift_table_down_loop:		call crt_byte_in
+										xchg 
+										call crt_byte_out 
+										xchg 
+										dcx h 
+										dcx d 
+										dcx b 
+										mov a,c
+										ora b
+										jnz hex_editor_shift_table_down_loop
+hex_editor_shift_table_down_end:		pop b 
+										pop d 
+										pop h
+										ret 
+
+
+;hex_editor_select_byte sets the display pointer to the specific byte into the hex table
+;A -> position of the byte
+hex_editor_select_byte:					push h 
+										push b
+										cpi hex_editor_table_bytes_represented
+										jnc hex_editor_select_byte_end
+										mov h,a 
+										lxi b,0 
+hex_editor_select_byte_row:				mov a,h 
+										sui hex_editor_table_bytes_per_line
+										jc hex_editor_select_byte_pointer
+										mov h,a 
+										inr b 
+										jmp hex_editor_select_byte_row
+hex_editor_select_byte_pointer:			mov c,h
+										lxi h,hex_editor_table_start_position+7
+hex_editor_select_byte_pointer_row:		mov a,b
+										ora a 
+										jz hex_editor_select_byte_pointer_col
+										mov a,l 
+										adi crt_display_character_line_size
+										mov l,a 
+										mov a,h 
+										aci 0 
+										mov h,a 
+										dcr b
+										jmp hex_editor_select_byte_pointer_row
+hex_editor_select_byte_pointer_col:		mov a,c 
+										ora a 
+										jz hex_editor_select_byte_pointer_end
+										mov a,l 
+										adi 3 
+										mov l,a 
+										mov a,h 
+										aci 0 
+										mov h,a 
+										dcr c 
+										jmp hex_editor_select_byte_pointer_col
+hex_editor_select_byte_pointer_end:		call crt_set_display_pointer
+hex_editor_select_byte_end:				pop b 
+										pop h 
+										ret 
+
+;hex_editor_print_frame prints the display frame with title bar 
+hex_editor_print_frame:					push h 
+										push d 
+										push b 
+										lxi h,0 
+										call crt_set_display_pointer
+										lxi h,hex_editor_top_bar_string
+										stc 
+										call hex_editor_string_out
+										lxi h,hex_editor_table_start_position
+										call crt_set_display_pointer
+										mvi b,hex_editor_table_lines_number
+hex_editor_print_frame_lines:			mvi a,hex_editor_left_border_character
+										stc 
+										cmc 
+										call hex_editor_char_out 
+										mov a,l 
+										adi 5 
+										mov l,a 
+										mov a,h 
+										aci 0 
+										call crt_set_display_pointer
+										mvi a,hex_editor_table_address_divisor_character
+										stc 
+										cmc 
+										call hex_editor_char_out
+										mov a,l 
+										adi (hex_editor_table_bytes_per_line*3)+2
+										mov l,a 
+										mov a,h 
+										aci 0 
+										mov h,a 
+										call crt_set_display_pointer
+										mvi a,hex_editor_right_border_character
+										stc 
+										cmc 
+										call hex_editor_char_out
+										inx h 
+										dcr b 
+										jnz hex_editor_print_frame_lines
+										lxi h,hex_editor_lower_border_position
+										call crt_set_display_pointer
+hex_editor_print_frame_bottom:			mvi a,hex_editor_lower_border_left_corner_character
+										call hex_editor_char_out 
+										mvi b,crt_display_character_line_size-2 
+hex_editor_print_frame_bottom_loop:		mvi a,hex_editor_lower_border_character
+										call hex_editor_char_out
+										dcr b 
+										jnz hex_editor_print_frame_bottom_loop
+										mvi a,hex_editor_lower_border_right_corner_character
+										call hex_editor_char_out 
+										lxi h,hex_editor_lower_border_position+5
+										call crt_set_display_pointer
+										mvi a,hex_editor_lower_border_divisor_character
+										stc 
+										cmc 
+										call hex_editor_char_out
+hex_editor_print_frame_end:				pop b 
+										pop d 
+										pop h 
+										ret 
+
+;hex_editor_print_table prints all the table starting from the specified address 
+;HL -> start address
+hex_editor_print_table:				push h
+									push d
+									push b 
+									mvi b,0
+									mvi c,hex_editor_table_lines_number 
+									lxi d,hex_editor_table_bytes_per_line
+hex_editor_print_table_loop:		mov a,b 
+									call hex_editor_print_line 
+									dad d 
+									inr b 
+									dcr c 
+									jnz hex_editor_print_table_loop
+hex_editor_print_table_end:			pop b 
+									pop d 
+									pop h 
+									ret 
+
+;hex_editor_print_line prints the memory values line that contains the requested address on the specified table line 
+;A -> table line 
+;HL -> address memory 
+
+hex_editor_print_line:				push h 
+									push b 
+									push d 
+									cpi hex_editor_table_lines_number
+									jnc hex_editor_print_line_end
+									xchg 
+									lxi h,hex_editor_table_start_position
+									lxi b,crt_display_character_line_size
+hex_editor_print_line_coordinate:	ora a 
+									jz hex_editor_print_line_address
+									dad b
+									dcr a 
+									jmp hex_editor_print_line_coordinate
+hex_editor_print_line_address:		inx h 
+									call crt_set_display_pointer
+									xchg 
+									call hex_editor_print_address
+									xchg 
+									lxi b,5 
+									dad b
+									call crt_set_display_pointer 
+									mvi c,hex_editor_table_bytes_per_line
+hex_editor_print_line_loop:			mvi a,hex_editor_table_byte_divisor_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+									ldax d 
+									call hex_editor_print_byte 
+									inx d
+									dcr c
+									jz hex_editor_print_line_loop_end 
+									jmp hex_editor_print_line_loop
+hex_editor_print_line_loop_end:		mvi a,hex_editor_table_byte_divisor_character
+									stc 
+									cmc 
+									call hex_editor_char_out
+hex_editor_print_line_end:			pop d 
+									pop b
+									pop h 
+									ret 
 
 ;hex_editor_string_out sends a string to the crt controller. The string is terminated with char $00
 ;Cy -> 1 if the string has to be printed with a white background, 0 otherwise
@@ -117,43 +316,6 @@ hex_editor_char_out_loop_out:	call crt_byte_out
 hex_editor_char_out_end:		pop d 
 								pop h 
 								ret 
-
-;hex_editor_print_line prints the memory values line that contains the requested address.
-;HL -> address memory 
-
-hex_editor_print_line:				push h 
-									push b 
-									mvi a,hex_editor_left_border_character
-									stc 
-									cmc 
-									call hex_editor_char_out 
-									call hex_editor_print_address
-									mvi a,hex_editor_table_address_divisor_character
-									stc 
-									cmc 
-									call hex_editor_char_out
-									mvi c,hex_editor_table_bytes_per_line
-hex_editor_print_line_loop:			mvi a,hex_editor_table_byte_divisor_character
-									stc 
-									cmc 
-									call hex_editor_char_out
-									mov a,m 
-									call hex_editor_print_byte 
-									inx h 
-									dcr c
-									jz hex_editor_print_line_loop_end 
-									jmp hex_editor_print_line_loop
-hex_editor_print_line_loop_end:		mvi a,hex_editor_table_byte_divisor_character
-									stc 
-									cmc 
-									call hex_editor_char_out
-									mvi a,hex_editor_right_border_character
-									stc 
-									cmc 
-									call hex_editor_char_out
-hex_editor_print_line_end:			pop b
-									pop h 
-									ret 
 
 ;hex_editor_print_address prints the given address 
 ;HL -> address to print 
@@ -252,7 +414,6 @@ keyb_wait_char_read:		call keyb_read
 keyb_wait_char_end:			pop b 
 							pop h
 							ret
-
 
 /*
 exitor_start:     		lxi sp,stack_pointer

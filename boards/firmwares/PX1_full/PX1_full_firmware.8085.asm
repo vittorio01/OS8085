@@ -1,5 +1,5 @@
 
-debug_mode          .var false
+debug_mode          .var true 
 
 firmware_start_address              .equ $8000
 firmware_dimension                  .equ 32768
