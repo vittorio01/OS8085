@@ -4,9 +4,7 @@
 
 ;--------- environment variables ---------
 
-pointer_blinking_delay			.equ 	500
-
-start_screen_delay				.equ 	2000
+pointer_blinking_delay			.equ 	50
 
 hex_editor_table_start_position				.equ crt_display_character_line_size
 hex_editor_table_bytes_per_line				.equ 8
@@ -113,8 +111,7 @@ hex_editor_move_down_shift:				call hex_editor_shift_table_up
 										mov a,d
 										call hex_editor_select_byte 
 										jmp hex_editor_wait_input
-hex_editor_move_left:					dcx h 
-										mov a,d 
+hex_editor_move_left:					mov a,d 
 										sui 1
 										jc hex_editor_move_left_shift
 										mov d,a 
@@ -149,11 +146,17 @@ hex_editor_move_right_shift:			mov a,l
 										aci 0 
 										mov h,a 
 										mov a,d 
-										sui hex_editor_table_bytes_per_line+1
+										sui hex_editor_table_bytes_per_line-1
 										mov d,a
 										call hex_editor_shift_table_down 
-										xra a 
-										call hex_editor_print_line
+										push d 
+										push h
+										lxi d,hex_editor_table_bytes_represented-hex_editor_table_bytes_per_line
+										dad d 
+										mvi a,hex_editor_table_lines_number-1
+										call hex_editor_print_line 
+										pop h 
+										pop d 
 										mov a,d
 										call hex_editor_select_byte 
 										jmp hex_editor_wait_input
@@ -316,16 +319,21 @@ hex_editor_edit_move_right_shift:		mov a,l
 										aci 0 
 										mov h,a 
 										mov a,d 
-										sui hex_editor_table_bytes_per_line+1
+										sui hex_editor_table_bytes_per_line-1
 										mov d,a
 										call hex_editor_shift_table_down 
-										xra a 
-										call hex_editor_print_line
+										push d 
+										push h
+										lxi d,hex_editor_table_bytes_represented-hex_editor_table_bytes_per_line
+										dad d 
+										mvi a,hex_editor_table_lines_number-1
+										call hex_editor_print_line 
+										pop h 
+										pop d 
 										mov a,d
 										call hex_editor_select_byte 
 										jmp hex_editor_edit_wait_ms
-hex_editor_edit_move_left:				dcx h 
-										mov a,d 
+hex_editor_edit_move_left:				mov a,d 
 										sui 1
 										jc hex_editor_edit_move_left_shift
 										mov d,a 
@@ -846,6 +854,17 @@ ascii_is_hex_true:			mvi a,$ff
 ascii_is_hex_false:			xra a 
 							ret 
 
+;ascii_upper_case converts all small letters in big letters 
+;A -> ASCII letter
+;A <- ASCII letter in upper case 
+ascii_upper_case:			cpi $7B
+							rnc 
+							cpi $61
+							rc 
+							sui $20
+							ret 
+
+
 ;keyb_wait_char wait a new character from the PS/2 interface and provide the blinking cursor effect 
 ;A	<- character received
 
@@ -853,11 +872,9 @@ keyb_wait_char:				push h
 							push b 
 keyb_wait_char_loop:		call crt_show_cursor
 							lxi b,pointer_blinking_delay
-							lxi h,1
 keyb_wait_char_on_loop:		call keyb_status
 							ora a
 							jnz keyb_wait_char_cursor_off
-							call time_delay 
 							dcx b 
 							mov a,c 
 							ora b
@@ -867,7 +884,6 @@ keyb_wait_char_on_loop:		call keyb_status
 keyb_wait_char_off_loop:	call keyb_status
 							ora a
 							jnz keyb_wait_char_read
-							call time_delay
 							dcx b 
 							mov a,c 
 							ora b
@@ -875,6 +891,7 @@ keyb_wait_char_off_loop:	call keyb_status
 							jmp keyb_wait_char_loop
 keyb_wait_char_cursor_off:	call crt_hide_cursor
 keyb_wait_char_read:		call keyb_read
+							call ascii_upper_case
 keyb_wait_char_end:			pop b 
 							pop h
 							ret

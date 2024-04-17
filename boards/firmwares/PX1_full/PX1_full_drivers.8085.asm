@@ -445,6 +445,9 @@ keyb_read:				in keyboard_input_port
 .if(debug_mode==false)
 						cma
 						ani keyboard_data_mask
+						cpi $0a 
+						rnz 
+						mvi a,$09
 .endif
 						ret
 
