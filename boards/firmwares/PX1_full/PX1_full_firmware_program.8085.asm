@@ -4,7 +4,7 @@
 
 ;--------- environment variables ---------
 
-pointer_blinking_delay			.equ 	50
+pointer_blinking_delay			.equ 	25
 
 hex_editor_table_start_position				.equ crt_display_character_line_size
 hex_editor_table_bytes_per_line				.equ 8
@@ -148,7 +148,7 @@ hex_editor_move_right_shift:			mov a,l
 										mov a,d 
 										sui hex_editor_table_bytes_per_line-1
 										mov d,a
-										call hex_editor_shift_table_down 
+										call hex_editor_shift_table_up
 										push d 
 										push h
 										lxi d,hex_editor_table_bytes_represented-hex_editor_table_bytes_per_line
@@ -321,7 +321,7 @@ hex_editor_edit_move_right_shift:		mov a,l
 										mov a,d 
 										sui hex_editor_table_bytes_per_line-1
 										mov d,a
-										call hex_editor_shift_table_down 
+										call hex_editor_shift_table_up
 										push d 
 										push h
 										lxi d,hex_editor_table_bytes_represented-hex_editor_table_bytes_per_line

@@ -33,7 +33,7 @@ crt_output_byte_inverted_mode 			.equ 	%01000000
 
 crt_vram_dimension        		.equ    512
 crt_background_character    	.equ    %10000000
-crt_cursor_character 			.equ 	%10000011
+crt_cursor_character 			.equ 	%10111111
 crt_line_feed_verify        	.equ    %00000001
 
 crt_cursor_status_mask			.equ 	%10000000

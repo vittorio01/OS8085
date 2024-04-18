@@ -99,17 +99,11 @@ boot_disk_load_end:         lxi h,boot_message2
                             lxi h,disk_boot_address
                             jmp system_transfer_and_boot
 
-
-char_out:	mov a,c 
-			call firmware_send_char
-			ret 
-
 text_out:			push psw		
 text_out_1:			mov a,m			
 					cpi 0
 					jz text_out_2
-					mov c,m
-					call char_out
+					call firmware_send_char
 					inx h
 					jmp text_out_1
 text_out_2:			pop psw

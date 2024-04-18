@@ -102,8 +102,10 @@ serial_reset_connection_retry:  mvi b,serial_command_reset_connection_byte
                                 xra a 
                                 stc 
                                 call serial_send_packet
-                                jnc serial_reset_connection_retry
-                                lda serial_packet_state 
+                                jc serial_reset_connection_next
+serial_reset_connection_error:  xra a 
+                                jz serial_reset_connection_end
+serial_reset_connection_next:   lda serial_packet_state 
                                 ori serial_packet_connection_reset 
                                 sta serial_packet_state
 serial_send_boardId:            mvi b,serial_command_send_identifier_byte
@@ -112,7 +114,8 @@ serial_send_boardId:            mvi b,serial_command_send_identifier_byte
                                 xra a 
                                 stc
                                 call serial_send_packet
-                                jnc serial_send_boardId
+                                jnc serial_reset_connection_error
+                                mvi a,$ff
 serial_reset_connection_end:    pop h 
                                 pop d 
                                 pop b

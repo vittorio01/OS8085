@@ -666,7 +666,7 @@ bios_disk_device_format_drive_end:          pop b
 ;----- system ram -----
 ;Il parametro system_ram_dimension viene utilizzato dalla mms per capire quanto spazio ha a disposizione per eseguire i programmi e mantenere i segmenti di memoria attivi. 
 ;Da ricordare che la zona dedicata alla RAM deve partire dal'indirizzo $0000 e una dimensione minima di 20KB 
-system_ram_dimension        .equ 32768-128
+system_ram_dimension        .equ $7E00 ;32768-128
 
 bios_avabile_ram_memory:    lxi h,system_ram_dimension
                             ret 
