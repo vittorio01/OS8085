@@ -52,8 +52,15 @@ firmware_functions:     .org firmware_start_address
                         jmp keyb_read 
                         jmp time_delay
 
+.include "string/string_ncompare.8085.asm"
+.include "PX1_full_serial_drivers.8085.asm"
+.include "PX1_full_drivers.8085.asm"
+.include "PX1_full_firmware_program.8085.asm"
+
 
 firmware_boot:                  lxi sp,stack_pointer 
+                                call crt_display_reset
+
                                 lxi h,firmware_boot_string
                                 call firmware_crt_string_out
                                 call serial_reset_connection 
@@ -171,29 +178,47 @@ firmware_serial_send_terminal_char:         call serial_send_terminal_char
 ;firmware_crt_string_out prints a string on the onboard crt controller
 ;HL -> address of the string
 
-firmware_crt_string_out:        push h 
-firmware_crt_string_out_loop:   mov a,m 
-                                ora a 
-                                jz firmware_crt_string_out_end
-                                call crt_char_out 
-                                inx h 
-                                jmp firmware_crt_string_out_loop
+firmware_crt_string_out:            push h 
+                                    push d 
+firmware_crt_string_out_loop:       mov a,m 
+                                    ora a 
+                                    jz firmware_crt_string_out_end
+                                    ani crt_output_byte_type_mode_mask
+                                    cpi crt_output_byte_mode_special
+                                    jnz firmware_crt_string_out_loop_char
+                                    xchg 
+                                    call crt_get_display_pointer
+                                    mov a,m 
+                                    call crt_byte_out
+                                    inx h 
+                                    call crt_set_display_pointer
+                                    xchg 
+                                    inx h 
+                                    jmp firmware_crt_string_out_loop
+firmware_crt_string_out_loop_char:  mov a,m 
+                                    call crt_char_out 
+                                    inx h 
+                                    jmp firmware_crt_string_out_loop
+firmware_crt_string_out_end:        pop d 
+                                    pop h 
+                                    ret 
 
-firmware_crt_string_out_end:    pop h 
-                                ret 
+firmware_boot_string:           .b %10000001, %10000011, %10000001, %10000001, %10000000, %10000000, %10000011, %10000000, %10000010, %10000001, %10000010, %10000000, %10000011, $80, $80, $80 
+                                .b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
+                                .b %10010101, %10001100, %10010001, %10011001, %10000100, %10001000, %10101110, %10100010, %10101010, %10101010, %10010101, %10010000, %10001101, $80, $80, $80 
+                                .b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
+                                .b %10010000, %10000000, %10010000, %10010000, %10000000, %10000000, %10110000, %10000000, %10100000, %10010000, %10100000, %10010000, %10100000, $80, $80, $80
+                                .b $0a, $0d, 0
 
-firmware_boot_string:           .text "PHOENIX 1 FULL BIOS"
-                                .b $0a, $0d, $0a, $0d
                                 .text "Starting serial port service...."
                                 .b $0a, $0d, 0
 
-firmware_boot_external_string:  .text "Done"
+firmware_boot_external_string:  .text "Done :-)"
                                 .b 0
 
 
 firmware_serial_error_string:               .text "Error reading first sector"
                                             .b $0a, $0d, 0
-
 firmware_serial_disk_not_valid_string:      .text "Boot disk not found"
                                             .b $0a, $0d, 0
 firmware_serial_disk_not_bootable_string:   .text "Disk not bootable"
@@ -208,12 +233,6 @@ firmware_starting_internal_string:  .b $0a, $0d
 
 boot_disk_format_string:        .text "SFS1.0"
 
-
-
-.include "string/string_ncompare.8085.asm"
-.include "PX1_full_serial_drivers.8085.asm"
-.include "PX1_full_drivers.8085.asm"
-.include "PX1_full_firmware_program.8085.asm"
 firmware_end:
 
 .print "Space left in firmware memory ->",firmware_dimension-(firmware_end-firmware_functions) 
