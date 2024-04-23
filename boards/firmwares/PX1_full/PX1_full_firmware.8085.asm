@@ -10,7 +10,8 @@ debug_mode          .var false
 
 firmware_start_address                      .equ $8000
 firmware_dimension                          .equ 32768
-bootloader_load_address                     .equ $0020
+bootloader_load_address                     .equ $0000
+bootloader_start_address                    .equ $0020
 
 serial_disk_inserted_mask                   .equ %10000000
 serial_disk_ready_mask                      .equ %01000000
@@ -67,6 +68,7 @@ firmware_boot:                  lxi sp,stack_pointer
                                 ora a 
                                 jz firmware_internal_boot
                                 call serial_request_disk_information
+                                mov a,b
                                 ani serial_disk_inserted_mask+serial_disk_ready_mask
                                 cpi serial_disk_inserted_mask+serial_disk_ready_mask
                                 jnz firmware_serial_disk_not_found
@@ -77,6 +79,7 @@ firmware_serial_disk_load:      lxi h,bootloader_load_address
                                 jnc firmware_serial_disk_error 
 firmware_serial_disk_verify:    lxi h,bootloader_load_address
                                 lxi d,boot_disk_format_string 
+                                mvi a,boot_disk_format_dimension
                                 call string_ncompare 
                                 ora a 
                                 jz firmware_serial_disk_not_bootable
@@ -86,7 +89,7 @@ firmware_serial_disk_verify:    lxi h,bootloader_load_address
                                 jnz firmware_serial_disk_not_bootable
 firmware_serial_boot:           lxi h,firmware_boot_external_string
                                 call firmware_crt_string_out 
-                                jmp bootloader_load_address
+                                jmp bootloader_start_address
 
 firmware_serial_disk_error:         lxi h,firmware_serial_error_string
                                     call firmware_crt_string_out
@@ -208,12 +211,12 @@ firmware_boot_string:           .b %10000001, %10000011, %10000001, %10000001, %
                                 .b %10010101, %10001100, %10010001, %10011001, %10000100, %10001000, %10101110, %10100010, %10101010, %10101010, %10010101, %10010000, %10001101, $80, $80, $80 
                                 .b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
                                 .b %10010000, %10000000, %10010000, %10010000, %10000000, %10000000, %10110000, %10000000, %10100000, %10010000, %10100000, %10010000, %10100000, $80, $80, $80
-                                .b $0a, $0d, 0
+                                .b $0a, $0d
 
                                 .text "Starting serial port service...."
                                 .b $0a, $0d, 0
 
-firmware_boot_external_string:  .text "Done :-)"
+firmware_boot_external_string:  .text "Starting from disk..."
                                 .b 0
 
 
