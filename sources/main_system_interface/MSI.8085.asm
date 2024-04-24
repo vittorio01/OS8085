@@ -1895,7 +1895,8 @@ msi_shell_command_list_start    .text "COPY"
                                 .word   msi_shell_ls_command
                                 .text "DISK"
                                 .b 0 
-                            
+                                .text "VER"
+                                .b 0
                                 .word   msi_shell_ver_command
                                 .text "ECHO"
                                 .b 0 
