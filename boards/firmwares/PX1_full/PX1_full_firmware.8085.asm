@@ -169,8 +169,6 @@ firmware_serial_disk_write_sector_end:  inx sp
                                         ret 
 
 firmware_serial_request_terminal_char:      call serial_request_terminal_char
-                                            rc 
-                                            call serial_reset_connection
                                             jmp firmware_serial_request_terminal_char
 
 firmware_serial_send_terminal_char:         call serial_send_terminal_char

@@ -2,7 +2,7 @@ start_address               .equ $0020
 disk_information_address    .equ $0000
 
 firmware_functions                      .equ $8000
-firmware_boot                           .equ firmware_functions+3
+firmware_boot                           .equ firmware_functions
 firmware_serial_send_terminal_char      .equ firmware_boot+3
 firmware_serial_request_terminal_char   .equ firmware_serial_send_terminal_char+3
 firmware_serial_disk_status             .equ firmware_serial_request_terminal_char+3
@@ -50,15 +50,14 @@ disk_informations:          .org disk_information_address
                             .w 44
 
 boot:                       .org start_address
-start:                      call firmware_serial_send_terminal_char 
-                            lxi h,boot_message
+start:                      lxi h,boot_message
                             call text_out
                             lxi d,disk_system_track_first
                             mvi b,disk_system_head_first
                             mvi c,disk_system_sector_first
                             lxi h,end_address
 boot_disk_load_increment:   push b
-                            mvi c,"."
+                            mvi a,"."
                             call firmware_serial_send_terminal_char
                             pop b 
                             call firmware_serial_disk_read_sector
@@ -103,14 +102,14 @@ boot_disk_load_end:         lxi h,boot_message2
                             lxi h,disk_boot_address
                             jmp system_transfer_and_boot
 
-text_out:			push psw		
+text_out:			push h		
 text_out_1:			mov a,m			
 					cpi 0
 					jz text_out_2
 					call firmware_serial_send_terminal_char
 					inx h
 					jmp text_out_1
-text_out_2:			pop psw
+text_out_2:			pop h
 					ret
 
 boot_message:       .b $0a,$0d
