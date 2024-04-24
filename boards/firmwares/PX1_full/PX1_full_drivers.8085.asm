@@ -268,8 +268,8 @@ crt_char_out_line_shift_up_loop2:	mvi a,crt_background_character
 									pop b 
 									lhld crt_current_pointer_address
 crt_char_out_next:					mov a,b 
-									cpi extended_ascii_characters_table_start_offset
-									jnc crt_char_out_extended_char
+									cpi $7F
+									jnc crt_char_out_custom_char
 									cpi $0a 
 									jz crt_char_out_new_line
 									cpi $0d
@@ -302,16 +302,7 @@ crt_char_out_backspace:				dcx h
 									call crt_byte_out
 									shld crt_current_pointer_address
 									jmp crt_char_out_end 
-crt_char_out_extended_char:			cpi extended_ascii_characters_table_end_offset
-									jnc crt_char_out_unknown_char
-									lxi d,extended_ascii_characters_table
-									sui extended_ascii_characters_table_start_offset
-									add e 
-									mov e,a 
-									mov a,d 
-									aci 0 
-									mov d,a 
-									mov a,m
+crt_char_out_custom_char:			mov a,b
 									call crt_byte_out 
 									inx h
 									shld crt_current_pointer_address

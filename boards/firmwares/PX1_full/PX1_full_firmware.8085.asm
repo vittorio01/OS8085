@@ -186,19 +186,6 @@ firmware_crt_string_out:            push h
 firmware_crt_string_out_loop:       mov a,m 
                                     ora a 
                                     jz firmware_crt_string_out_end
-                                    ani crt_output_byte_type_mode_mask
-                                    cpi crt_output_byte_mode_special
-                                    jnz firmware_crt_string_out_loop_char
-                                    xchg 
-                                    call crt_get_display_pointer
-                                    mov a,m 
-                                    call crt_byte_out
-                                    inx h 
-                                    call crt_set_display_pointer
-                                    xchg 
-                                    inx h 
-                                    jmp firmware_crt_string_out_loop
-firmware_crt_string_out_loop_char:  mov a,m 
                                     call crt_char_out 
                                     inx h 
                                     jmp firmware_crt_string_out_loop
@@ -211,12 +198,9 @@ firmware_boot_string:           .b %10000001, %10000011, %10000001, %10000001, %
                                 .b %10010101, %10001100, %10010001, %10011001, %10000100, %10001000, %10101110, %10100010, %10101010, %10101010, %10010101, %10010000, %10001101, $80, $80, $80 
                                 .b $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
                                 .b %10010000, %10000000, %10010000, %10010000, %10000000, %10000000, %10110000, %10000000, %10100000, %10010000, %10100000, %10010000, %10100000, $80, $80, $80
-                                .b $0a, $0d
-
-                                .text "Starting serial port service...."
                                 .b $0a, $0d, 0
 
-firmware_boot_external_string:  .text "Starting from disk..."
+firmware_boot_external_string:  .text "Starting from external disk"
                                 .b 0
 
 
@@ -228,10 +212,10 @@ firmware_serial_disk_not_bootable_string:   .text "Disk not bootable"
                                             .b $0a, $0d, 0
 
 
-firmware_boot_internal_string:      .text "Serial service not available."
+firmware_boot_internal_string:      .text "Serial service not available"
                                     .b $0a, $0d
 firmware_starting_internal_string:  .b $0a, $0d 
-                                    .text "Starting firmware...."
+                                    .text "Starting internal firmware"
                                     .b 0
 
 boot_disk_format_string:        .text "SFS1.0"

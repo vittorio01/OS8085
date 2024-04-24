@@ -16,8 +16,8 @@ TEMP=tmp
 OUTPUT=bin
 
 FIRMWARE_DIR=boards/firmwares/$(FIRMWARE)/
-
-all: system firmware
+BOOTLOADER_DIR=boards/bootloaders/$(FIRMWARE)/
+all: system firmware bootloader
 
 system: $(MSI) $(FSM) $(MMS) $(BIOS_DIR) $(MAIN) 
 	rm -rf $(TEMP)
@@ -70,3 +70,11 @@ firmware:
 	@echo --------------------------------
 	@echo 
 	
+bootloader: 
+	@echo selected bootloader for FIRMWARE: $(FIRMWARE)
+	rm -rf $(TEMP)
+	mkdir $(TEMP)
+	cp -r $(BOOTLOADER_DIR)/* $(TEMP)
+	cp -r $(LIBRARIES_DIR)/* $(TEMP)
+	@echo building bootloader...
+	dotnet $(ASSEMBLER) $(TEMP)/$(FIRMWARE)_system_bootloader.8085.asm bin/bootloader.bin

@@ -1,17 +1,23 @@
-
-stack_pointer               .equ $7fb7
 start_address               .equ $0020
 disk_information_address    .equ $0000
 
-firmware_functions          .equ $8000
-firmware_boot               .equ firmware_functions
-firmware_serial_connect     .equ firmware_boot+3
-firmware_send_char          .equ firmware_serial_connect+3
-firmware_request_char       .equ firmware_send_char+3
-firmware_disk_information   .equ firmware_request_char+3
-firmware_disk_read_sector   .equ firmware_disk_information+3
-firmware_disk_write_sector  .equ firmware_disk_read_sector+3
-system_transfer_and_boot    .equ firmware_disk_write_sector+3
+firmware_functions                      .equ $8000
+firmware_boot                           .equ firmware_functions+3
+firmware_serial_send_terminal_char      .equ firmware_boot+3
+firmware_serial_request_terminal_char   .equ firmware_serial_send_terminal_char+3
+firmware_serial_disk_status             .equ firmware_serial_request_terminal_char+3
+firmware_serial_disk_read_sector        .equ firmware_serial_disk_status+3
+firmware_serial_disk_write_sector       .equ firmware_serial_disk_read_sector+3
+system_transfer_and_boot                .equ firmware_serial_disk_write_sector+3
+crt_display_reset                       .equ system_transfer_and_boot+3
+crt_char_out                            .equ crt_display_reset+3
+crt_set_display_pointer                 .equ crt_char_out+3
+crt_get_display_pointer                 .equ crt_set_display_pointer+3
+crt_show_cursor                         .equ crt_get_display_pointer+3
+crt_hide_cursor                         .equ crt_show_cursor+3
+keyb_status                             .equ crt_hide_cursor+3
+keyb_read                               .equ keyb_status+3
+time_delay                              .equ keyb_read+3
 
 disk_sector_dimension     .equ 512
 disk_sector_per_track     .equ 18
@@ -44,9 +50,7 @@ disk_informations:          .org disk_information_address
                             .w 44
 
 boot:                       .org start_address
-start:                      lxi sp,stack_pointer
-                            mvi c,$0d 
-                            call char_out 
+start:                      call firmware_serial_send_terminal_char 
                             lxi h,boot_message
                             call text_out
                             lxi d,disk_system_track_first
@@ -55,9 +59,9 @@ start:                      lxi sp,stack_pointer
                             lxi h,end_address
 boot_disk_load_increment:   push b
                             mvi c,"."
-                            call char_out
+                            call firmware_serial_send_terminal_char
                             pop b 
-                            call firmware_disk_read_sector
+                            call firmware_serial_disk_read_sector
                             inr c 
                             mov a,c 
                             cpi disk_sector_per_track 
@@ -103,15 +107,24 @@ text_out:			push psw
 text_out_1:			mov a,m			
 					cpi 0
 					jz text_out_2
-					call firmware_send_char
+					call firmware_serial_send_terminal_char
 					inx h
 					jmp text_out_1
 text_out_2:			pop psw
 					ret
 
-boot_message:       .text "Starting OS "
+boot_message:       .b $0a,$0d
+                    .text "Loading OS "
                     .b $0d,$0a,$00
 
 boot_message2:      .b $0a, $0d
                     .text "Done"
                     .b $0a, $0d ,$0a,$0d,$00
+
+bootloader_end:
+
+.print "Space left in bootloader sector ->",disk_sector_dimension-(bootloader_end-disk_information_address) 
+.memory "fill", bootloader_end, disk_sector_dimension-(bootloader_end-disk_information_address) ,$00
+.print "Bootloader load address -> ",disk_information_address
+.print "Bootloader start address -> ", start_address
+.print "All functions built successfully"
