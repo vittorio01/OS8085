@@ -104,10 +104,13 @@ start:                  .org 0000
                         lxi sp,$2000
                         call crt_display_reset
                         call dma_reset 
-                        lxi b,$1000
+                        lxi b,$0100
                         lxi d,$8000
-                        lxi h,$0100
+                        lxi h,$1000
                         call dma_memory_transfer
+                        lxi h,100
+                        call time_delay
+
                         in dma_status_register
                         call print_byte 
                         mvi a,$20 
@@ -158,9 +161,9 @@ dma_reset:				out dma_master_clear
 						out dma_all_mask_register
 						ret
 
-dma_memory_transfer:        mvi a,dma_mode_register_channel0+dma_mode_register_increment+dma_mode_register_no_autoinitialize+dma_mode_register_block_transfer+dma_mode_register_read_transfer
+dma_memory_transfer:        mvi a,dma_mode_register_channel0+dma_mode_register_increment+dma_mode_register_no_autoinitialize+dma_mode_register_block_transfer+dma_mode_register_write_transfer
                             out dma_mode_register
-                            mvi a,dma_mode_register_channel1+dma_mode_register_increment+dma_mode_register_no_autoinitialize+dma_mode_register_block_transfer+dma_mode_register_write_transfer
+                            mvi a,dma_mode_register_channel1+dma_mode_register_increment+dma_mode_register_no_autoinitialize+dma_mode_register_block_transfer+dma_mode_register_read_transfer
                              out dma_mode_register
                             out dma_ff_clear
                             mov a,c 
