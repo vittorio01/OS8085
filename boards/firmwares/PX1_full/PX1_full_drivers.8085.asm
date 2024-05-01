@@ -147,11 +147,17 @@ dma_channel3_word_count_register    .equ $07
 ;fdc_read_bytes					.equ 	$0082
 
 ;FDC controller port addresses
-;fdc_drive_control_register	.equ $12
-;fdc_data_rate_register		.equ $17
-;fdc_disk_changed_register	.equ $17
-;fdc_main_status_register	.equ $14
-;fdc_data_register			.equ $15
+
+fdc_drive_control_register	.equ $12
+fdc_data_rate_register		.equ $17
+fdc_disk_changed_register	.equ $17
+fdc_main_status_register	.equ $14
+fdc_data_register			.equ $15
+
+fdc_drive_control_register_motor0 
+fdc_drive_control_register_motor1
+fdc_drive_control_register_motor2 
+fdc_drive_control_register_motor3
 
 ;--------- memory variables ---------
 
