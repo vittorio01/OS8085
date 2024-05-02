@@ -12,10 +12,13 @@ crt_set_display_pointer                 .equ crt_char_out+3
 crt_get_display_pointer                 .equ crt_set_display_pointer+3
 crt_show_cursor                         .equ crt_get_display_pointer+3
 crt_hide_cursor                         .equ crt_show_cursor+3
-keyb_status                             .equ crt_hide_cursor+3
+crt_byte_in                             .equ crt_hide_cursor+3
+crt_byte_out                            .equ crt_byte_in+3
+keyb_status                             .equ crt_byte_out+3
 keyb_read                               .equ keyb_status+3
 time_delay                              .equ keyb_read+3
 
+pointer_blinking_delay      .equ 200
 
 dma_status_register		    .equ $08
 dma_command_register	    .equ $08
@@ -105,8 +108,12 @@ dma_request_register_reset_request              .equ %00000000
 fdc_runtime_settings                            .equ $0500
 fdc_runtime_settings_drive_selected_mask        .equ %00000011   
 fdc_runtime_settings_interrupt_wait_mask        .equ %00000100
+fdc_runtime_settings_motor_on_mask              .equ %00001000
+
+
 fdc_runtime_settings_interrupt_seek             .equ %00000000
 fdc_runtime_settings_interrupt_execution        .equ %00000100
+fdc_runtime_settings_motor_on                   .equ %00001000
 
 fdc_command_wait_timeout_value           .equ 5000
 ;fdc_send_bytes					.equ	$0082
@@ -240,7 +247,7 @@ fdc_command_space           .equ $0200
 begin:                  .org 0000
                         jmp start 
 
-rst6.5:                 .org $0034 
+rst65:                 .org $0034 
                         jmp fdc_interrupt_routine
 
 start:                  .org $0050
@@ -250,6 +257,58 @@ start:                  .org $0050
                         call fdc_reset
                         xra a 
                         call fdc_select_drive 
+command_phase_restart:  lxi h,command_wait_message 
+                        call text_out  
+                        lxi h,$0f00
+command_in_msb:         call keyb_wait_char
+                        call ascii_upper_case
+                        cpi $52 
+                        jz command_reload 
+                        cpi $0d 
+                        jz command_send 
+                        mov b,a 
+                        call crt_char_out
+                        mov a,b 
+                        call ascii_is_hex
+                        ora a 
+                        jnz command_in_msb 
+                        call ascii_to_hex
+                        ral 
+                        ral 
+                        ral 
+                        ral 
+                        ani $f0 
+                        mov m,a 
+command_in_lsb:         call keyb_wait_char
+                        call ascii_upper_case
+                        cpi $52 
+                        jz command_reload 
+                        cpi $0d 
+                        jz command_send 
+                        mov b,a 
+                        call crt_char_out
+                        mov a,b 
+                        call ascii_is_hex
+                        ora a 
+                        jz command_in_lsb
+                        call ascii_to_hex
+                        ani $0f 
+                        ora m 
+                        mov m,a
+                        inx h 
+                        mvi a,$20 
+                        call crt_char_out
+                        jmp command_in_msb
+command_reload:         call crt_display_reset
+                        jmp command_phase_restart
+comamnd_send:           mvi a,$0d
+                        call crt_char_out
+                        mvi a,$0a 
+                        call crt_char_out 
+                        lxi h,command_send_message 
+                        call text_out 
+
+                        call fdc_motor_on 
                         lxi h,$1000 
                         call dma_set_channel2_read_transfer
                         lxi h,$0f00
@@ -262,7 +321,12 @@ start:                  .org $0050
 command_no_int:         stc 
                         cmc 
 command_send:           call fdc_send_command
+                        mov b,a 
+                        lxi h,command_done_message
+                        call text_out 
+                        mov a,b 
                         call print_byte 
+                        lxi h,$0f01
                         mvi a,$20 
                         call crt_char_out 
                         mvi b,7
@@ -272,7 +336,9 @@ print_loop:             call print_byte
                         call crt_char_out
                         dcr b 
                         jnz print_loop 
-                        hlt 
+                        call fdc_motor_off 
+                        call keyb_wait_char
+                        jmp command_phase_restart
 
 dma_reset:				out dma_master_clear
 						mvi a,dma_command_register_mm_enable+dma_command_register_ch0_hold_disable+dma_command_register_controller_enable+dma_command_register_compressed_timing+dma_command_register_drq_active_high+dma_command_register_dack_active_low 
@@ -348,6 +414,29 @@ fdc_reset:      mvi a,fdc_drive_control_register_reset
                 sta fdc_runtime_settings
                 ret 
 
+fdc_motor_on:           lda fdc_runtime_settings
+                        ori fdc_runtime_settings_motor_on 
+                        sta fdc_runtime_settings 
+                        ani fdc_runtime_settings_drive_selected_mask
+                        mvi a,fdc_drive_control_register_dma_enable+fdc_drive_control_register_drive0_select+fdc_drive_control_register_motor0_enable
+                        out fdc_drive_control_register
+                        ret 
+fdc_motor_on_drive1:    mvi a,fdc_drive_control_register_dma_enable+fdc_drive_control_register_drive1_select+fdc_drive_control_register_motor1_enable
+                        out fdc_drive_control_register
+                        ret 
+fdc_motor_on_drive2:    mvi a,fdc_drive_control_register_dma_enable+fdc_drive_control_register_drive2_select+fdc_drive_control_register_motor2_enable
+                        out fdc_drive_control_register
+                        ret 
+fdc_motor_on_drive3:    mvi a,fdc_drive_control_register_dma_enable+fdc_drive_control_register_drive3_select+fdc_drive_control_register_motor3_enable
+                        out fdc_drive_control_register
+                        ret 
+
+fdc_motor_off:          lda fdc_runtime_settings 
+                        ani $ff-fdc_runtime_settings_motor_on_mask 
+                        sta fdc_runtime_settings 
+                        mvi a,fdc_drive_control_register_dma_enable
+                        out fdc_drive_control_register
+                        ret           
 
 ;fdc_select_drive selects the ddesired floppy drive 
 ;A -> drive number (0 to 3)
@@ -359,8 +448,6 @@ fdc_select_drive:       ani %00000011
                         jz fdc_select_drive2 
                         cpi 3 
                         jz fdc_select_drive3 
-                        mvi a,fdc_drive_control_register_dma_enable+fdc_drive_control_register_drive0_select+fdc_drive_control_register_motor0_enable
-                        out fdc_drive_control_register
                         lda fdc_runtime_settings
                         ani $ff-fdc_runtime_settings_drive_selected_mask
                         ret 
@@ -535,3 +622,97 @@ hex_to_ascii:				ani $0f
 							adi $30 
 							ret 
 hex_to_ascii_letter:		adi $37
+
+;ascii_to_hex converts the ascii character into his hex value 
+;A	-> ASCII character
+;A 	<- hex value
+
+ascii_to_hex:				cpi $30 
+							jc ascii_to_hex_not_valid
+							cpi $3A 
+							jnc ascii_to_hex_letter 
+							sui $30 
+							ret 
+ascii_to_hex_letter:		cpi $41 
+							jc ascii_to_hex_not_valid
+							cpi $47
+							jnc ascii_to_hex_not_valid
+							sui $37 
+							ret 
+ascii_to_hex_not_valid:		xra a 
+							ret 
+
+;ascii_is_hex indicates if the ascii character can be converted as hex value
+;A -> ASCII character
+;A -> $ff if true, $00 if false
+ascii_is_hex:				cpi $47 
+							jnc ascii_is_hex_false
+							cpi $41 
+							jnc ascii_is_hex_true
+							cpi $3A
+							jnc ascii_is_hex_false
+							cpi $30 
+							jc ascii_is_hex_false
+ascii_is_hex_true:			mvi a,$ff 
+							ret 
+ascii_is_hex_false:			xra a 
+							ret 
+
+;ascii_upper_case converts all small letters in big letters 
+;A -> ASCII letter
+;A <- ASCII letter in upper case 
+ascii_upper_case:			cpi $7B
+							rnc 
+							cpi $61
+							rc 
+							sui $20
+							ret 
+
+
+;keyb_wait_char wait a new character from the PS/2 interface and provide the blinking cursor effect 
+;A	<- character received
+
+keyb_wait_char:				push h
+							push b 
+keyb_wait_char_loop:		call crt_show_cursor
+							lxi b,pointer_blinking_delay
+keyb_wait_char_on_loop:		call keyb_status
+							ora a
+							jnz keyb_wait_char_cursor_off
+							dcx b 
+							mov a,c 
+							ora b
+							jnz keyb_wait_char_on_loop
+							call crt_hide_cursor
+							lxi b,pointer_blinking_delay
+keyb_wait_char_off_loop:	call keyb_status
+							ora a
+							jnz keyb_wait_char_read
+							dcx b 
+							mov a,c 
+							ora b
+							jnz keyb_wait_char_off_loop
+							jmp keyb_wait_char_loop
+keyb_wait_char_cursor_off:	call crt_hide_cursor
+keyb_wait_char_read:		call keyb_read
+							call ascii_upper_case
+keyb_wait_char_end:			pop b 
+							pop h
+							ret
+
+text_out:			push h		
+text_out_1:			mov a,m			
+					cpi 0
+					jz text_out_2
+					call crt_char_out
+					inx h
+					jmp text_out_1
+text_out_2:			pop h
+					ret
+
+command_wait_message:   .text "Insert hex command:"
+                        .b $0a, $0d, 0
+command_send_message:   .text "Sending command..."
+                        .b 0 
+command_done_message:   .text "done"
+                        .b $0a,$0d,0

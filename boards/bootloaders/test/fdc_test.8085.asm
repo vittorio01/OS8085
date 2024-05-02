@@ -12,7 +12,9 @@ crt_set_display_pointer                 .equ crt_char_out+3
 crt_get_display_pointer                 .equ crt_set_display_pointer+3
 crt_show_cursor                         .equ crt_get_display_pointer+3
 crt_hide_cursor                         .equ crt_show_cursor+3
-keyb_status                             .equ crt_hide_cursor+3
+crt_byte_in                             .equ crt_hide_cursor+3
+crt_byte_out                            .equ crt_byte_in+3
+keyb_status                             .equ crt_byte_out+3
 keyb_read                               .equ keyb_status+3
 time_delay                              .equ keyb_read+3
 
@@ -264,9 +266,15 @@ command_in_msb:         call keyb_wait_char
                         jz command_reload 
                         cpi $0d 
                         jz command_send 
+                        cpi $56 
+                        jz command_msr_read 
+                        mov b,a
                         call ascii_is_hex
                         ora a 
-                        jnz command_in_msb 
+                        jz command_in_msb 
+                        mov a,b
+                        call crt_char_out
+                        mov a,b 
                         call ascii_to_hex
                         ral 
                         ral 
@@ -280,9 +288,15 @@ command_in_lsb:         call keyb_wait_char
                         jz command_reload 
                         cpi $0d 
                         jz command_send 
+                        cpi $56 
+                        jz command_msr_read
+                        mov b,a
                         call ascii_is_hex
                         ora a 
                         jz command_in_lsb
+                        mov a,b
+                        call crt_char_out
+                        mov a,b 
                         call ascii_to_hex
                         ani $0f 
                         ora m 
@@ -291,6 +305,9 @@ command_in_lsb:         call keyb_wait_char
                         mvi a,$20 
                         call crt_char_out
                         jmp command_in_msb
+command_msr_read:       in fdc_main_status_register
+                        call print_byte 
+                        jmp command_key_wait
 command_reload:         call crt_display_reset
                         jmp command_phase_restart
 comamnd_send:           mvi a,$0d
@@ -329,7 +346,8 @@ print_loop:             call print_byte
                         dcr b 
                         jnz print_loop 
                         call fdc_motor_off 
-                        call keyb_wait_char
+command_key_wait:       call keyb_wait_char
+                        call crt_display_reset
                         jmp command_phase_restart
 
 dma_reset:				out dma_master_clear

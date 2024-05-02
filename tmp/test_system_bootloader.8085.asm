@@ -15,7 +15,9 @@ crt_set_display_pointer                 .equ crt_char_out+3
 crt_get_display_pointer                 .equ crt_set_display_pointer+3
 crt_show_cursor                         .equ crt_get_display_pointer+3
 crt_hide_cursor                         .equ crt_show_cursor+3
-keyb_status                             .equ crt_hide_cursor+3
+crt_byte_in                             .equ crt_hide_cursor+3
+crt_byte_out                            .equ crt_byte_in+3
+keyb_status                             .equ crt_byte_out+3
 keyb_read                               .equ keyb_status+3
 time_delay                              .equ keyb_read+3
 
